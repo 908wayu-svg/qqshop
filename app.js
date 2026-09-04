@@ -125,10 +125,9 @@ function openCheckout() {
   closePanel("cart-overlay");
   document.getElementById("qr-amount").textContent = "ยอดชำระ ฿" + total.toLocaleString();
   const payload = promptPayPayload(PROMPTPAY_PHONE, total);
-  const canvas = document.getElementById("qr-canvas");
-  QRCode.toCanvas(canvas, payload, { width: 240 }, function (err) {
-    if (err) console.error(err);
-  });
+  const box = document.getElementById("qr-canvas");
+  box.innerHTML = "";
+  new QRCode(box, { text: payload, width: 240, height: 240 });
   openPanel("checkout-overlay");
 }
 
