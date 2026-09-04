@@ -14,7 +14,9 @@ function toDate(ts) {
   if (typeof ts.toDate === "function") return ts.toDate();
   return new Date(ts);
 }
-const dayKey = d => d.toISOString().slice(0, 10);
+// ใช้วันที่ตามเวลาท้องถิ่น (ไม่ใช่ UTC) ไม่งั้นออเดอร์ช่วงเช้าจะถูกนับผิดวัน
+const dayKey = d =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function dayLabel(key) {
   const d = new Date(key + "T00:00:00");

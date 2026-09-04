@@ -12,6 +12,10 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./firebase-config.js";
 
+// อีเมลเจ้าของร้าน — เข้าหลังบ้านได้เสมอ
+// *** ถ้าแก้ตรงนี้ ต้องแก้ ownerEmails() ในไฟล์ firestore.rules ให้ตรงกันด้วย ***
+const ADMIN_EMAILS = ["908wayu@gmail.com"];
+
 let app, auth, db;
 if (isConfigured) {
   app = initializeApp(firebaseConfig);
@@ -97,7 +101,10 @@ export const QQAuth = {
   isConfigured,
   get user() { return currentUser; },
   get profile() { return currentProfile; },
-  get isAdmin() { return currentProfile?.role === "admin"; },
+  get isAdmin() {
+    return currentProfile?.role === "admin"
+      || ADMIN_EMAILS.includes((currentUser?.email || "").toLowerCase());
+  },
   whenAuthReady,
   friendlyError,
 

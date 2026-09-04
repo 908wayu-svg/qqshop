@@ -81,8 +81,19 @@ function renderCartBadge() {
   document.getElementById("cart-count").textContent = count;
 }
 
-function renderCartPanel() {
+// ทิ้งสินค้าที่ไม่มีอยู่แล้วออกจากตะกร้า (เช่น ถูกลบออกจาก products.json)
+function pruneCart() {
   const cart = getCart();
+  let changed = false;
+  Object.keys(cart).forEach(id => {
+    if (!PRODUCTS.some(p => p.id == id)) { delete cart[id]; changed = true; }
+  });
+  if (changed) saveCart(cart);
+  return cart;
+}
+
+function renderCartPanel() {
+  const cart = pruneCart();
   const list = document.getElementById("cart-list");
   const ids = Object.keys(cart);
   if (ids.length === 0) {
@@ -117,7 +128,7 @@ function openCart() { renderCartPanel(); openPanel("cart-overlay"); }
 let PENDING_ORDER = null;
 
 function openCheckout() {
-  const cart = getCart();
+  const cart = pruneCart();
   const ids = Object.keys(cart);
   if (ids.length === 0) return;
   let total = 0;

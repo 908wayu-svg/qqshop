@@ -5,10 +5,16 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
+    // อีเมลเจ้าของร้าน — เป็นแอดมินเสมอ (เพิ่มคนได้โดยใส่อีเมลในลิสต์นี้)
+    // *** ถ้าแก้ตรงนี้ ต้องแก้ ADMIN_EMAILS ในไฟล์ auth.js ให้ตรงกันด้วย ***
+    function ownerEmails() {
+      return ['908wayu@gmail.com'];
+    }
     function isAdmin() {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        && (request.auth.token.email in ownerEmails()
+            || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+                && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
     // สมาชิก: อ่าน/แก้ได้เฉพาะของตัวเอง, แอดมินอ่านได้ทั้งหมด
