@@ -61,11 +61,14 @@ service cloud.firestore {
 
     // ===== คำขอเติมเงิน =====
     match /topups/{id} {
-      allow create: if isSignedIn()
-                    && request.resource.data.uid == request.auth.uid
-                    && request.resource.data.status == 'pending'
-                    && request.resource.data.amount is number
-                    && request.resource.data.amount > 0;
+      // แอดมินสร้างรายการให้ใครก็ได้ (ใช้ตอนเพิ่มเครดิตให้สมาชิก)
+      // ลูกค้าสร้างได้เฉพาะของตัวเอง และต้องเริ่มที่สถานะ pending เสมอ
+      allow create: if isAdmin()
+                    || (isSignedIn()
+                        && request.resource.data.uid == request.auth.uid
+                        && request.resource.data.status == 'pending'
+                        && request.resource.data.amount is number
+                        && request.resource.data.amount > 0);
 
       allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
       allow update, delete: if isAdmin();

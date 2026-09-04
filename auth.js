@@ -8,7 +8,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection,
-  serverTimestamp, query, orderBy, getDocs, limit, onSnapshot, runTransaction, increment,
+  serverTimestamp, query, orderBy, getDocs, limit, onSnapshot, runTransaction, increment, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./firebase-config.js";
 
@@ -274,16 +274,21 @@ export const QQ = {
     return rows(await getDocs(query(collection(db, "users"), orderBy("createdAt", "desc"), limit(max))));
   },
   // แอดมินเพิ่มเครดิตให้ใครก็ได้ (บันทึกไว้ในประวัติเติมเงินด้วย)
+  // เขียนสองที่พร้อมกันแบบ batch — สำเร็จทั้งคู่หรือไม่สำเร็จเลย จะได้ไม่มีเครดิตเข้าแบบไม่มีประวัติ
   async addCreditTo(uid, amount, note = "") {
     const amt = Number(amount);
-    await updateDoc(doc(db, "users", uid), { credit: increment(amt) });
     const u = await getDoc(doc(db, "users", uid));
-    await addDoc(collection(db, "topups"), {
+    const batch = writeBatch(db);
+
+    batch.update(doc(db, "users", uid), { credit: increment(amt) });
+    batch.set(doc(collection(db, "topups")), {
       uid, name: u.data()?.name || "", email: u.data()?.email || "",
       amount: amt, method: "admin", note,
       status: "approved", createdAt: serverTimestamp(),
       approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
     });
+
+    await batch.commit();
   },
   setRole: (uid, role) => updateDoc(doc(db, "users", uid), { role }),
   updateMyProfile: (data) => updateDoc(doc(db, "users", currentUser.uid), data),
