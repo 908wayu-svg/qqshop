@@ -130,6 +130,37 @@ async function commit(token, writes) {
 
 const docPath = (col, id) => `projects/${PROJECT_ID}/databases/(default)/documents/${col}/${id}`;
 
+// ---------- จำกัดจำนวนครั้งต่อคน ----------
+// กันคนยิงลิงก์รัวๆ จนทรูมันนี่บล็อกเซิร์ฟเวอร์เรา
+const RATE_MAX = 8;          // กี่ครั้ง
+const RATE_WINDOW_MS = 60000; // ต่อกี่มิลลิวินาที
+
+async function rateLimited(token, uid) {
+  const path = docPath("ratelimits", uid);
+  const now = Date.now();
+
+  let count = 0, windowStart = now;
+  try {
+    const res = await fetch(`https://firestore.googleapis.com/v1/${path}`,
+      { headers: { Authorization: "Bearer " + token } });
+    if (res.ok) {
+      const f = (await res.json()).fields || {};
+      const prevStart = Number(f.windowStart?.integerValue ?? 0);
+      if (now - prevStart < RATE_WINDOW_MS) {
+        count = Number(f.count?.integerValue ?? 0);
+        windowStart = prevStart;
+      }
+    }
+  } catch { /* อ่านไม่ได้ก็ปล่อยผ่าน ดีกว่าปิดระบบทั้งหมด */ }
+
+  if (count >= RATE_MAX) return true;
+
+  await commit(token, [{
+    update: { name: path, fields: fsFields({ count: count + 1, windowStart, uid }) },
+  }]).catch(() => {});
+  return false;
+}
+
 // ---------- กดรับซองอั่งเปา ----------
 async function redeemAngpao(code, phone) {
   const res = await fetch(`https://gift.truemoney.com/campaign/vouchers/${code}/redeem`, {
@@ -181,10 +212,16 @@ export default {
     catch { return json({ ok: false, error: "UNAUTHORIZED" }, 401, origin); }
 
     const token = await getAccessToken(env.SA_KEY);
+
+    // 2) จำกัดจำนวนครั้ง กันการยิงรัว
+    if (await rateLimited(token, user.uid)) {
+      return json({ ok: false, error: "RATE_LIMITED" }, 429, origin);
+    }
+
     const phone = env.RECEIVE_PHONE;
     const topupDoc = docPath("topups", "angpao_" + code);
 
-    // 2) จองรหัสซองนี้ไว้ก่อน — ถ้ามีคนใช้ไปแล้วจะเขียนไม่สำเร็จ (กันใช้ซ้ำ/ยิงพร้อมกัน)
+    // 3) จองรหัสซองนี้ไว้ก่อน — ถ้ามีคนใช้ไปแล้วจะเขียนไม่สำเร็จ (กันใช้ซ้ำ/ยิงพร้อมกัน)
     try {
       await commit(token, [{
         update: {
@@ -203,7 +240,7 @@ export default {
       return json({ ok: false, error: "ALREADY_USED" }, 409, origin);
     }
 
-    // 3) กดรับซองเข้าเบอร์ร้าน
+    // 4) กดรับซองเข้าเบอร์ร้าน
     let result;
     try {
       result = await redeemAngpao(code, phone);
@@ -229,7 +266,7 @@ export default {
       return json({ ok: false, error: why }, 400, origin);
     }
 
-    // 4) สำเร็จ — เติมเครดิตให้ลูกค้า + ปิดรายการ ในคำสั่งเดียว (atomic)
+    // 5) สำเร็จ — เติมเครดิตให้ลูกค้า + ปิดรายการ ในคำสั่งเดียว (atomic)
     await commit(token, [
       {
         update: {
