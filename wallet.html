@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QQSHOP — กระเป๋าเงิน</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="brand" href="index.html">QQSHOP <small data-i18n="wallet">กระเป๋าเงิน</small></a>
+  <div class="header-actions">
+    <button class="btn-lang" onclick="toggleLang()"><span data-lang-label>EN</span></button>
+    <a class="btn-ghost" href="index.html" data-i18n="back_to_shop">กลับหน้าร้าน</a>
+    <button class="btn-ghost hidden" id="nav-logout" data-i18n="logout">ออกจากระบบ</button>
+  </div>
+</header>
+
+<div id="gate" class="gate"><span data-i18n="loading">กำลังโหลด...</span></div>
+
+<main id="page" class="wallet-main hidden">
+
+  <section class="credit-hero">
+    <div class="tile-label" data-i18n="my_credit">เครดิตของฉัน</div>
+    <div class="credit-big" id="credit-big">฿0</div>
+  </section>
+
+  <section class="card">
+    <h3 data-i18n="topup_title">เติมเงิน</h3>
+
+    <label data-i18n="topup_method">ช่องทางเติมเงิน</label>
+    <div class="method-grid" id="method-grid"></div>
+
+    <div id="method-info" class="method-info"></div>
+
+    <label data-i18n="topup_amount">จำนวนเงินที่เติม</label>
+    <input type="number" id="amount" min="1" step="1" inputmode="numeric" placeholder="0">
+
+    <!-- ช่องลิงก์ซองอั่งเปา -->
+    <div id="angpao-box" class="hidden">
+      <label data-i18n="angpao_link">ลิงก์ซองอั่งเปา</label>
+      <input type="url" id="angpao" placeholder="https://gift.truemoney.com/campaign/?v=...">
+      <div class="hint" data-i18n="angpao_hint">วางลิงก์ซองอั่งเปาที่นี่ ระบบจะส่งให้แอดมินกดรับ</div>
+    </div>
+
+    <!-- แนบสลิป -->
+    <div id="slip-box">
+      <label><span data-i18n="attach_slip">แนบภาพสลิป</span> <span class="req">*</span></label>
+      <input type="file" id="slip" accept="image/*" capture="environment">
+      <div id="slip-preview" class="slip-preview"></div>
+    </div>
+
+    <div id="msg" class="msg"></div>
+    <button class="btn-primary" id="submit-btn" onclick="submitTopup()" data-i18n="topup_submit">ส่งคำขอเติมเงิน</button>
+  </section>
+
+  <section class="card">
+    <h3 data-i18n="topup_history">ประวัติเติมเงิน</h3>
+    <div class="table-wrap"><table id="table-topups"></table></div>
+  </section>
+
+  <section class="card">
+    <h3 data-i18n="order_history">ประวัติการสั่งซื้อ</h3>
+    <div class="table-wrap"><table id="table-orders"></table></div>
+  </section>
+
+</main>
+
+<!-- ดูรูปเต็ม -->
+<div class="overlay" id="img-overlay" onclick="closePanel('img-overlay')">
+  <div class="panel img-panel"><img id="img-full" alt=""></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="i18n.js"></script>
+<script type="module" src="auth.js"></script>
+<script type="module" src="wallet.js"></script>
+</body>
+</html>

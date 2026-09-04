@@ -1,182 +1,208 @@
-// ===== ตั้งค่าร้าน =====
-const SHOP_NAME = "QQSHOP";
-const PROMPTPAY_PHONE = "0918200409"; // ใช้เบอร์นี้สร้าง QR (ปลอดภัยกว่าเผยแพร่เลขบัตรประชาชน)
+// ===== หน้าร้าน: แสดงสินค้า + ตะกร้า + สั่งซื้อด้วยเครดิต =====
 
-// ===== PromptPay QR payload generator (EMV QR มาตรฐานไทย) =====
-function crc16(str) {
-  let crc = 0xFFFF;
-  for (let i = 0; i < str.length; i++) {
-    crc ^= str.charCodeAt(i) << 8;
-    for (let b = 0; b < 8; b++) {
-      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
-    }
-  }
-  return crc.toString(16).toUpperCase().padStart(4, "0");
-}
-function tlv(id, value) {
-  return id + String(value.length).padStart(2, "0") + value;
-}
-function promptPayPayload(phone, amount) {
-  const digits = phone.replace(/\D/g, "");
-  const local = digits.startsWith("0") ? digits.slice(1) : digits;
-  const target = "0066" + local;
-  const merchantInfo = tlv("00", "A000000677010111") + tlv("01", target);
-  let payload = "";
-  payload += tlv("00", "01");
-  payload += tlv("01", amount ? "12" : "11");
-  payload += tlv("29", merchantInfo);
-  payload += tlv("53", "764");
-  if (amount) payload += tlv("54", Number(amount).toFixed(2));
-  payload += tlv("58", "TH");
-  payload += tlv("59", SHOP_NAME.slice(0, 25));
-  payload += tlv("60", "Bangkok");
-  payload += "6304";
-  return payload + crc16(payload);
-}
+const CART_KEY = "qq_cart";
+let PRODUCTS = [];
 
-// ===== Cart (localStorage) =====
-const CART_KEY = "omg_cart";
-function getCart() { return JSON.parse(localStorage.getItem(CART_KEY) || "{}"); }
-function saveCart(cart) { localStorage.setItem(CART_KEY, JSON.stringify(cart)); }
+const getCart = () => JSON.parse(localStorage.getItem(CART_KEY) || "{}");
+const saveCart = c => localStorage.setItem(CART_KEY, JSON.stringify(c));
+const findProduct = id => PRODUCTS.find(p => p.id === String(id));
+
 function addToCart(id) {
+  const p = findProduct(id);
+  if (!p) return;
   const cart = getCart();
-  cart[id] = (cart[id] || 0) + 1;
+  const next = (cart[id] || 0) + 1;
+  if (p.stock != null && next > p.stock) return;  // ไม่ให้เกินสต๊อก
+  cart[id] = next;
   saveCart(cart);
   renderCartBadge();
 }
+
 function changeQty(id, delta) {
   const cart = getCart();
-  cart[id] = (cart[id] || 0) + delta;
-  if (cart[id] <= 0) delete cart[id];
+  const p = findProduct(id);
+  const next = (cart[id] || 0) + delta;
+  if (p?.stock != null && next > p.stock) return;
+  if (next <= 0) delete cart[id]; else cart[id] = next;
   saveCart(cart);
   renderCartBadge();
   renderCartPanel();
 }
 
-let PRODUCTS = [];
+// ทิ้งสินค้าที่ไม่มีอยู่แล้วออกจากตะกร้า (เช่น แอดมินลบสินค้าไปแล้ว)
+function pruneCart() {
+  const cart = getCart();
+  let changed = false;
+  Object.keys(cart).forEach(id => {
+    const p = findProduct(id);
+    if (!p) { delete cart[id]; changed = true; }
+    else if (p.stock != null && cart[id] > p.stock) { cart[id] = p.stock; changed = true; }
+    if (cart[id] === 0) delete cart[id];
+  });
+  if (changed) saveCart(cart);
+  return cart;
+}
 
-async function loadProducts() {
-  const res = await fetch("products.json");
-  PRODUCTS = await res.json();
-  renderProducts();
+const cartTotal = cart => Object.entries(cart)
+  .reduce((s, [id, qty]) => s + (findProduct(id)?.price || 0) * qty, 0);
+
+// ---------- แสดงผล ----------
+function productImage(p) {
+  return p.image
+    ? `<img class="p-img" src="${p.image}" alt="${escapeHtml(p.name)}" loading="lazy">`
+    : `<div class="emoji">${p.emoji || "🛍️"}</div>`;
 }
 
 function renderProducts() {
   const grid = document.getElementById("grid");
   const lang = getLang();
-  grid.innerHTML = PRODUCTS.map(p => `
-    <div class="product">
-      <div class="emoji">${p.emoji || "🛍️"}</div>
-      <h3>${(lang === "en" && p.name_en) || p.name}</h3>
-      <div class="desc">${(lang === "en" && p.desc_en) || p.desc || ""}</div>
-      <div class="price">฿${p.price.toLocaleString()}</div>
-      <button onclick="addToCart(${p.id})">${t("add_to_cart")}</button>
-    </div>
-  `).join("");
+  const list = PRODUCTS.filter(p => p.active !== false);
+
+  if (!list.length) { grid.innerHTML = `<div class="empty">${t("no_data")}</div>`; return; }
+
+  grid.innerHTML = list.map(p => {
+    const name = (lang === "en" && p.name_en) || p.name;
+    const desc = (lang === "en" && p.desc_en) || p.desc || "";
+    const soldOut = p.stock != null && p.stock <= 0;
+    return `
+      <div class="product${soldOut ? " sold-out" : ""}">
+        ${productImage(p)}
+        <h3>${escapeHtml(name)}</h3>
+        <div class="desc">${escapeHtml(desc)}</div>
+        <div class="price">${money(p.price)}</div>
+        ${p.stock != null && !soldOut ? `<div class="stock">${t("stock_left")} ${p.stock}</div>` : ""}
+        ${soldOut
+          ? `<button disabled>${t("out_of_stock")}</button>`
+          : `<button onclick="addToCart('${p.id}')">${t("add_to_cart")}</button>`}
+      </div>`;
+  }).join("");
 }
 
 function renderCartBadge() {
-  const cart = getCart();
-  const count = Object.values(cart).reduce((a, b) => a + b, 0);
+  const count = Object.values(getCart()).reduce((a, b) => a + b, 0);
   document.getElementById("cart-count").textContent = count;
-}
-
-// ทิ้งสินค้าที่ไม่มีอยู่แล้วออกจากตะกร้า (เช่น ถูกลบออกจาก products.json)
-function pruneCart() {
-  const cart = getCart();
-  let changed = false;
-  Object.keys(cart).forEach(id => {
-    if (!PRODUCTS.some(p => p.id == id)) { delete cart[id]; changed = true; }
-  });
-  if (changed) saveCart(cart);
-  return cart;
 }
 
 function renderCartPanel() {
   const cart = pruneCart();
   const list = document.getElementById("cart-list");
   const ids = Object.keys(cart);
-  if (ids.length === 0) {
+  const lang = getLang();
+
+  if (!ids.length) {
     list.innerHTML = `<div class="empty">${t("cart_empty")}</div>`;
-    document.getElementById("cart-total-amount").textContent = "฿0";
-    return;
+    document.getElementById("cart-total-amount").textContent = money(0);
+  } else {
+    list.innerHTML = ids.map(id => {
+      const p = findProduct(id);
+      const name = (lang === "en" && p.name_en) || p.name;
+      return `
+        <div class="cart-row">
+          <div>${escapeHtml(name)}<br><small>${money(p.price)} × ${cart[id]}</small></div>
+          <div class="qty">
+            <button onclick="changeQty('${id}', -1)">−</button>
+            <span>${cart[id]}</span>
+            <button onclick="changeQty('${id}', 1)">+</button>
+          </div>
+        </div>`;
+    }).join("");
+    document.getElementById("cart-total-amount").textContent = money(cartTotal(cart));
   }
-  let total = 0;
-  list.innerHTML = ids.map(id => {
-    const p = PRODUCTS.find(x => x.id == id);
-    const qty = cart[id];
-    const sub = p.price * qty;
-    total += sub;
-    return `
-      <div class="cart-row">
-        <div>${p.emoji || ""} ${p.name}<br><small>฿${p.price} x ${qty}</small></div>
-        <div class="qty">
-          <button onclick="changeQty(${id}, -1)">-</button>
-          <span>${qty}</span>
-          <button onclick="changeQty(${id}, 1)">+</button>
-        </div>
-      </div>`;
-  }).join("");
-  document.getElementById("cart-total-amount").textContent = "฿" + total.toLocaleString();
+  syncCheckoutState();
+}
+
+// เปิด/ปิดปุ่มสั่งซื้อ ตามสถานะล็อกอินและเครดิต
+function syncCheckoutState() {
+  const btn = document.getElementById("cart-checkout");
+  const msg = document.getElementById("cart-msg");
+  const row = document.getElementById("cart-credit-row");
+  if (!btn) return;
+
+  const total = cartTotal(getCart());
+  const signedIn = !!window.QQ?.user;
+  const credit = window.QQ?.credit || 0;
+
+  row.classList.toggle("hidden", !signedIn);
+  document.getElementById("cart-credit").textContent = money(credit);
+
+  const show = (text, kind) => {
+    msg.textContent = text;
+    msg.className = "msg" + (text ? " show " + kind : "");
+  };
+
+  if (total === 0) { btn.disabled = true; show(""); return; }
+  if (!signedIn) { btn.disabled = false; show(t("login_required"), "warn"); return; }
+  if (credit < total) { btn.disabled = true; show(t("not_enough_credit"), "warn"); return; }
+  btn.disabled = false; show("");
 }
 
 function openPanel(id) { document.getElementById(id).classList.add("open"); }
 function closePanel(id) { document.getElementById(id).classList.remove("open"); }
-
 function openCart() { renderCartPanel(); openPanel("cart-overlay"); }
 
-let PENDING_ORDER = null;
-
-function openCheckout() {
+// ---------- สั่งซื้อ ----------
+async function doCheckout() {
   const cart = pruneCart();
-  const ids = Object.keys(cart);
-  if (ids.length === 0) return;
-  let total = 0;
-  const items = ids.map(id => {
-    const p = PRODUCTS.find(x => x.id == id);
-    total += p.price * cart[id];
-    return { id: p.id, name: p.name, price: p.price, qty: cart[id] };
-  });
-  PENDING_ORDER = { items, total };
-  closePanel("cart-overlay");
-  document.getElementById("qr-amount").textContent = t("pay_amount") + " ฿" + total.toLocaleString();
-  const payload = promptPayPayload(PROMPTPAY_PHONE, total);
-  const box = document.getElementById("qr-canvas");
-  box.innerHTML = "";
-  new QRCode(box, { text: payload, width: 240, height: 240 });
-  openPanel("checkout-overlay");
-}
+  const total = cartTotal(cart);
+  if (!total) return;
 
-async function clearCartAfterOrder() {
-  let orderId = null;
+  if (!window.QQ?.user) { location.href = "login.html?next=index.html"; return; }
+  if (QQ.credit < total) return;
+
+  const btn = document.getElementById("cart-checkout");
+  btn.disabled = true;
   try {
-    if (PENDING_ORDER && window.QQAuth?.isConfigured) {
-      orderId = await QQAuth.saveOrder(PENDING_ORDER);
-    }
+    const items = Object.entries(cart).map(([id, qty]) => {
+      const p = findProduct(id);
+      return { id, name: p.name, price: p.price, qty };
+    });
+    const ref = await QQ.createOrder({ items, total });
+    localStorage.removeItem(CART_KEY);
+    renderCartBadge();
+    closePanel("cart-overlay");
+    alert(`${t("order_placed")}\n\n${t("order_no")}: ${ref.id.slice(0, 8).toUpperCase()}`);
   } catch (e) {
-    console.warn("บันทึกออเดอร์ไม่สำเร็จ", e);
+    alert(QQ.friendlyError(e));
+  } finally {
+    btn.disabled = false;
   }
-  localStorage.removeItem(CART_KEY);
-  PENDING_ORDER = null;
-  renderCartBadge();
-  closePanel("checkout-overlay");
-  alert(t("thanks") + (orderId ? `\n\n${t("order_no")}: ${orderId.slice(0, 8).toUpperCase()}` : ""));
 }
 
-// อัปเดตปุ่มบนหัวเว็บตามสถานะล็อกอิน
+// ---------- หัวเว็บ ----------
 function syncNav() {
-  const user = window.QQAuth?.user;
-  const isAdmin = window.QQAuth?.isAdmin;
+  const user = window.QQ?.user;
   document.getElementById("nav-login")?.classList.toggle("hidden", !!user);
   document.getElementById("nav-logout")?.classList.toggle("hidden", !user);
-  document.getElementById("nav-admin")?.classList.toggle("hidden", !isAdmin);
+  document.getElementById("nav-admin")?.classList.toggle("hidden", !window.QQ?.isAdmin);
+  const chip = document.getElementById("nav-credit");
+  if (chip) {
+    chip.classList.toggle("hidden", !user);
+    document.getElementById("nav-credit-amount").textContent = money(window.QQ?.credit || 0);
+  }
+  syncCheckoutState();
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function loadProducts() {
+  try {
+    PRODUCTS = (await QQ.fetchProducts()).map(p => ({ ...p, id: String(p.id) }));
+  } catch (e) {
+    console.warn("โหลดสินค้าไม่ได้", e);
+    PRODUCTS = [];
+  }
+  renderProducts();
+  renderCartBadge();
 }
 
 document.addEventListener("authchange", syncNav);
 document.addEventListener("langchange", () => { renderProducts(); renderCartPanel(); });
 
-document.addEventListener("DOMContentLoaded", () => {
-  loadProducts();
+document.addEventListener("DOMContentLoaded", async () => {
   renderCartBadge();
+  if (window.QQ?.isConfigured) { await QQ.whenAuthReady(); await loadProducts(); }
   syncNav();
 });

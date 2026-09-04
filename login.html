@@ -54,7 +54,7 @@
       <span class="ico">f</span><span data-i18n="continue_facebook">เข้าสู่ระบบด้วย Facebook</span>
     </button>
 
-    <a class="btn-link center" href="index.html" data-i18n="guest_checkout">สั่งซื้อแบบไม่สมัครสมาชิก</a>
+    <a class="btn-link center" href="index.html" data-i18n="browse_shop">ดูสินค้าก่อน</a>
   </div>
 </main>
 
@@ -81,20 +81,20 @@ function afterLogin() {
 }
 
 async function guard(fn) {
-  if (!window.QQAuth?.isConfigured) {
+  if (!window.QQ?.isConfigured) {
     setMsg(getLang() === "th"
       ? "ยังไม่ได้ตั้งค่า Firebase (แก้ที่ไฟล์ firebase-config.js)"
       : "Firebase is not configured yet (edit firebase-config.js)");
     return;
   }
   try { await fn(); }
-  catch (e) { setMsg(QQAuth.friendlyError(e)); }
+  catch (e) { setMsg(QQ.friendlyError(e)); }
 }
 
 function doLogin(e) {
   e.preventDefault();
   guard(async () => {
-    await QQAuth.loginWithEmail(
+    await QQ.loginWithEmail(
       document.getElementById("login-email").value.trim(),
       document.getElementById("login-password").value
     );
@@ -108,7 +108,7 @@ function doRegister(e) {
   const pw = document.getElementById("reg-password").value;
   if (pw.length < 6) { setMsg(t("pw_too_short")); return false; }
   guard(async () => {
-    await QQAuth.registerWithEmail(
+    await QQ.registerWithEmail(
       document.getElementById("reg-email").value.trim(), pw,
       document.getElementById("reg-name").value.trim(),
       document.getElementById("reg-phone").value.trim()
@@ -118,13 +118,13 @@ function doRegister(e) {
   return false;
 }
 
-function doGoogle() { guard(async () => { await QQAuth.loginWithGoogle(); afterLogin(); }); }
-function doFacebook() { guard(async () => { await QQAuth.loginWithFacebook(); afterLogin(); }); }
+function doGoogle() { guard(async () => { await QQ.loginWithGoogle(); afterLogin(); }); }
+function doFacebook() { guard(async () => { await QQ.loginWithFacebook(); afterLogin(); }); }
 
 function doReset() {
   const email = document.getElementById("login-email").value.trim();
   if (!email) { setMsg(t("email")); return; }
-  guard(async () => { await QQAuth.resetPassword(email); setMsg(t("reset_sent"), "ok"); });
+  guard(async () => { await QQ.resetPassword(email); setMsg(t("reset_sent"), "ok"); });
 }
 </script>
 </body>

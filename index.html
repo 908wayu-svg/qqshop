@@ -12,18 +12,22 @@
   <a class="brand" href="index.html">QQSHOP</a>
   <div class="header-actions">
     <button class="btn-lang" onclick="toggleLang()"><span data-lang-label>EN</span></button>
+    <a class="credit-chip hidden" id="nav-credit" href="wallet.html">
+      <span class="credit-label" data-i18n="credit">เครดิต</span>
+      <b id="nav-credit-amount">฿0</b>
+    </a>
     <a class="btn-ghost hidden" id="nav-admin" href="admin.html" data-i18n="admin_panel">หลังบ้าน</a>
     <a class="btn-ghost" id="nav-login" href="login.html" data-i18n="login">เข้าสู่ระบบ</a>
-    <button class="btn-ghost hidden" id="nav-logout" onclick="QQAuth.logout()" data-i18n="logout">ออกจากระบบ</button>
+    <button class="btn-ghost hidden" id="nav-logout" onclick="QQ.logout()" data-i18n="logout">ออกจากระบบ</button>
     <button id="cart-btn" onclick="openCart()">🛒 <span data-i18n="cart">ตะกร้า</span> (<span id="cart-count">0</span>)</button>
   </div>
 </header>
 
 <main>
-  <div class="grid" id="grid"></div>
+  <div class="grid" id="grid"><div class="empty" data-i18n="loading">กำลังโหลด...</div></div>
 </main>
 
-<!-- Cart Panel -->
+<!-- ตะกร้า -->
 <div class="overlay" id="cart-overlay">
   <div class="panel">
     <button class="btn-close" onclick="closePanel('cart-overlay')">×</button>
@@ -33,22 +37,13 @@
       <span data-i18n="total">รวมทั้งหมด</span>
       <span id="cart-total-amount">฿0</span>
     </div>
-    <button class="btn-primary" onclick="openCheckout()" data-i18n="checkout">ชำระเงิน</button>
-  </div>
-</div>
-
-<!-- Checkout / QR Panel -->
-<div class="overlay" id="checkout-overlay">
-  <div class="panel">
-    <button class="btn-close" onclick="closePanel('checkout-overlay')">×</button>
-    <h2 data-i18n="pay_title">สแกนจ่ายผ่าน PromptPay</h2>
-    <div id="qr-canvas"></div>
-    <div class="qr-info">
-      <div id="qr-amount"></div>
-      <div>QQSHOP</div>
-      <div data-i18n="pay_hint">เปิดแอปธนาคาร แล้วสแกน QR นี้เพื่อชำระเงิน</div>
+    <div class="credit-row" id="cart-credit-row">
+      <span data-i18n="my_credit">เครดิตของฉัน</span>
+      <span id="cart-credit">฿0</span>
     </div>
-    <button class="btn-primary" onclick="clearCartAfterOrder()" data-i18n="paid_done">โอนเงินเรียบร้อยแล้ว</button>
+    <div id="cart-msg" class="msg"></div>
+    <button class="btn-primary" id="cart-checkout" onclick="doCheckout()" data-i18n="checkout">สั่งซื้อ</button>
+    <a class="btn-link center" href="wallet.html" data-i18n="topup_now">เติมเงิน</a>
   </div>
 </div>
 

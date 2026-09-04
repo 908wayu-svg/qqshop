@@ -4,159 +4,160 @@
 const I18N = {
   th: {
     // ทั่วไป
-    shop_name: "QQSHOP",
-    cart: "ตะกร้า",
-    login: "เข้าสู่ระบบ",
-    logout: "ออกจากระบบ",
-    register: "สมัครสมาชิก",
-    admin_panel: "หลังบ้าน",
-    back_to_shop: "กลับหน้าร้าน",
-    loading: "กำลังโหลด...",
-    cancel: "ยกเลิก",
-    save: "บันทึก",
-    close: "ปิด",
+    cart: "ตะกร้า", login: "เข้าสู่ระบบ", logout: "ออกจากระบบ", register: "สมัครสมาชิก",
+    admin_panel: "หลังบ้าน", back_to_shop: "กลับหน้าร้าน", loading: "กำลังโหลด...",
+    cancel: "ยกเลิก", save: "บันทึก", close: "ปิด", edit: "แก้ไข", delete: "ลบ",
+    add: "เพิ่ม", confirm: "ยืนยัน", search: "ค้นหา", all: "ทั้งหมด", baht: "฿",
+    saved: "บันทึกแล้ว", error_generic: "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง",
 
     // หน้าร้าน
-    cart_title: "ตะกร้าสินค้า",
-    cart_empty: "ตะกร้าว่างเปล่า",
-    total: "รวมทั้งหมด",
-    checkout: "ชำระเงิน",
-    add_to_cart: "เพิ่มลงตะกร้า",
-    pay_title: "สแกนจ่ายผ่าน PromptPay",
-    pay_amount: "ยอดชำระ",
-    pay_hint: "เปิดแอปธนาคาร แล้วสแกน QR นี้เพื่อชำระเงิน",
-    paid_done: "โอนเงินเรียบร้อยแล้ว",
-    thanks: "ขอบคุณสำหรับการสั่งซื้อ! หลังโอนเงินแล้วรบกวนแจ้งสลิปกับทางร้านได้เลยค่ะ",
-    order_no: "เลขที่คำสั่งซื้อ",
+    cart_title: "ตะกร้าสินค้า", cart_empty: "ตะกร้าว่างเปล่า", total: "รวมทั้งหมด",
+    checkout: "สั่งซื้อ", add_to_cart: "เพิ่มลงตะกร้า", out_of_stock: "สินค้าหมด",
+    stock_left: "เหลือ", order_no: "เลขที่คำสั่งซื้อ",
+    order_placed: "สั่งซื้อเรียบร้อย! รอแอดมินอนุมัติ เครดิตจะถูกหักเมื่ออนุมัติแล้ว",
+    login_required: "กรุณาเข้าสู่ระบบก่อนสั่งซื้อ",
+    not_enough_credit: "เครดิตไม่พอ กรุณาเติมเงินก่อน",
+    topup_now: "เติมเงิน",
 
-    // เข้าสู่ระบบ / สมัคร
-    login_title: "เข้าสู่ระบบ",
-    register_title: "สมัครสมาชิก",
-    email: "อีเมล",
-    password: "รหัสผ่าน",
-    name: "ชื่อ",
-    phone: "เบอร์โทร",
-    login_btn: "เข้าสู่ระบบ",
-    register_btn: "สมัครสมาชิก",
-    or: "หรือ",
-    continue_google: "เข้าสู่ระบบด้วย Google",
-    continue_facebook: "เข้าสู่ระบบด้วย Facebook",
-    no_account: "ยังไม่มีบัญชี?",
-    have_account: "มีบัญชีแล้ว?",
-    forgot_password: "ลืมรหัสผ่าน?",
-    reset_sent: "ส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลแล้ว",
+    // กระเป๋าเงิน / เติมเงิน
+    wallet: "กระเป๋าเงิน", my_credit: "เครดิตของฉัน", credit: "เครดิต",
+    topup_title: "เติมเงิน", topup_amount: "จำนวนเงินที่เติม", topup_method: "ช่องทางเติมเงิน",
+    topup_submit: "ส่งคำขอเติมเงิน",
+    topup_sent: "ส่งคำขอแล้ว รอแอดมินอนุมัติ เครดิตจะเข้าหลังอนุมัติ",
+    attach_slip: "แนบภาพสลิป", attach_slip_required: "ต้องแนบภาพสลิปทุกครั้ง",
+    slip: "สลิป", choose_image: "เลือกรูป", change_image: "เปลี่ยนรูป",
+    m_truewallet: "ทรูมันนี่ วอลเล็ต", m_angpao: "ซองอั่งเปา ทรูมันนี่",
+    m_bank: "โอนผ่านธนาคาร", m_promptpay: "พร้อมเพย์ (QR)", m_admin: "แอดมินเพิ่มให้",
+    angpao_link: "ลิงก์ซองอั่งเปา", angpao_hint: "วางลิงก์ซองอั่งเปาที่นี่ ระบบจะส่งให้แอดมินกดรับ",
+    angpao_invalid: "ลิงก์ซองอั่งเปาไม่ถูกต้อง",
+    transfer_to: "โอนเข้า", account_name: "ชื่อบัญชี", account_no: "เลขที่บัญชี",
+    scan_qr: "สแกน QR เพื่อโอน",
+    topup_history: "ประวัติเติมเงิน", order_history: "ประวัติการสั่งซื้อ",
+    min_amount: "จำนวนเงินขั้นต่ำ", amount_invalid: "จำนวนเงินไม่ถูกต้อง",
+
+    // สถานะ
+    status: "สถานะ", st_pending: "รออนุมัติ", st_approved: "อนุมัติแล้ว", st_rejected: "ไม่อนุมัติ",
+    approve: "อนุมัติ", reject: "ไม่อนุมัติ", approved_by: "อนุมัติโดย",
+
+    // เข้าสู่ระบบ
+    login_title: "เข้าสู่ระบบ", register_title: "สมัครสมาชิก", email: "อีเมล",
+    password: "รหัสผ่าน", name: "ชื่อ", phone: "เบอร์โทร",
+    login_btn: "เข้าสู่ระบบ", register_btn: "สมัครสมาชิก", or: "หรือ",
+    continue_google: "เข้าสู่ระบบด้วย Google", continue_facebook: "เข้าสู่ระบบด้วย Facebook",
+    forgot_password: "ลืมรหัสผ่าน?", reset_sent: "ส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลแล้ว",
     pw_too_short: "รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร",
-    guest_checkout: "สั่งซื้อแบบไม่สมัครสมาชิก",
+    browse_shop: "ดูสินค้าก่อน",
 
     // หลังบ้าน
-    dashboard: "ภาพรวมร้าน",
-    total_sales: "ยอดขายรวม",
-    total_orders: "จำนวนออเดอร์",
-    total_members: "สมาชิกทั้งหมด",
-    avg_order: "ยอดเฉลี่ยต่อออเดอร์",
-    sales_over_time: "ยอดขายรายวัน",
-    new_members: "สมาชิกใหม่รายวัน",
-    top_products: "สินค้าขายดี",
-    recent_orders: "ออเดอร์ล่าสุด",
-    members_list: "รายชื่อสมาชิก",
-    date: "วันที่",
-    customer: "ลูกค้า",
-    items: "รายการ",
-    amount: "ยอดเงิน",
-    status: "สถานะ",
-    signup_method: "ช่องทางสมัคร",
-    joined: "สมัครเมื่อ",
-    no_data: "ยังไม่มีข้อมูล",
+    dashboard: "ภาพรวม", tab_orders: "ออเดอร์", tab_topups: "เติมเงิน",
+    tab_products: "สินค้า", tab_members: "สมาชิก",
+    total_sales: "ยอดขาย (อนุมัติแล้ว)", total_orders: "ออเดอร์ที่อนุมัติ",
+    total_members: "สมาชิกทั้งหมด", avg_order: "ยอดเฉลี่ยต่อออเดอร์",
+    pending_orders: "ออเดอร์รออนุมัติ", pending_topups: "เติมเงินรออนุมัติ",
+    total_credit: "เครดิตคงเหลือรวม",
+    sales_over_time: "ยอดขายรายวัน", new_members: "สมาชิกใหม่รายวัน",
+    top_products: "สินค้าขายดี", recent_orders: "ออเดอร์ล่าสุด", members_list: "รายชื่อสมาชิก",
+    date: "วันที่", customer: "ลูกค้า", items: "รายการ", amount: "ยอดเงิน",
+    signup_method: "ช่องทางสมัคร", joined: "สมัครเมื่อ", no_data: "ยังไม่มีข้อมูล",
     access_denied: "คุณไม่มีสิทธิ์เข้าถึงหน้านี้",
-    range_7: "7 วันล่าสุด",
-    range_30: "30 วันล่าสุด",
-    range_90: "90 วันล่าสุด",
-    range_all: "ทั้งหมด",
-    baht: "฿",
-    orders_unit: "ออเดอร์",
-    people_unit: "คน",
-    status_pending: "รอตรวจสอบ",
-    status_paid: "ชำระแล้ว",
+    range_7: "7 วัน", range_30: "30 วัน", range_90: "90 วัน", range_all: "ทั้งหมด",
+    orders_unit: "ออเดอร์", people_unit: "คน",
+    method: "ช่องทาง", view_slip: "ดูสลิป", open_angpao: "เปิดลิงก์ซอง",
+    confirm_approve_order: "อนุมัติออเดอร์นี้? เครดิตลูกค้าจะถูกหักทันที",
+    confirm_reject: "ไม่อนุมัติรายการนี้?",
+    confirm_approve_topup: "อนุมัติการเติมเงินนี้? เครดิตจะเข้าบัญชีลูกค้าทันที",
+    insufficient_customer_credit: "เครดิตลูกค้าไม่พอ อนุมัติไม่ได้",
+
+    // จัดการสินค้า
+    add_product: "เพิ่มสินค้า", edit_product: "แก้ไขสินค้า", product_name: "ชื่อสินค้า",
+    product_name_en: "ชื่อสินค้า (อังกฤษ)", product_desc: "คำอธิบาย",
+    product_desc_en: "คำอธิบาย (อังกฤษ)", price: "ราคา", stock: "สต๊อก",
+    product_image: "รูปสินค้า", active: "เปิดขาย", inactive: "ปิดขาย",
+    confirm_delete_product: "ลบสินค้านี้?", image_too_big: "ไฟล์รูปใหญ่เกินไป",
+
+    // จัดการสมาชิก
+    add_credit: "เพิ่มเครดิต", add_credit_to: "เพิ่มเครดิตให้", credit_amount: "จำนวนเครดิต",
+    make_admin: "ตั้งเป็นแอดมิน", remove_admin: "ถอดสิทธิ์แอดมิน",
+    role: "สิทธิ์", role_admin: "แอดมิน", role_member: "สมาชิก",
+    note: "หมายเหตุ", note_optional: "หมายเหตุ (ไม่บังคับ)",
   },
+
   en: {
-    shop_name: "QQSHOP",
-    cart: "Cart",
-    login: "Sign in",
-    logout: "Sign out",
-    register: "Sign up",
-    admin_panel: "Admin",
-    back_to_shop: "Back to shop",
-    loading: "Loading...",
-    cancel: "Cancel",
-    save: "Save",
-    close: "Close",
+    cart: "Cart", login: "Sign in", logout: "Sign out", register: "Sign up",
+    admin_panel: "Admin", back_to_shop: "Back to shop", loading: "Loading...",
+    cancel: "Cancel", save: "Save", close: "Close", edit: "Edit", delete: "Delete",
+    add: "Add", confirm: "Confirm", search: "Search", all: "All", baht: "฿",
+    saved: "Saved", error_generic: "Something went wrong, please try again",
 
-    cart_title: "Your cart",
-    cart_empty: "Your cart is empty",
-    total: "Total",
-    checkout: "Checkout",
-    add_to_cart: "Add to cart",
-    pay_title: "Pay with PromptPay",
-    pay_amount: "Amount due",
-    pay_hint: "Open your banking app and scan this QR code to pay",
-    paid_done: "I've completed the transfer",
-    thanks: "Thank you for your order! Please send us your payment slip.",
-    order_no: "Order number",
+    cart_title: "Your cart", cart_empty: "Your cart is empty", total: "Total",
+    checkout: "Place order", add_to_cart: "Add to cart", out_of_stock: "Out of stock",
+    stock_left: "left", order_no: "Order number",
+    order_placed: "Order placed! Waiting for admin approval — credit is deducted on approval.",
+    login_required: "Please sign in before ordering",
+    not_enough_credit: "Not enough credit. Please top up first.",
+    topup_now: "Top up",
 
-    login_title: "Sign in",
-    register_title: "Create an account",
-    email: "Email",
-    password: "Password",
-    name: "Name",
-    phone: "Phone",
-    login_btn: "Sign in",
-    register_btn: "Create account",
-    or: "or",
-    continue_google: "Continue with Google",
-    continue_facebook: "Continue with Facebook",
-    no_account: "Don't have an account?",
-    have_account: "Already have an account?",
-    forgot_password: "Forgot password?",
-    reset_sent: "Password reset link sent to your email",
+    wallet: "Wallet", my_credit: "My credit", credit: "Credit",
+    topup_title: "Top up", topup_amount: "Amount", topup_method: "Payment method",
+    topup_submit: "Submit top-up request",
+    topup_sent: "Request submitted. Credit will be added once an admin approves.",
+    attach_slip: "Attach payment slip", attach_slip_required: "A payment slip is required",
+    slip: "Slip", choose_image: "Choose image", change_image: "Change image",
+    m_truewallet: "TrueMoney Wallet", m_angpao: "TrueMoney Angpao link",
+    m_bank: "Bank transfer", m_promptpay: "PromptPay (QR)", m_admin: "Added by admin",
+    angpao_link: "Angpao link", angpao_hint: "Paste your TrueMoney angpao link — an admin will redeem it",
+    angpao_invalid: "That angpao link doesn't look valid",
+    transfer_to: "Transfer to", account_name: "Account name", account_no: "Account number",
+    scan_qr: "Scan the QR to pay",
+    topup_history: "Top-up history", order_history: "Order history",
+    min_amount: "Minimum amount", amount_invalid: "Invalid amount",
+
+    status: "Status", st_pending: "Pending", st_approved: "Approved", st_rejected: "Rejected",
+    approve: "Approve", reject: "Reject", approved_by: "Approved by",
+
+    login_title: "Sign in", register_title: "Create an account", email: "Email",
+    password: "Password", name: "Name", phone: "Phone",
+    login_btn: "Sign in", register_btn: "Create account", or: "or",
+    continue_google: "Continue with Google", continue_facebook: "Continue with Facebook",
+    forgot_password: "Forgot password?", reset_sent: "Password reset link sent to your email",
     pw_too_short: "Password must be at least 6 characters",
-    guest_checkout: "Check out as guest",
+    browse_shop: "Browse the shop",
 
-    dashboard: "Dashboard",
-    total_sales: "Total sales",
-    total_orders: "Orders",
-    total_members: "Members",
-    avg_order: "Average order value",
-    sales_over_time: "Daily sales",
-    new_members: "New members per day",
-    top_products: "Top products",
-    recent_orders: "Recent orders",
-    members_list: "Members",
-    date: "Date",
-    customer: "Customer",
-    items: "Items",
-    amount: "Amount",
-    status: "Status",
-    signup_method: "Sign-up method",
-    joined: "Joined",
-    no_data: "No data yet",
+    dashboard: "Overview", tab_orders: "Orders", tab_topups: "Top-ups",
+    tab_products: "Products", tab_members: "Members",
+    total_sales: "Sales (approved)", total_orders: "Approved orders",
+    total_members: "Members", avg_order: "Average order value",
+    pending_orders: "Orders awaiting approval", pending_topups: "Top-ups awaiting approval",
+    total_credit: "Outstanding credit",
+    sales_over_time: "Daily sales", new_members: "New members per day",
+    top_products: "Top products", recent_orders: "Recent orders", members_list: "Members",
+    date: "Date", customer: "Customer", items: "Items", amount: "Amount",
+    signup_method: "Sign-up method", joined: "Joined", no_data: "No data yet",
     access_denied: "You don't have permission to view this page",
-    range_7: "Last 7 days",
-    range_30: "Last 30 days",
-    range_90: "Last 90 days",
-    range_all: "All time",
-    baht: "฿",
-    orders_unit: "orders",
-    people_unit: "people",
-    status_pending: "Pending",
-    status_paid: "Paid",
+    range_7: "7 days", range_30: "30 days", range_90: "90 days", range_all: "All time",
+    orders_unit: "orders", people_unit: "people",
+    method: "Method", view_slip: "View slip", open_angpao: "Open angpao link",
+    confirm_approve_order: "Approve this order? The customer's credit will be deducted now.",
+    confirm_reject: "Reject this item?",
+    confirm_approve_topup: "Approve this top-up? Credit will be added to the customer now.",
+    insufficient_customer_credit: "Customer doesn't have enough credit",
+
+    add_product: "Add product", edit_product: "Edit product", product_name: "Product name",
+    product_name_en: "Product name (English)", product_desc: "Description",
+    product_desc_en: "Description (English)", price: "Price", stock: "Stock",
+    product_image: "Product image", active: "Listed", inactive: "Hidden",
+    confirm_delete_product: "Delete this product?", image_too_big: "Image file is too large",
+
+    add_credit: "Add credit", add_credit_to: "Add credit to", credit_amount: "Credit amount",
+    make_admin: "Make admin", remove_admin: "Remove admin",
+    role: "Role", role_admin: "Admin", role_member: "Member",
+    note: "Note", note_optional: "Note (optional)",
   },
 };
 
 const LANG_KEY = "qq_lang";
 
-function getLang() {
-  return localStorage.getItem(LANG_KEY) || "th";
-}
+function getLang() { return localStorage.getItem(LANG_KEY) || "th"; }
 
 function setLang(lang) {
   localStorage.setItem(LANG_KEY, lang);
@@ -164,9 +165,7 @@ function setLang(lang) {
   document.dispatchEvent(new CustomEvent("langchange", { detail: lang }));
 }
 
-function toggleLang() {
-  setLang(getLang() === "th" ? "en" : "th");
-}
+function toggleLang() { setLang(getLang() === "th" ? "en" : "th"); }
 
 // t("cart") -> ข้อความตามภาษาปัจจุบัน
 function t(key) {
@@ -174,19 +173,16 @@ function t(key) {
   return (I18N[lang] && I18N[lang][key]) || I18N.th[key] || key;
 }
 
+// จัดรูปแบบเงินบาท
+function money(n) { return "฿" + Math.round(Number(n) || 0).toLocaleString(); }
+
 // แปลทุก element ที่มี data-i18n / data-i18n-placeholder
 function applyLang() {
   const lang = getLang();
   document.documentElement.lang = lang;
-  document.querySelectorAll("[data-i18n]").forEach(el => {
-    el.textContent = t(el.dataset.i18n);
-  });
-  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-    el.placeholder = t(el.dataset.i18nPlaceholder);
-  });
-  document.querySelectorAll("[data-lang-label]").forEach(el => {
-    el.textContent = lang === "th" ? "EN" : "ไทย";
-  });
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll("[data-lang-label]").forEach(el => { el.textContent = lang === "th" ? "EN" : "ไทย"; });
 }
 
 document.addEventListener("DOMContentLoaded", applyLang);

@@ -2,14 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
+    function isSignedIn() { return request.auth != null; }
+
     // อีเมลเจ้าของร้าน — เป็นแอดมินเสมอ (เพิ่มคนได้โดยใส่อีเมลในลิสต์นี้)
     // *** ถ้าแก้ตรงนี้ ต้องแก้ ADMIN_EMAILS ในไฟล์ auth.js ให้ตรงกันด้วย ***
-    function ownerEmails() {
-      return ['908wayu@gmail.com'];
-    }
+    function ownerEmails() { return ['908wayu@gmail.com']; }
+
     function isAdmin() {
       return isSignedIn()
         && (request.auth.token.email in ownerEmails()
@@ -17,26 +15,59 @@ service cloud.firestore {
                 && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
-    // สมาชิก: อ่าน/แก้ได้เฉพาะของตัวเอง, แอดมินอ่านได้ทั้งหมด
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+
+    // เช็คว่าฟิลด์เหล่านี้ไม่ถูกแก้
+    function unchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===== สมาชิก =====
     match /users/{uid} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
-      // สมัครใหม่ได้เฉพาะ uid ตัวเอง และห้ามตั้ง role เป็น admin เอง
-      allow create: if isSignedIn() && request.auth.uid == uid
-                    && request.resource.data.role == 'member';
-      // แก้โปรไฟล์ตัวเองได้ แต่ห้ามเปลี่ยน role (แอดมินเท่านั้นที่เปลี่ยนได้)
+      allow read: if isAdmin() || isOwner(uid);
+
+      // สมัครใหม่: ต้องเป็น uid ตัวเอง, role = member, เครดิตเริ่มต้น 0
+      allow create: if isOwner(uid)
+                    && request.resource.data.role == 'member'
+                    && request.resource.data.credit == 0;
+
+      // แก้โปรไฟล์ตัวเองได้ แต่ห้ามแตะ role และ credit เด็ดขาด
       allow update: if isAdmin()
-                    || (isSignedIn() && request.auth.uid == uid
-                        && request.resource.data.role == resource.data.role);
+                    || (isOwner(uid) && unchanged(['role', 'credit']));
+
       allow delete: if isAdmin();
     }
 
-    // ออเดอร์: ใครก็สั่งซื้อได้ (รวมลูกค้าที่ไม่ได้สมัครสมาชิก)
-    match /orders/{orderId} {
-      allow create: if request.resource.data.total is number
-                    && request.resource.data.total > 0
-                    && request.resource.data.status == 'pending';
-      allow read: if isAdmin()
-                  || (isSignedIn() && resource.data.uid == request.auth.uid);
+    // ===== สินค้า =====
+    match /products/{id} {
+      allow read: if true;                 // ลูกค้าดูได้ทุกคน
+      allow write: if isAdmin();           // แก้ไขได้เฉพาะแอดมิน
+    }
+
+    // ===== ออเดอร์ =====
+    match /orders/{id} {
+      // สั่งซื้อได้เฉพาะสมาชิกที่ล็อกอิน และต้องเริ่มที่สถานะ pending เสมอ
+      allow create: if isSignedIn()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.total is number
+                    && request.resource.data.total > 0;
+
+      allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+
+      // อนุมัติ/ไม่อนุมัติ ทำได้เฉพาะแอดมิน
+      allow update, delete: if isAdmin();
+    }
+
+    // ===== คำขอเติมเงิน =====
+    match /topups/{id} {
+      allow create: if isSignedIn()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.amount is number
+                    && request.resource.data.amount > 0;
+
+      allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
       allow update, delete: if isAdmin();
     }
   }

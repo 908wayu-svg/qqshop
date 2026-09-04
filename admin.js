@@ -1,19 +1,19 @@
-// ===== หน้าหลังบ้าน: ยอดขาย + สถิติสมาชิก =====
-import { QQAuth } from "./auth.js";
+// ===== หลังบ้าน: ภาพรวม / ออเดอร์ / เติมเงิน / สินค้า / สมาชิก =====
+import { QQ } from "./auth.js";
+import { angpaoRedeemUrl } from "./shop-config.js";
 
-let ORDERS = [];
-let USERS = [];
-let RANGE = 30; // วัน หรือ "all"
+let ORDERS = [], USERS = [], TOPUPS = [], PRODUCTS = [];
+let RANGE = 30;
+let ORDER_FILTER = "pending", TOPUP_FILTER = "pending";
+let EDITING_PRODUCT = null, PRODUCT_IMAGE = null, CREDIT_TARGET = null;
 
 // ---------- utils ----------
-const fmtBaht = n => "฿" + Math.round(n).toLocaleString();
-const fmtNum = n => n.toLocaleString();
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtNum = n => Number(n || 0).toLocaleString();
 
-function toDate(ts) {
-  if (!ts) return null;
-  if (typeof ts.toDate === "function") return ts.toDate();
-  return new Date(ts);
-}
+const toDate = ts => !ts ? null : (typeof ts.toDate === "function" ? ts.toDate() : new Date(ts));
+
 // ใช้วันที่ตามเวลาท้องถิ่น (ไม่ใช่ UTC) ไม่งั้นออเดอร์ช่วงเช้าจะถูกนับผิดวัน
 const dayKey = d =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -40,7 +40,8 @@ function rangeStart() {
   return d;
 }
 
-// สร้างชุดข้อมูลรายวันแบบเติมวันที่ขาดให้เป็น 0
+const statusBadge = s => `<span class="badge ${s}">${t("st_" + s)}</span>`;
+
 function dailySeries(records, valueFn) {
   const start = RANGE === "all"
     ? (records.length ? new Date(Math.min(...records.map(r => r._date.getTime()))) : new Date())
@@ -49,9 +50,7 @@ function dailySeries(records, valueFn) {
   const end = new Date(); end.setHours(0, 0, 0, 0);
 
   const buckets = new Map();
-  for (let d = new Date(startDay); d <= end; d.setDate(d.getDate() + 1)) {
-    buckets.set(dayKey(d), 0);
-  }
+  for (let d = new Date(startDay); d <= end; d.setDate(d.getDate() + 1)) buckets.set(dayKey(d), 0);
   records.forEach(r => {
     const k = dayKey(r._date);
     if (buckets.has(k)) buckets.set(k, buckets.get(k) + valueFn(r));
@@ -59,49 +58,34 @@ function dailySeries(records, valueFn) {
   return [...buckets.entries()].map(([key, value]) => ({ key, label: dayLabel(key), value }));
 }
 
-// ---------- charts (SVG เขียนเอง) ----------
-const CHART_COLORS = { sales: "var(--series-1)", members: "var(--series-2)", products: "var(--series-1)" };
+// ---------- กราฟ ----------
+function emptyState(box) { box.innerHTML = `<div class="chart-empty">${t("no_data")}</div>`; }
 
 function chartTooltip(box) {
   let tip = box.querySelector(".chart-tip");
-  if (!tip) {
-    tip = document.createElement("div");
-    tip.className = "chart-tip";
-    box.appendChild(tip);
-  }
+  if (!tip) { tip = document.createElement("div"); tip.className = "chart-tip"; box.appendChild(tip); }
   return tip;
-}
-
-function emptyState(box) {
-  box.innerHTML = `<div class="chart-empty">${t("no_data")}</div>`;
 }
 
 function lineChart(box, data, { color, format }) {
   if (!data.length || data.every(d => d.value === 0)) return emptyState(box);
 
   const W = Math.max(box.clientWidth || 640, 320), H = 240;
-  const P = { t: 16, r: 16, b: 28, l: 52 };
+  const P = { t: 16, r: 16, b: 28, l: 56 };
   const iw = W - P.l - P.r, ih = H - P.t - P.b;
-  const max = Math.max(...data.map(d => d.value)) || 1;
-  const niceMax = Math.ceil(max / 4) * 4 || 4;
+  const niceMax = Math.ceil((Math.max(...data.map(d => d.value)) || 1) / 4) * 4 || 4;
   const x = i => P.l + (data.length === 1 ? iw / 2 : (i / (data.length - 1)) * iw);
   const y = v => P.t + ih - (v / niceMax) * ih;
 
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(niceMax * f));
-  const grid = ticks.map(v => `
+  const grid = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(niceMax * f)).map(v => `
     <line class="grid" x1="${P.l}" y1="${y(v)}" x2="${W - P.r}" y2="${y(v)}"/>
     <text class="axis" x="${P.l - 8}" y="${y(v) + 4}" text-anchor="end">${format(v)}</text>`).join("");
 
   const path = data.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(d.value).toFixed(1)}`).join(" ");
   const area = `${path} L${x(data.length - 1).toFixed(1)},${P.t + ih} L${x(0).toFixed(1)},${P.t + ih} Z`;
-
-  // ป้ายแกน X แสดงแค่บางจุด ไม่ให้ทับกัน
   const step = Math.max(1, Math.ceil(data.length / 6));
-  const xLabels = data.map((d, i) =>
-    (i % step === 0 || i === data.length - 1)
-      ? `<text class="axis" x="${x(i)}" y="${H - 8}" text-anchor="middle">${d.label}</text>` : ""
-  ).join("");
-
+  const xLabels = data.map((d, i) => (i % step === 0 || i === data.length - 1)
+    ? `<text class="axis" x="${x(i)}" y="${H - 8}" text-anchor="middle">${d.label}</text>` : "").join("");
   const dots = data.map((d, i) =>
     `<circle class="dot" cx="${x(i).toFixed(1)}" cy="${y(d.value).toFixed(1)}" r="4"/>`).join("");
 
@@ -114,8 +98,7 @@ function lineChart(box, data, { color, format }) {
       ${grid}
       <path d="${area}" fill="url(#g-${box.id})"/>
       <path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-      ${dots}
-      ${xLabels}
+      ${dots}${xLabels}
       <line class="crosshair" y1="${P.t}" y2="${P.t + ih}" style="display:none"/>
     </svg>`;
 
@@ -126,16 +109,14 @@ function lineChart(box, data, { color, format }) {
 
   svg.addEventListener("mousemove", e => {
     const r = svg.getBoundingClientRect();
-    const px = (e.clientX - r.left) * (W / r.width);
-    let i = Math.round(((px - P.l) / iw) * (data.length - 1));
+    let i = Math.round((((e.clientX - r.left) * (W / r.width) - P.l) / iw) * (data.length - 1));
     i = Math.min(data.length - 1, Math.max(0, i));
     const d = data[i];
     cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i));
     cross.style.display = "";
     tip.innerHTML = `<b>${d.label}</b><br>${format(d.value)}`;
     tip.style.display = "block";
-    const left = (x(i) / W) * r.width;
-    tip.style.left = Math.min(Math.max(left, 40), r.width - 40) + "px";
+    tip.style.left = Math.min(Math.max((x(i) / W) * r.width, 40), r.width - 40) + "px";
     tip.style.top = ((y(d.value) / H) * r.height - 12) + "px";
   });
   svg.addEventListener("mouseleave", () => { tip.style.display = "none"; cross.style.display = "none"; });
@@ -143,141 +124,382 @@ function lineChart(box, data, { color, format }) {
 
 function barChart(box, items, { color, format }) {
   if (!items.length) return emptyState(box);
-
-  const rowH = 34, P = { t: 8, r: 90, b: 8, l: 150 };
+  const rowH = 34, P = { t: 8, r: 95, b: 8, l: 150 };
   const W = Math.max(box.clientWidth || 640, 320);
   const H = P.t + P.b + items.length * rowH;
   const iw = W - P.l - P.r;
   const max = Math.max(...items.map(d => d.value)) || 1;
 
-  const rows = items.map((d, i) => {
-    const w = Math.max((d.value / max) * iw, 3);
-    const y = P.t + i * rowH + 6;
-    const h = rowH - 14;
-    return `
-      <text class="axis name" x="${P.l - 12}" y="${y + h / 2 + 4}" text-anchor="end">${escapeHtml(d.label)}</text>
-      <rect class="bar" x="${P.l}" y="${y}" width="${w}" height="${h}" rx="4" fill="${color}"
-            data-label="${escapeHtml(d.label)}" data-value="${format(d.value)}"/>
-      <text class="value" x="${P.l + w + 10}" y="${y + h / 2 + 4}">${format(d.value)}</text>`;
-  }).join("");
-
-  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">${rows}</svg>`;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">${
+    items.map((d, i) => {
+      const w = Math.max((d.value / max) * iw, 3);
+      const y = P.t + i * rowH + 6, h = rowH - 14;
+      return `
+        <text class="axis name" x="${P.l - 12}" y="${y + h / 2 + 4}" text-anchor="end">${esc(d.label)}</text>
+        <rect class="bar" x="${P.l}" y="${y}" width="${w}" height="${h}" rx="4" fill="${color}"/>
+        <text class="value" x="${P.l + w + 10}" y="${y + h / 2 + 4}">${format(d.value)}</text>`;
+    }).join("")}</svg>`;
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// ---------- ภาพรวม ----------
+function renderOverview() {
+  const start = rangeStart();
+  const inRange = arr => arr.filter(x => x._date && x._date >= start);
+
+  const approved = inRange(ORDERS.filter(o => o.status === "approved"));
+  const users = inRange(USERS);
+  const sales = approved.reduce((s, o) => s + (o.total || 0), 0);
+
+  const set = (id, v) => { document.getElementById(id).textContent = v; };
+  set("kpi-sales", money(sales));
+  set("kpi-orders", fmtNum(approved.length));
+  set("kpi-avg", approved.length ? money(sales / approved.length) : "—");
+  set("kpi-members", fmtNum(USERS.length));
+  set("kpi-pending-orders", fmtNum(ORDERS.filter(o => o.status === "pending").length));
+  set("kpi-pending-topups", fmtNum(TOPUPS.filter(x => x.status === "pending").length));
+  set("kpi-credit", money(USERS.reduce((s, u) => s + Number(u.credit || 0), 0)));
+
+  lineChart(document.getElementById("chart-sales"),
+    dailySeries(approved, o => o.total || 0), { color: "var(--series-1)", format: money });
+  lineChart(document.getElementById("chart-members"),
+    dailySeries(users, () => 1), { color: "var(--series-2)", format: fmtNum });
+
+  const byProduct = new Map();
+  approved.forEach(o => (o.items || []).forEach(i =>
+    byProduct.set(i.name, (byProduct.get(i.name) || 0) + (i.price || 0) * (i.qty || 0))));
+  barChart(document.getElementById("chart-products"),
+    [...byProduct.entries()].map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value).slice(0, 8),
+    { color: "var(--series-1)", format: money });
+
+  // ตัวเลขแจ้งเตือนบนแท็บ
+  const pill = (id, n) => {
+    const el = document.getElementById(id);
+    el.textContent = n; el.classList.toggle("hidden", !n);
+  };
+  pill("pill-orders", ORDERS.filter(o => o.status === "pending").length);
+  pill("pill-topups", TOPUPS.filter(x => x.status === "pending").length);
 }
 
-// ---------- ตาราง ----------
-function renderOrdersTable(orders) {
+// ---------- ออเดอร์ ----------
+function renderOrders() {
+  const list = ORDER_FILTER === "all" ? ORDERS : ORDERS.filter(o => o.status === ORDER_FILTER);
   const el = document.getElementById("table-orders");
-  if (!orders.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
+  if (!list.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
+
   el.innerHTML = `
     <thead><tr>
       <th>${t("date")}</th><th>${t("customer")}</th><th>${t("items")}</th>
-      <th class="num">${t("amount")}</th><th>${t("status")}</th>
+      <th class="num">${t("amount")}</th><th>${t("status")}</th><th></th>
     </tr></thead>
-    <tbody>${orders.slice(0, 20).map(o => `
+    <tbody>${list.slice(0, 100).map(o => `
       <tr>
         <td>${fmtDateTime(o._date)}</td>
-        <td>${escapeHtml(o.customerName || "Guest")}<br><small>${escapeHtml(o.customerEmail || "")}</small></td>
-        <td><small>${escapeHtml((o.items || []).map(i => `${i.name} x${i.qty}`).join(", "))}</small></td>
-        <td class="num">${fmtBaht(o.total || 0)}</td>
-        <td><span class="badge ${o.status === "paid" ? "ok" : "pending"}">${o.status === "paid" ? t("status_paid") : t("status_pending")}</span></td>
-      </tr>`).join("")}
-    </tbody>`;
+        <td>${esc(o.customerName || "—")}<br><small>${esc(o.customerEmail || "")}</small>
+            <br><small class="credit-note">${t("credit")}: ${money(creditOf(o.uid))}</small></td>
+        <td><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small></td>
+        <td class="num">${money(o.total)}</td>
+        <td>${statusBadge(o.status)}${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
+        <td class="actions">${o.status === "pending" ? `
+          <button class="btn-small ok" data-act="approve-order" data-id="${o.id}">${t("approve")}</button>
+          <button class="btn-small danger" data-act="reject-order" data-id="${o.id}">${t("reject")}</button>` : ""}
+        </td>
+      </tr>`).join("")}</tbody>`;
 }
 
-function renderMembersTable(users) {
-  const el = document.getElementById("table-members");
-  if (!users.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
+const creditOf = uid => Number(USERS.find(u => u.id === uid)?.credit || 0);
+
+// ---------- เติมเงิน ----------
+const METHOD_KEY = { truewallet: "m_truewallet", angpao: "m_angpao", bank: "m_bank", promptpay: "m_promptpay", admin: "m_admin" };
+
+function renderTopups() {
+  const list = TOPUP_FILTER === "all" ? TOPUPS : TOPUPS.filter(x => x.status === TOPUP_FILTER);
+  const el = document.getElementById("table-topups");
+  if (!list.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
+
   el.innerHTML = `
     <thead><tr>
-      <th>${t("name")}</th><th>${t("email")}</th><th>${t("signup_method")}</th><th>${t("joined")}</th>
+      <th>${t("date")}</th><th>${t("customer")}</th><th>${t("method")}</th>
+      <th>${t("slip")}</th><th class="num">${t("amount")}</th><th>${t("status")}</th><th></th>
     </tr></thead>
-    <tbody>${users.slice(0, 20).map(u => `
+    <tbody>${list.slice(0, 100).map(x => `
       <tr>
-        <td>${escapeHtml(u.name || "—")}${u.role === "admin" ? ' <span class="badge admin">admin</span>' : ""}</td>
-        <td>${escapeHtml(u.email || "—")}</td>
-        <td><span class="badge provider">${escapeHtml(u.provider || "email")}</span></td>
+        <td>${fmtDateTime(x._date)}</td>
+        <td>${esc(x.name || "—")}<br><small>${esc(x.email || "")}</small></td>
+        <td>${t(METHOD_KEY[x.method] || "m_admin")}</td>
+        <td>${x.slip
+              ? `<img class="slip-thumb" src="${x.slip}" alt="slip">`
+              : x.angpaoLink
+                ? `<a class="btn-small" href="${esc(angpaoRedeemUrl(x.angpaoLink))}" target="_blank" rel="noopener">🧧 ${t("open_angpao")}</a>`
+                : "—"}</td>
+        <td class="num">${money(x.amount)}</td>
+        <td>${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}</td>
+        <td class="actions">${x.status === "pending" ? `
+          <button class="btn-small ok" data-act="approve-topup" data-id="${x.id}">${t("approve")}</button>
+          <button class="btn-small danger" data-act="reject-topup" data-id="${x.id}">${t("reject")}</button>` : ""}
+        </td>
+      </tr>`).join("")}</tbody>`;
+}
+
+// ---------- สินค้า ----------
+function renderProducts() {
+  const el = document.getElementById("product-list");
+  if (!PRODUCTS.length) { el.innerHTML = `<div class="empty">${t("no_data")}</div>`; return; }
+
+  el.innerHTML = PRODUCTS.map(p => `
+    <div class="padmin${p.active === false ? " off" : ""}">
+      <div class="padmin-img">${p.image
+        ? `<img src="${p.image}" alt="">`
+        : `<span class="emoji">${p.emoji || "🛍️"}</span>`}</div>
+      <div class="padmin-body">
+        <b>${esc(p.name)}</b>
+        <div class="muted">${money(p.price)} · ${t("stock")} ${p.stock ?? "∞"}</div>
+        <div class="muted">${p.active === false ? t("inactive") : t("active")}</div>
+      </div>
+      <button class="btn-small" data-act="edit-product" data-id="${p.id}">${t("edit")}</button>
+    </div>`).join("");
+}
+
+function openProductModal(product) {
+  EDITING_PRODUCT = product;
+  PRODUCT_IMAGE = product?.image || null;
+  const v = (id, val) => { document.getElementById(id).value = val ?? ""; };
+  document.getElementById("product-modal-title").textContent = product ? t("edit_product") : t("add_product");
+  v("p-name", product?.name); v("p-name-en", product?.name_en);
+  v("p-desc", product?.desc); v("p-desc-en", product?.desc_en);
+  v("p-price", product?.price ?? ""); v("p-stock", product?.stock ?? "");
+  v("p-emoji", product?.emoji); v("p-image", "");
+  document.getElementById("p-active").checked = product ? product.active !== false : true;
+  document.getElementById("p-delete").classList.toggle("hidden", !product);
+  setMsg("p-msg", "");
+  renderProductPreview();
+  document.getElementById("product-overlay").classList.add("open");
+}
+
+function renderProductPreview() {
+  const box = document.getElementById("p-image-preview");
+  box.innerHTML = PRODUCT_IMAGE
+    ? `<img src="${PRODUCT_IMAGE}" alt=""><button class="img-clear" id="p-image-clear">×</button>`
+    : `<span class="muted">${t("choose_image")}</span>`;
+}
+
+async function saveProduct() {
+  const num = id => {
+    const raw = document.getElementById(id).value;
+    return raw === "" ? null : Number(raw);
+  };
+  const data = {
+    name: document.getElementById("p-name").value.trim(),
+    name_en: document.getElementById("p-name-en").value.trim(),
+    desc: document.getElementById("p-desc").value.trim(),
+    desc_en: document.getElementById("p-desc-en").value.trim(),
+    price: num("p-price") || 0,
+    stock: num("p-stock"),
+    emoji: document.getElementById("p-emoji").value.trim(),
+    image: PRODUCT_IMAGE,
+    active: document.getElementById("p-active").checked,
+    sort: EDITING_PRODUCT?.sort ?? PRODUCTS.length,
+  };
+  if (!data.name) return setMsg("p-msg", t("product_name"));
+  if (data.price <= 0) return setMsg("p-msg", t("amount_invalid"));
+
+  const btn = document.getElementById("p-save");
+  btn.disabled = true;
+  try {
+    await QQ.saveProduct(EDITING_PRODUCT?.id, data);
+    closePanel("product-overlay");
+    await reloadProducts();
+  } catch (e) { setMsg("p-msg", QQ.friendlyError(e)); }
+  finally { btn.disabled = false; }
+}
+
+// ---------- สมาชิก ----------
+function renderMembers() {
+  const q = document.getElementById("member-search").value.trim().toLowerCase();
+  const list = USERS.filter(u => !q
+    || (u.name || "").toLowerCase().includes(q)
+    || (u.email || "").toLowerCase().includes(q));
+  const el = document.getElementById("table-members");
+  if (!list.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
+
+  el.innerHTML = `
+    <thead><tr>
+      <th>${t("name")}</th><th>${t("email")}</th><th>${t("signup_method")}</th>
+      <th class="num">${t("credit")}</th><th>${t("role")}</th><th>${t("joined")}</th><th></th>
+    </tr></thead>
+    <tbody>${list.slice(0, 200).map(u => `
+      <tr>
+        <td>${esc(u.name || "—")}</td>
+        <td>${esc(u.email || "—")}</td>
+        <td><span class="badge provider">${esc(u.provider || "email")}</span></td>
+        <td class="num"><b>${money(u.credit)}</b></td>
+        <td>${u.role === "admin" ? `<span class="badge admin">${t("role_admin")}</span>` : t("role_member")}</td>
         <td>${fmtDateTime(u._date)}</td>
-      </tr>`).join("")}
-    </tbody>`;
+        <td class="actions">
+          <button class="btn-small primary" data-act="add-credit" data-id="${u.id}">+ ${t("credit")}</button>
+          <button class="btn-small" data-act="toggle-role" data-id="${u.id}">
+            ${u.role === "admin" ? t("remove_admin") : t("make_admin")}</button>
+        </td>
+      </tr>`).join("")}</tbody>`;
 }
 
-// ---------- render ทั้งหน้า ----------
-function render() {
-  const start = rangeStart();
-  const orders = ORDERS.filter(o => o._date && o._date >= start);
-  const users = USERS.filter(u => u._date && u._date >= start);
-
-  const sales = orders.reduce((s, o) => s + (o.total || 0), 0);
-  document.getElementById("kpi-sales").textContent = fmtBaht(sales);
-  document.getElementById("kpi-orders").textContent = fmtNum(orders.length);
-  document.getElementById("kpi-members").textContent = fmtNum(USERS.length);
-  document.getElementById("kpi-avg").textContent = orders.length ? fmtBaht(sales / orders.length) : "—";
-
-  lineChart(document.getElementById("chart-sales"),
-    dailySeries(orders, o => o.total || 0), { color: CHART_COLORS.sales, format: fmtBaht });
-
-  lineChart(document.getElementById("chart-members"),
-    dailySeries(users, () => 1), { color: CHART_COLORS.members, format: fmtNum });
-
-  // สินค้าขายดี (นับจากยอดเงินรวมของสินค้าแต่ละชิ้น)
-  const byProduct = new Map();
-  orders.forEach(o => (o.items || []).forEach(i => {
-    byProduct.set(i.name, (byProduct.get(i.name) || 0) + (i.price || 0) * (i.qty || 0));
-  }));
-  const top = [...byProduct.entries()]
-    .map(([label, value]) => ({ label, value }))
-    .sort((a, b) => b.value - a.value).slice(0, 8);
-  barChart(document.getElementById("chart-products"), top,
-    { color: CHART_COLORS.products, format: fmtBaht });
-
-  renderOrdersTable(orders);
-  renderMembersTable(users.length ? users : USERS);
+function setMsg(id, text, kind = "error") {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "msg" + (text ? " show " + kind : "");
 }
 
-// ---------- โหลดข้อมูล + ตรวจสิทธิ์ ----------
-function showGate(msgKey) {
-  const gate = document.getElementById("gate");
-  gate.innerHTML = `<div class="gate-box">
-      <p>${t(msgKey)}</p>
-      <a class="btn-primary" href="login.html?next=admin.html" data-i18n="login">${t("login")}</a>
-    </div>`;
-  gate.classList.remove("hidden");
-  document.getElementById("dash").classList.add("hidden");
-}
-
-async function boot() {
-  if (!QQAuth.isConfigured) {
-    document.getElementById("gate").innerHTML =
-      `<div class="gate-box"><p>ยังไม่ได้ตั้งค่า Firebase — แก้ไฟล์ <code>firebase-config.js</code> ก่อน</p></div>`;
-    return;
-  }
-  await QQAuth.whenAuthReady();
-  if (!QQAuth.user) return showGate("login_title");
-  if (!QQAuth.isAdmin) return showGate("access_denied");
-
-  document.getElementById("gate").classList.add("hidden");
-  document.getElementById("dash").classList.remove("hidden");
-
-  const [orders, users] = await Promise.all([QQAuth.fetchOrders(), QQAuth.fetchUsers()]);
-  ORDERS = orders.map(o => ({ ...o, _date: toDate(o.createdAt) })).filter(o => o._date);
+// ---------- โหลดข้อมูล ----------
+async function reloadAll() {
+  const [orders, users, topups, products] = await Promise.all([
+    QQ.fetchOrders(), QQ.fetchUsers(), QQ.fetchTopups(), QQ.fetchProducts(),
+  ]);
+  ORDERS = orders.map(o => ({ ...o, _date: toDate(o.createdAt) }));
   USERS = users.map(u => ({ ...u, _date: toDate(u.createdAt) }));
-  render();
+  TOPUPS = topups.map(x => ({ ...x, _date: toDate(x.createdAt) }));
+  PRODUCTS = products;
+  renderAll();
 }
+
+async function reloadProducts() { PRODUCTS = await QQ.fetchProducts(); renderProducts(); }
+
+function renderAll() {
+  renderOverview(); renderOrders(); renderTopups(); renderProducts(); renderMembers();
+}
+
+// ---------- events ----------
+document.getElementById("tabs").addEventListener("click", e => {
+  const btn = e.target.closest(".tab");
+  if (!btn) return;
+  document.querySelectorAll("#tabs .tab").forEach(b => b.classList.toggle("active", b === btn));
+  document.querySelectorAll(".tab-page").forEach(p =>
+    p.classList.toggle("hidden", p.id !== "page-" + btn.dataset.tab));
+  if (btn.dataset.tab === "overview") renderOverview();
+});
 
 document.getElementById("range-filter").addEventListener("click", e => {
   const btn = e.target.closest(".range-btn");
   if (!btn) return;
-  document.querySelectorAll(".range-btn").forEach(b => b.classList.toggle("active", b === btn));
+  document.querySelectorAll("#range-filter .range-btn").forEach(b => b.classList.toggle("active", b === btn));
   RANGE = btn.dataset.range === "all" ? "all" : Number(btn.dataset.range);
-  render();
+  renderOverview();
 });
 
-document.addEventListener("langchange", () => { if (ORDERS.length || USERS.length) render(); });
-window.addEventListener("resize", () => { if (ORDERS.length || USERS.length) render(); });
+const wireFilter = (id, set) => document.getElementById(id).addEventListener("click", e => {
+  const btn = e.target.closest(".range-btn");
+  if (!btn) return;
+  document.querySelectorAll(`#${id} .range-btn`).forEach(b => b.classList.toggle("active", b === btn));
+  set(btn.dataset.st);
+});
+wireFilter("orders-filter", v => { ORDER_FILTER = v; renderOrders(); });
+wireFilter("topups-filter", v => { TOPUP_FILTER = v; renderTopups(); });
 
-boot();
+document.getElementById("member-search").addEventListener("input", renderMembers);
+document.getElementById("btn-add-product").addEventListener("click", () => openProductModal(null));
+document.getElementById("p-save").addEventListener("click", saveProduct);
+
+document.getElementById("p-delete").addEventListener("click", async () => {
+  if (!EDITING_PRODUCT || !confirm(t("confirm_delete_product"))) return;
+  await QQ.deleteProduct(EDITING_PRODUCT.id);
+  closePanel("product-overlay");
+  await reloadProducts();
+});
+
+document.getElementById("p-image").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try { PRODUCT_IMAGE = await QQ.resizeImage(file, 900, 0.75); renderProductPreview(); }
+  catch (err) { setMsg("p-msg", err.message || t("error_generic")); }
+});
+
+document.getElementById("p-image-preview").addEventListener("click", e => {
+  if (e.target.id === "p-image-clear") { PRODUCT_IMAGE = null; renderProductPreview(); }
+});
+
+document.getElementById("c-save").addEventListener("click", async () => {
+  const amount = Number(document.getElementById("c-amount").value);
+  if (!amount) return setMsg("c-msg", t("amount_invalid"));
+  const btn = document.getElementById("c-save");
+  btn.disabled = true;
+  try {
+    await QQ.addCreditTo(CREDIT_TARGET.id, amount, document.getElementById("c-note").value.trim());
+    closePanel("credit-overlay");
+    await reloadAll();
+  } catch (e) { setMsg("c-msg", QQ.friendlyError(e)); }
+  finally { btn.disabled = false; }
+});
+
+// ปุ่มในตาราง (ใช้ event delegation ตัวเดียวครอบทั้งหน้า)
+document.getElementById("dash").addEventListener("click", async e => {
+  const btn = e.target.closest("[data-act]");
+  if (btn) {
+    const { act, id } = btn.dataset;
+    btn.disabled = true;
+    try {
+      if (act === "approve-order" && confirm(t("confirm_approve_order"))) {
+        await QQ.approveOrder(id); await reloadAll();
+      } else if (act === "reject-order" && confirm(t("confirm_reject"))) {
+        await QQ.rejectOrder(id); await reloadAll();
+      } else if (act === "approve-topup" && confirm(t("confirm_approve_topup"))) {
+        await QQ.approveTopup(id); await reloadAll();
+      } else if (act === "reject-topup" && confirm(t("confirm_reject"))) {
+        await QQ.rejectTopup(id); await reloadAll();
+      } else if (act === "edit-product") {
+        openProductModal(PRODUCTS.find(p => p.id === id));
+      } else if (act === "add-credit") {
+        CREDIT_TARGET = USERS.find(u => u.id === id);
+        document.getElementById("credit-target").textContent =
+          `${t("add_credit_to")} ${CREDIT_TARGET.name || CREDIT_TARGET.email} · ${t("credit")} ${money(CREDIT_TARGET.credit)}`;
+        document.getElementById("c-amount").value = "";
+        document.getElementById("c-note").value = "";
+        setMsg("c-msg", "");
+        document.getElementById("credit-overlay").classList.add("open");
+      } else if (act === "toggle-role") {
+        const u = USERS.find(x => x.id === id);
+        await QQ.setRole(id, u.role === "admin" ? "member" : "admin");
+        await reloadAll();
+      }
+    } catch (err) { alert(QQ.friendlyError(err)); }
+    finally { btn.disabled = false; }
+    return;
+  }
+  // คลิกรูปสลิปเพื่อดูขนาดเต็ม
+  const img = e.target.closest(".slip-thumb");
+  if (img) {
+    document.getElementById("img-full").src = img.src;
+    document.getElementById("img-overlay").classList.add("open");
+  }
+});
+
+document.getElementById("nav-logout").addEventListener("click", () =>
+  QQ.logout().then(() => location.href = "login.html"));
+
+document.addEventListener("langchange", () => { if (USERS.length || ORDERS.length) renderAll(); });
+window.addEventListener("resize", () => { if (ORDERS.length || USERS.length) renderOverview(); });
+
+window.closePanel = id => document.getElementById(id).classList.remove("open");
+
+// ---------- เริ่มทำงาน ----------
+function showGate(msgKey, withLogin) {
+  document.getElementById("gate").innerHTML = `<div class="gate-box">
+      <p>${t(msgKey)}</p>
+      ${withLogin ? `<a class="btn-primary" href="login.html?next=admin.html">${t("login")}</a>` : ""}
+    </div>`;
+  document.getElementById("gate").classList.remove("hidden");
+  document.getElementById("dash").classList.add("hidden");
+}
+
+(async function boot() {
+  if (!QQ.isConfigured) {
+    document.getElementById("gate").innerHTML =
+      `<div class="gate-box"><p>ยังไม่ได้ตั้งค่า Firebase — แก้ไฟล์ <code>firebase-config.js</code></p></div>`;
+    return;
+  }
+  await QQ.whenAuthReady();
+  if (!QQ.user) return showGate("login_title", true);
+  if (!QQ.isAdmin) return showGate("access_denied", false);
+
+  document.getElementById("gate").classList.add("hidden");
+  document.getElementById("dash").classList.remove("hidden");
+  await reloadAll();
+})();

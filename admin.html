@@ -13,7 +13,7 @@
   <div class="header-actions">
     <button class="btn-lang" onclick="toggleLang()"><span data-lang-label>EN</span></button>
     <a class="btn-ghost" href="index.html" data-i18n="back_to_shop">กลับหน้าร้าน</a>
-    <button class="btn-ghost" onclick="QQAuth.logout().then(()=>location.href='login.html')" data-i18n="logout">ออกจากระบบ</button>
+    <button class="btn-ghost" id="nav-logout" data-i18n="logout">ออกจากระบบ</button>
   </div>
 </header>
 
@@ -21,65 +21,164 @@
 
 <main id="dash" class="admin-main hidden">
 
-  <div class="toolbar">
-    <h2 data-i18n="dashboard">ภาพรวมร้าน</h2>
-    <div class="range-filter" id="range-filter">
-      <button class="range-btn" data-range="7" data-i18n="range_7">7 วันล่าสุด</button>
-      <button class="range-btn active" data-range="30" data-i18n="range_30">30 วันล่าสุด</button>
-      <button class="range-btn" data-range="90" data-i18n="range_90">90 วันล่าสุด</button>
-      <button class="range-btn" data-range="all" data-i18n="range_all">ทั้งหมด</button>
-    </div>
-  </div>
+  <nav class="tabs tabs-main" id="tabs">
+    <button class="tab active" data-tab="overview" data-i18n="dashboard">ภาพรวม</button>
+    <button class="tab" data-tab="orders">
+      <span data-i18n="tab_orders">ออเดอร์</span><span class="pill hidden" id="pill-orders">0</span>
+    </button>
+    <button class="tab" data-tab="topups">
+      <span data-i18n="tab_topups">เติมเงิน</span><span class="pill hidden" id="pill-topups">0</span>
+    </button>
+    <button class="tab" data-tab="products" data-i18n="tab_products">สินค้า</button>
+    <button class="tab" data-tab="members" data-i18n="tab_members">สมาชิก</button>
+  </nav>
 
-  <!-- ตัวเลขสรุป -->
-  <section class="tiles">
-    <div class="tile">
-      <div class="tile-label" data-i18n="total_sales">ยอดขายรวม</div>
-      <div class="tile-value" id="kpi-sales">—</div>
+  <!-- ===== ภาพรวม ===== -->
+  <section class="tab-page" id="page-overview">
+    <div class="toolbar">
+      <div class="range-filter" id="range-filter">
+        <button class="range-btn" data-range="7" data-i18n="range_7">7 วัน</button>
+        <button class="range-btn active" data-range="30" data-i18n="range_30">30 วัน</button>
+        <button class="range-btn" data-range="90" data-i18n="range_90">90 วัน</button>
+        <button class="range-btn" data-range="all" data-i18n="range_all">ทั้งหมด</button>
+      </div>
     </div>
-    <div class="tile">
-      <div class="tile-label" data-i18n="total_orders">จำนวนออเดอร์</div>
-      <div class="tile-value" id="kpi-orders">—</div>
+
+    <div class="tiles">
+      <div class="tile"><div class="tile-label" data-i18n="total_sales">ยอดขาย (อนุมัติแล้ว)</div><div class="tile-value" id="kpi-sales">—</div></div>
+      <div class="tile"><div class="tile-label" data-i18n="total_orders">ออเดอร์ที่อนุมัติ</div><div class="tile-value" id="kpi-orders">—</div></div>
+      <div class="tile"><div class="tile-label" data-i18n="avg_order">ยอดเฉลี่ยต่อออเดอร์</div><div class="tile-value" id="kpi-avg">—</div></div>
+      <div class="tile"><div class="tile-label" data-i18n="total_members">สมาชิกทั้งหมด</div><div class="tile-value" id="kpi-members">—</div></div>
+      <div class="tile"><div class="tile-label" data-i18n="pending_orders">ออเดอร์รออนุมัติ</div><div class="tile-value" id="kpi-pending-orders">—</div></div>
+      <div class="tile"><div class="tile-label" data-i18n="pending_topups">เติมเงินรออนุมัติ</div><div class="tile-value" id="kpi-pending-topups">—</div></div>
+      <div class="tile"><div class="tile-label" data-i18n="total_credit">เครดิตคงเหลือรวม</div><div class="tile-value" id="kpi-credit">—</div></div>
     </div>
-    <div class="tile">
-      <div class="tile-label" data-i18n="total_members">สมาชิกทั้งหมด</div>
-      <div class="tile-value" id="kpi-members">—</div>
+
+    <div class="cards-2">
+      <div class="card"><h3 data-i18n="sales_over_time">ยอดขายรายวัน</h3><div class="chart" id="chart-sales"></div></div>
+      <div class="card"><h3 data-i18n="new_members">สมาชิกใหม่รายวัน</h3><div class="chart" id="chart-members"></div></div>
     </div>
-    <div class="tile">
-      <div class="tile-label" data-i18n="avg_order">ยอดเฉลี่ยต่อออเดอร์</div>
-      <div class="tile-value" id="kpi-avg">—</div>
-    </div>
+    <div class="card"><h3 data-i18n="top_products">สินค้าขายดี</h3><div class="chart" id="chart-products"></div></div>
   </section>
 
-  <!-- กราฟ -->
-  <section class="cards-2">
+  <!-- ===== ออเดอร์ ===== -->
+  <section class="tab-page hidden" id="page-orders">
     <div class="card">
-      <h3 data-i18n="sales_over_time">ยอดขายรายวัน</h3>
-      <div class="chart" id="chart-sales"></div>
+      <div class="toolbar">
+        <h3 data-i18n="tab_orders">ออเดอร์</h3>
+        <div class="range-filter" id="orders-filter">
+          <button class="range-btn active" data-st="pending" data-i18n="st_pending">รออนุมัติ</button>
+          <button class="range-btn" data-st="approved" data-i18n="st_approved">อนุมัติแล้ว</button>
+          <button class="range-btn" data-st="rejected" data-i18n="st_rejected">ไม่อนุมัติ</button>
+          <button class="range-btn" data-st="all" data-i18n="all">ทั้งหมด</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table id="table-orders"></table></div>
     </div>
+  </section>
+
+  <!-- ===== เติมเงิน ===== -->
+  <section class="tab-page hidden" id="page-topups">
     <div class="card">
-      <h3 data-i18n="new_members">สมาชิกใหม่รายวัน</h3>
-      <div class="chart" id="chart-members"></div>
+      <div class="toolbar">
+        <h3 data-i18n="tab_topups">เติมเงิน</h3>
+        <div class="range-filter" id="topups-filter">
+          <button class="range-btn active" data-st="pending" data-i18n="st_pending">รออนุมัติ</button>
+          <button class="range-btn" data-st="approved" data-i18n="st_approved">อนุมัติแล้ว</button>
+          <button class="range-btn" data-st="rejected" data-i18n="st_rejected">ไม่อนุมัติ</button>
+          <button class="range-btn" data-st="all" data-i18n="all">ทั้งหมด</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table id="table-topups"></table></div>
     </div>
   </section>
 
-  <section class="card">
-    <h3 data-i18n="top_products">สินค้าขายดี</h3>
-    <div class="chart" id="chart-products"></div>
+  <!-- ===== สินค้า ===== -->
+  <section class="tab-page hidden" id="page-products">
+    <div class="card">
+      <div class="toolbar">
+        <h3 data-i18n="tab_products">สินค้า</h3>
+        <button class="btn-small primary" id="btn-add-product" data-i18n="add_product">เพิ่มสินค้า</button>
+      </div>
+      <div class="product-admin-grid" id="product-list"></div>
+    </div>
   </section>
 
-  <!-- ตาราง -->
-  <section class="card">
-    <h3 data-i18n="recent_orders">ออเดอร์ล่าสุด</h3>
-    <div class="table-wrap"><table id="table-orders"></table></div>
-  </section>
-
-  <section class="card">
-    <h3 data-i18n="members_list">รายชื่อสมาชิก</h3>
-    <div class="table-wrap"><table id="table-members"></table></div>
+  <!-- ===== สมาชิก ===== -->
+  <section class="tab-page hidden" id="page-members">
+    <div class="card">
+      <div class="toolbar">
+        <h3 data-i18n="members_list">รายชื่อสมาชิก</h3>
+        <input class="search" id="member-search" data-i18n-placeholder="search" placeholder="ค้นหา">
+      </div>
+      <div class="table-wrap"><table id="table-members"></table></div>
+    </div>
   </section>
 
 </main>
+
+<!-- แก้ไขสินค้า -->
+<div class="overlay" id="product-overlay">
+  <div class="panel">
+    <button class="btn-close" onclick="closePanel('product-overlay')">×</button>
+    <h2 id="product-modal-title" data-i18n="edit_product">แก้ไขสินค้า</h2>
+
+    <label data-i18n="product_image">รูปสินค้า</label>
+    <div class="img-picker">
+      <div id="p-image-preview" class="img-preview"></div>
+      <div>
+        <input type="file" id="p-image" accept="image/*">
+        <input type="text" id="p-emoji" maxlength="4" placeholder="🛍️" class="emoji-input">
+      </div>
+    </div>
+
+    <label data-i18n="product_name">ชื่อสินค้า</label>
+    <input type="text" id="p-name">
+    <label data-i18n="product_name_en">ชื่อสินค้า (อังกฤษ)</label>
+    <input type="text" id="p-name-en">
+    <label data-i18n="product_desc">คำอธิบาย</label>
+    <input type="text" id="p-desc">
+    <label data-i18n="product_desc_en">คำอธิบาย (อังกฤษ)</label>
+    <input type="text" id="p-desc-en">
+
+    <div class="two-col">
+      <div>
+        <label data-i18n="price">ราคา</label>
+        <input type="number" id="p-price" min="0" step="1">
+      </div>
+      <div>
+        <label data-i18n="stock">สต๊อก</label>
+        <input type="number" id="p-stock" min="0" step="1">
+      </div>
+    </div>
+
+    <label class="check"><input type="checkbox" id="p-active" checked> <span data-i18n="active">เปิดขาย</span></label>
+
+    <div id="p-msg" class="msg"></div>
+    <button class="btn-primary" id="p-save" data-i18n="save">บันทึก</button>
+    <button class="btn-link center danger hidden" id="p-delete" data-i18n="delete">ลบ</button>
+  </div>
+</div>
+
+<!-- เพิ่มเครดิต -->
+<div class="overlay" id="credit-overlay">
+  <div class="panel">
+    <button class="btn-close" onclick="closePanel('credit-overlay')">×</button>
+    <h2 data-i18n="add_credit">เพิ่มเครดิต</h2>
+    <p class="hint" id="credit-target"></p>
+    <label data-i18n="credit_amount">จำนวนเครดิต</label>
+    <input type="number" id="c-amount" step="1" placeholder="0">
+    <label data-i18n="note_optional">หมายเหตุ (ไม่บังคับ)</label>
+    <input type="text" id="c-note">
+    <div id="c-msg" class="msg"></div>
+    <button class="btn-primary" id="c-save" data-i18n="save">บันทึก</button>
+  </div>
+</div>
+
+<!-- ดูรูปเต็ม -->
+<div class="overlay" id="img-overlay" onclick="closePanel('img-overlay')">
+  <div class="panel img-panel"><img id="img-full" alt=""></div>
+</div>
 
 <script src="i18n.js"></script>
 <script type="module" src="auth.js"></script>
