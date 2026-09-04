@@ -17,6 +17,7 @@ const I18N = {
     order_placed: "สั่งซื้อเรียบร้อย! รอแอดมินอนุมัติ เครดิตจะถูกหักเมื่ออนุมัติแล้ว",
     login_required: "กรุณาเข้าสู่ระบบก่อนสั่งซื้อ",
     not_enough_credit: "เครดิตไม่พอ กรุณาเติมเงินก่อน",
+    cart_updated: "ราคาหรือจำนวนสินค้าในตะกร้ามีการเปลี่ยนแปลง กรุณาตรวจสอบแล้วกดสั่งซื้ออีกครั้ง",
     topup_now: "เติมเงิน",
 
     // กระเป๋าเงิน / เติมเงิน
@@ -123,6 +124,7 @@ const I18N = {
     order_placed: "Order placed! Waiting for admin approval — credit is deducted on approval.",
     login_required: "Please sign in before ordering",
     not_enough_credit: "Not enough credit. Please top up first.",
+    cart_updated: "Prices or quantities in your cart changed — please review and order again.",
     topup_now: "Top up",
 
     wallet: "Wallet", my_credit: "My credit", credit: "Credit",

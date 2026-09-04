@@ -148,16 +148,26 @@ function openCart() { renderCartPanel(); openPanel("cart-overlay"); }
 
 // ---------- สั่งซื้อ ----------
 async function doCheckout() {
-  const cart = pruneCart();
-  const total = cartTotal(cart);
-  if (!total) return;
-
   if (!window.QQ?.user) { location.href = "login.html?next=index.html"; return; }
-  if (QQ.credit < total) return;
+  if (!cartTotal(pruneCart())) return;
 
   const btn = document.getElementById("cart-checkout");
   btn.disabled = true;
   try {
+    // ดึงราคา/สต๊อกล่าสุดก่อนสั่งจริง เผื่อแอดมินแก้ระหว่างที่ลูกค้าเปิดหน้าค้างไว้
+    const before = cartTotal(getCart());
+    await loadProducts();
+    const cart = pruneCart();
+    const total = cartTotal(cart);
+
+    if (!total) { renderCartPanel(); return; }
+    if (total !== before) {          // ราคาหรือจำนวนเปลี่ยน ให้ลูกค้าเห็นก่อนแล้วค่อยกดใหม่
+      renderCartPanel();
+      alert(`${t("cart_updated")}\n${t("total")}: ${money(total)}`);
+      return;
+    }
+    if (QQ.credit < total) { syncCheckoutState(); return; }
+
     const items = Object.entries(cart).map(([id, qty]) => {
       const p = findProduct(id);
       return { id, name: p.name, price: p.price, qty };
@@ -202,6 +212,7 @@ async function loadProducts() {
     PRODUCTS = [];
   }
   renderProducts();
+  pruneCart();        // ทิ้งของที่ถูกลบ/เกินสต๊อกก่อนนับตัวเลขบนไอคอนตะกร้า
   renderCartBadge();
 }
 
