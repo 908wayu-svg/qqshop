@@ -42,6 +42,19 @@ service cloud.firestore {
     match /products/{id} {
       allow read: if true;                 // ลูกค้าดูได้ทุกคน
       allow write: if isAdmin();           // แก้ไขได้เฉพาะแอดมิน
+
+      // คลังของสินค้าดิจิทัล — เก็บไอดี/รหัสผ่านรายชิ้น
+      // ห้ามลูกค้าอ่านเด็ดขาด (ต่อให้เป็นชิ้นที่ตัวเองซื้อ)
+      // ลูกค้าเห็นรหัสจากในออเดอร์ของตัวเองที่คัดลอกไปตอนแอดมินอนุมัติแทน
+      match /stockItems/{itemId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    // ===== ตั้งค่าร้าน (เช่น จุดเริ่มนับยอดขาย) =====
+    match /settings/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
 
     // ===== ออเดอร์ =====

@@ -49,6 +49,16 @@
   <div id="list"></div>
 </main>
 
+<!-- ไอดี/รหัสผ่านที่ซื้อมา -->
+<div class="overlay" id="cred-overlay">
+  <div class="panel">
+    <button class="btn-close" onclick="closePanel('cred-overlay')">×</button>
+    <h2 id="cred-title"></h2>
+    <div id="cred-list"></div>
+    <div class="hint" data-i18n="keep_safe">เก็บข้อมูลนี้ไว้ให้ดี และรีบเปลี่ยนรหัสผ่านหลังได้รับ</div>
+  </div>
+</div>
+
 <script src="i18n.js"></script>
 <script type="module" src="auth.js"></script>
 <script type="module" src="purchases.js"></script>

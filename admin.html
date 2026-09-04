@@ -42,6 +42,11 @@
         <button class="range-btn" data-range="90" data-i18n="range_90">90 วัน</button>
         <button class="range-btn" data-range="all" data-i18n="range_all">ทั้งหมด</button>
       </div>
+      <div class="reset-box">
+        <span class="muted" id="reset-info"></span>
+        <button class="btn-small" id="btn-reset-sales" data-i18n="reset_sales">รีเซ็ตยอดขาย</button>
+        <button class="btn-small hidden" id="btn-undo-reset" data-i18n="undo_reset">ยกเลิกการรีเซ็ต</button>
+      </div>
     </div>
 
     <div class="tiles">
@@ -146,17 +151,30 @@
         <label data-i18n="price">ราคา</label>
         <input type="number" id="p-price" min="0" step="1">
       </div>
-      <div>
+      <div id="p-stock-box">
         <label data-i18n="stock">สต๊อก</label>
         <input type="number" id="p-stock" min="0" step="1">
       </div>
     </div>
 
     <label class="check"><input type="checkbox" id="p-active" checked> <span data-i18n="active">เปิดขาย</span></label>
+    <label class="check"><input type="checkbox" id="p-digital">
+      <span data-i18n="is_digital">สินค้าดิจิทัล (มีไอดี/รหัสผ่านรายชิ้น)</span></label>
+    <div class="hint" data-i18n="digital_hint">เมื่อเปิด สต๊อกจะนับจากจำนวนชิ้นในคลังอัตโนมัติ ลูกค้าจะเห็นไอดี/รหัสผ่านในประวัติการซื้อทันทีที่คุณอนุมัติออเดอร์</div>
 
     <div id="p-msg" class="msg"></div>
     <button class="btn-primary" id="p-save" data-i18n="save">บันทึก</button>
     <button class="btn-link center danger hidden" id="p-delete" data-i18n="delete">ลบ</button>
+
+    <!-- คลังสินค้าดิจิทัล -->
+    <section id="p-stockitems" class="stock-section hidden">
+      <div class="toolbar">
+        <h3><span data-i18n="stock_items">คลังสินค้า</span> <span class="muted" id="si-count"></span></h3>
+        <button class="btn-small primary" id="si-add" data-i18n="add_stock_item">เพิ่มชิ้น</button>
+      </div>
+      <p class="hint" id="si-hint" data-i18n="stock_items_hint">แต่ละชิ้นคือของ 1 ชุดที่ขายได้ 1 ครั้ง ใส่ชื่อผู้ใช้และรหัสผ่านของชุดนั้น</p>
+      <div id="si-list"></div>
+    </section>
   </div>
 </div>
 
@@ -164,10 +182,18 @@
 <div class="overlay" id="credit-overlay">
   <div class="panel">
     <button class="btn-close" onclick="closePanel('credit-overlay')">×</button>
-    <h2 data-i18n="add_credit">เพิ่มเครดิต</h2>
+    <h2 data-i18n="adjust_credit">ปรับเครดิต</h2>
     <p class="hint" id="credit-target"></p>
     <label data-i18n="credit_amount">จำนวนเครดิต</label>
-    <input type="number" id="c-amount" step="1" placeholder="0">
+    <div class="amount-row">
+      <button type="button" class="btn-small" data-amt="-100">−100</button>
+      <button type="button" class="btn-small" data-amt="-10">−10</button>
+      <input type="number" id="c-amount" step="1" placeholder="0">
+      <button type="button" class="btn-small" data-amt="10">+10</button>
+      <button type="button" class="btn-small" data-amt="100">+100</button>
+    </div>
+    <div class="hint" data-i18n="adjust_credit_hint">ใส่จำนวนบวกเพื่อเพิ่ม ใส่จำนวนติดลบเพื่อหักคืน เช่น -50</div>
+    <div class="hint" id="c-preview"></div>
     <label data-i18n="note_optional">หมายเหตุ (ไม่บังคับ)</label>
     <input type="text" id="c-note">
     <div id="c-msg" class="msg"></div>

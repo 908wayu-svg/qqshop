@@ -2,10 +2,11 @@
 import { QQ } from "./auth.js";
 import { angpaoRedeemUrl } from "./shop-config.js";
 
-let ORDERS = [], USERS = [], TOPUPS = [], PRODUCTS = [];
+let ORDERS = [], USERS = [], TOPUPS = [], PRODUCTS = [], SETTINGS = {};
 let RANGE = 30;
 let ORDER_FILTER = "pending", TOPUP_FILTER = "pending";
 let EDITING_PRODUCT = null, PRODUCT_IMAGE = null, CREDIT_TARGET = null;
+let STOCK_ITEMS = [];
 
 // ---------- utils ----------
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
@@ -158,12 +159,25 @@ function barChart(box, items, { color, format }) {
 }
 
 // ---------- ภาพรวม ----------
+// จุดเริ่มนับยอดขายใหม่ (ถ้าแอดมินเคยกดรีเซ็ต)
+function salesResetAt() {
+  const v = SETTINGS.salesResetAt;
+  return v ? (typeof v.toDate === "function" ? v.toDate() : new Date(v)) : null;
+}
+
 function renderOverview() {
-  const start = rangeStart();
+  const reset = salesResetAt();
+  const start = reset && reset > rangeStart() ? reset : rangeStart();
   const inRange = arr => arr.filter(x => x._date && x._date >= start);
 
+  // แสดงว่ากำลังนับจากจุดไหน
+  const info = document.getElementById("reset-info");
+  info.textContent = reset ? `${t("counting_since")} ${fmtDateTime(reset)}` : "";
+  document.getElementById("btn-undo-reset").classList.toggle("hidden", !reset);
+
   const approved = inRange(ORDERS.filter(o => o.status === "approved"));
-  const users = inRange(USERS);
+  // สมาชิกไม่เกี่ยวกับการรีเซ็ตยอดขาย จึงใช้ช่วงเวลาปกติ
+  const users = USERS.filter(u => u._date && u._date >= rangeStart());
   const sales = approved.reduce((s, o) => s + (o.total || 0), 0);
 
   const set = (id, v) => { document.getElementById(id).textContent = v; };
@@ -311,9 +325,10 @@ function renderProducts() {
     </div>`).join("");
 }
 
-function openProductModal(product) {
+async function openProductModal(product) {
   EDITING_PRODUCT = product;
   PRODUCT_IMAGE = product?.image || null;
+  STOCK_ITEMS = [];
   const v = (id, val) => { document.getElementById(id).value = val ?? ""; };
   document.getElementById("product-modal-title").textContent = product ? t("edit_product") : t("add_product");
   v("p-name", product?.name); v("p-name-en", product?.name_en);
@@ -321,10 +336,75 @@ function openProductModal(product) {
   v("p-price", product?.price ?? ""); v("p-stock", product?.stock ?? "");
   v("p-emoji", product?.emoji); v("p-image", "");
   document.getElementById("p-active").checked = product ? product.active !== false : true;
+  document.getElementById("p-digital").checked = !!product?.digital;
   document.getElementById("p-delete").classList.toggle("hidden", !product);
   setMsg("p-msg", "");
   renderProductPreview();
+  syncDigitalUI();
   document.getElementById("product-overlay").classList.add("open");
+
+  // คลังสินค้าโหลดได้เฉพาะสินค้าที่บันทึกแล้ว
+  if (product?.digital) await loadStockItems();
+}
+
+// สินค้าดิจิทัลให้สต๊อกนับจากจำนวนชิ้นในคลังแทนการพิมพ์เอง
+function syncDigitalUI() {
+  const digital = document.getElementById("p-digital").checked;
+  document.getElementById("p-stock-box").classList.toggle("hidden", digital);
+  const box = document.getElementById("p-stockitems");
+  box.classList.toggle("hidden", !digital);
+  document.getElementById("si-hint").textContent =
+    EDITING_PRODUCT ? t("stock_items_hint") : t("save_product_first");
+  document.getElementById("si-add").disabled = !EDITING_PRODUCT;
+}
+
+async function loadStockItems() {
+  if (!EDITING_PRODUCT) return;
+  STOCK_ITEMS = await QQ.fetchStockItems(EDITING_PRODUCT.id);
+  renderStockItems();
+}
+
+function renderStockItems() {
+  const box = document.getElementById("si-list");
+  const available = STOCK_ITEMS.filter(i => i.status !== "sold").length;
+  document.getElementById("si-count").textContent =
+    `(${t("available")} ${available} / ${t("all")} ${STOCK_ITEMS.length})`;
+
+  if (!STOCK_ITEMS.length) { box.innerHTML = `<div class="empty">${t("no_stock_items")}</div>`; return; }
+
+  box.innerHTML = STOCK_ITEMS.map((it, idx) => {
+    const sold = it.status === "sold";
+    return `
+      <div class="si-row${sold ? " sold" : ""}" data-id="${it.id}">
+        <span class="si-no">#${idx + 1}</span>
+        <input class="si-login" data-f="login" value="${esc(it.login)}"
+               placeholder="${t("item_login")}" ${sold ? "disabled" : ""}>
+        <input class="si-pass" data-f="password" value="${esc(it.password)}"
+               placeholder="${t("item_password")}" ${sold ? "disabled" : ""}>
+        <input class="si-note" data-f="note" value="${esc(it.note)}"
+               placeholder="${t("note_optional")}" ${sold ? "disabled" : ""}>
+        ${sold
+          ? `<span class="badge approved">${t("sold_out_item")}</span>`
+          : `<button class="btn-small danger" data-si-del="${it.id}">✕</button>`}
+      </div>`;
+  }).join("");
+}
+
+// เก็บค่าที่พิมพ์ในคลังทั้งหมดลงฐานข้อมูล
+async function saveStockItems() {
+  if (!EDITING_PRODUCT) return;
+  const rows = [...document.querySelectorAll("#si-list .si-row:not(.sold)")];
+  for (const row of rows) {
+    const id = row.dataset.id;
+    const data = {};
+    row.querySelectorAll("input[data-f]").forEach(inp => { data[inp.dataset.f] = inp.value.trim(); });
+    const orig = STOCK_ITEMS.find(i => i.id === id) || {};
+    if (data.login !== (orig.login || "") || data.password !== (orig.password || "")
+        || data.note !== (orig.note || "")) {
+      await QQ.saveStockItem(EDITING_PRODUCT.id, id, data);
+    }
+  }
+  await QQ.syncDigitalStock(EDITING_PRODUCT.id);
 }
 
 function renderProductPreview() {
@@ -340,25 +420,40 @@ async function saveProduct() {
     const raw = document.getElementById(id).value;
     return raw === "" ? null : Number(raw);
   };
+  const digital = document.getElementById("p-digital").checked;
   const data = {
     name: document.getElementById("p-name").value.trim(),
     name_en: document.getElementById("p-name-en").value.trim(),
     desc: document.getElementById("p-desc").value.trim(),
     desc_en: document.getElementById("p-desc-en").value.trim(),
     price: num("p-price") || 0,
-    stock: num("p-stock"),
     emoji: document.getElementById("p-emoji").value.trim(),
     image: PRODUCT_IMAGE,
     active: document.getElementById("p-active").checked,
+    digital,
     sort: EDITING_PRODUCT?.sort ?? PRODUCTS.length,
   };
+  // สินค้าดิจิทัลไม่ให้พิมพ์สต๊อกเอง ระบบนับจากคลังให้
+  if (!digital) data.stock = num("p-stock");
+
   if (!data.name) return setMsg("p-msg", t("product_name"));
   if (data.price <= 0) return setMsg("p-msg", t("amount_invalid"));
 
   const btn = document.getElementById("p-save");
   btn.disabled = true;
   try {
-    await QQ.saveProduct(EDITING_PRODUCT?.id, data);
+    if (EDITING_PRODUCT && digital) await saveStockItems();
+    const ref = await QQ.saveProduct(EDITING_PRODUCT?.id, data);
+
+    // เพิ่งสร้างสินค้าดิจิทัลใหม่ ให้เปิดคลังต่อทันทีแทนการปิดหน้าต่าง
+    if (!EDITING_PRODUCT && digital) {
+      await reloadProducts();
+      const created = PRODUCTS.find(p => p.id === ref.id);
+      setMsg("p-msg", t("saved_now_add_items"), "ok");
+      await openProductModal(created);
+      return;
+    }
+    if (digital) await QQ.syncDigitalStock(EDITING_PRODUCT.id);
     closePanel("product-overlay");
     await reloadProducts();
   } catch (e) { setMsg("p-msg", QQ.friendlyError(e)); }
@@ -403,13 +498,14 @@ function setMsg(id, text, kind = "error") {
 
 // ---------- โหลดข้อมูล ----------
 async function reloadAll() {
-  const [orders, users, topups, products] = await Promise.all([
-    QQ.fetchOrders(), QQ.fetchUsers(), QQ.fetchTopups(), QQ.fetchProducts(),
+  const [orders, users, topups, products, settings] = await Promise.all([
+    QQ.fetchOrders(), QQ.fetchUsers(), QQ.fetchTopups(), QQ.fetchProducts(), QQ.fetchSettings(),
   ]);
   ORDERS = orders.map(o => ({ ...o, _date: toDate(o.createdAt) }));
   USERS = users.map(u => ({ ...u, _date: toDate(u.createdAt) }));
   TOPUPS = topups.map(x => ({ ...x, _date: toDate(x.createdAt) }));
   PRODUCTS = products;
+  SETTINGS = settings;
   renderAll();
 }
 
@@ -457,6 +553,66 @@ document.getElementById("p-delete").addEventListener("click", async () => {
   await reloadProducts();
 });
 
+document.getElementById("p-digital").addEventListener("change", async () => {
+  syncDigitalUI();
+  if (document.getElementById("p-digital").checked && EDITING_PRODUCT) await loadStockItems();
+});
+
+document.getElementById("si-add").addEventListener("click", async () => {
+  if (!EDITING_PRODUCT) return;
+  const btn = document.getElementById("si-add");
+  btn.disabled = true;
+  try {
+    await QQ.saveStockItem(EDITING_PRODUCT.id, null,
+      { login: "", password: "", note: "", sort: STOCK_ITEMS.length });
+    await loadStockItems();
+    await QQ.syncDigitalStock(EDITING_PRODUCT.id);
+    document.querySelector("#si-list .si-row:last-child .si-login")?.focus();
+  } catch (e) { setMsg("p-msg", QQ.friendlyError(e)); }
+  finally { btn.disabled = false; }
+});
+
+document.getElementById("si-list").addEventListener("click", async e => {
+  const del = e.target.closest("[data-si-del]");
+  if (!del || !EDITING_PRODUCT) return;
+  if (!confirm(t("confirm_delete_stock_item"))) return;
+  del.disabled = true;
+  await QQ.deleteStockItem(EDITING_PRODUCT.id, del.dataset.siDel);
+  await loadStockItems();
+  await QQ.syncDigitalStock(EDITING_PRODUCT.id);
+});
+
+// ---------- รีเซ็ตยอดขาย ----------
+document.getElementById("btn-reset-sales").addEventListener("click", async () => {
+  if (!confirm(t("confirm_reset_sales"))) return;
+  await QQ.setSalesResetPoint(new Date());
+  SETTINGS = await QQ.fetchSettings();
+  renderOverview();
+});
+
+document.getElementById("btn-undo-reset").addEventListener("click", async () => {
+  if (!confirm(t("confirm_undo_reset"))) return;
+  await QQ.clearSalesResetPoint();
+  SETTINGS = await QQ.fetchSettings();
+  renderOverview();
+});
+
+// ---------- ปุ่มบวก/ลบเครดิตเร็ว ----------
+document.querySelector("#credit-overlay .amount-row").addEventListener("click", e => {
+  const btn = e.target.closest("[data-amt]");
+  if (!btn) return;
+  const input = document.getElementById("c-amount");
+  input.value = (Number(input.value) || 0) + Number(btn.dataset.amt);
+  input.dispatchEvent(new Event("input"));
+});
+
+document.getElementById("c-amount").addEventListener("input", () => {
+  const amt = Number(document.getElementById("c-amount").value) || 0;
+  const before = Number(CREDIT_TARGET?.credit || 0);
+  document.getElementById("c-preview").textContent = amt
+    ? `${money(before)} → ${money(before + amt)}` : "";
+});
+
 document.getElementById("p-image").addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -473,12 +629,12 @@ document.getElementById("c-save").addEventListener("click", async () => {
   if (!Number.isFinite(amount) || amount === 0) return setMsg("c-msg", t("amount_invalid"));
   // ใส่ค่าติดลบได้ (ไว้หักคืน) แต่ห้ามหักจนเครดิตติดลบ
   if (amount < 0 && Number(CREDIT_TARGET.credit || 0) + amount < 0) {
-    return setMsg("c-msg", t("insufficient_customer_credit"));
+    return setMsg("c-msg", t("would_go_negative"));
   }
   const btn = document.getElementById("c-save");
   btn.disabled = true;
   try {
-    await QQ.addCreditTo(CREDIT_TARGET.id, amount, document.getElementById("c-note").value.trim());
+    await QQ.adjustCredit(CREDIT_TARGET.id, amount, document.getElementById("c-note").value.trim());
     closePanel("credit-overlay");
     await reloadAll();
   } catch (e) { setMsg("c-msg", QQ.friendlyError(e)); }
@@ -501,13 +657,14 @@ document.getElementById("dash").addEventListener("click", async e => {
       } else if (act === "reject-topup" && confirm(t("confirm_reject"))) {
         await QQ.rejectTopup(id); await reloadAll();
       } else if (act === "edit-product") {
-        openProductModal(PRODUCTS.find(p => p.id === id));
+        await openProductModal(PRODUCTS.find(p => p.id === id));
       } else if (act === "add-credit") {
         CREDIT_TARGET = USERS.find(u => u.id === id);
         document.getElementById("credit-target").textContent =
-          `${t("add_credit_to")} ${CREDIT_TARGET.name || CREDIT_TARGET.email} · ${t("credit")} ${money(CREDIT_TARGET.credit)}`;
+          `${CREDIT_TARGET.name || CREDIT_TARGET.email} · ${t("credit")} ${money(CREDIT_TARGET.credit)}`;
         document.getElementById("c-amount").value = "";
         document.getElementById("c-note").value = "";
+        document.getElementById("c-preview").textContent = "";
         setMsg("c-msg", "");
         document.getElementById("credit-overlay").classList.add("open");
       } else if (act === "toggle-role") {

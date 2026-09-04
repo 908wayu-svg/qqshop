@@ -64,15 +64,19 @@ function render() {
       </header>
 
       <ul class="purchase-items">
-        ${(o.items || []).map(i => `
-          <li>
+        ${(o.items || []).map((i, idx) => {
+          const has = Array.isArray(i.delivered) && i.delivered.length;
+          return `
+          <li class="${has ? "has-delivery" : ""}" ${has ? `data-open="${o.id}|${idx}"` : ""}>
             <div class="pi-thumb">${itemThumb(i)}</div>
             <div class="pi-body">
               <b>${esc(itemName(i))}</b>
               <div class="muted">${money(i.price)} × ${i.qty}</div>
+              ${has ? `<div class="pi-open">🔑 ${t("view_credentials")}</div>` : ""}
             </div>
             <div class="pi-sum">${money(Number(i.price) * Number(i.qty))}</div>
-          </li>`).join("")}
+          </li>`;
+        }).join("")}
       </ul>
 
       <footer class="purchase-foot">
@@ -81,6 +85,47 @@ function render() {
       </footer>
     </article>`).join("");
 }
+
+// ---------- กล่องแสดงไอดี/รหัสผ่านที่ซื้อมา ----------
+function openCredentials(orderId, itemIdx) {
+  const order = ORDERS.find(o => o.id === orderId);
+  const item = order?.items?.[itemIdx];
+  if (!item?.delivered?.length) return;
+
+  document.getElementById("cred-title").textContent = itemName(item);
+  document.getElementById("cred-list").innerHTML = item.delivered.map((d, n) => `
+    <div class="cred-card">
+      ${item.delivered.length > 1 ? `<div class="cred-no">${t("set_no")} ${n + 1}</div>` : ""}
+      <div class="cred-row">
+        <span>${t("item_login")}</span>
+        <b>${esc(d.login) || "—"}</b>
+        <button class="copy" data-copy="${esc(d.login)}">⧉</button>
+      </div>
+      <div class="cred-row">
+        <span>${t("item_password")}</span>
+        <b>${esc(d.password) || "—"}</b>
+        <button class="copy" data-copy="${esc(d.password)}">⧉</button>
+      </div>
+      ${d.note ? `<div class="cred-note">${esc(d.note)}</div>` : ""}
+    </div>`).join("");
+
+  document.getElementById("cred-overlay").classList.add("open");
+}
+
+document.getElementById("list").addEventListener("click", e => {
+  const li = e.target.closest("[data-open]");
+  if (!li) return;
+  const [orderId, idx] = li.dataset.open.split("|");
+  openCredentials(orderId, Number(idx));
+});
+
+document.getElementById("cred-list").addEventListener("click", async e => {
+  const btn = e.target.closest(".copy");
+  if (!btn) return;
+  try { await navigator.clipboard.writeText(btn.dataset.copy); btn.textContent = "✓"; }
+  catch { /* บางเบราว์เซอร์ไม่รองรับ */ }
+  setTimeout(() => { btn.textContent = "⧉"; }, 1200);
+});
 
 document.getElementById("status-filter").addEventListener("click", e => {
   const btn = e.target.closest(".range-btn");
@@ -91,6 +136,7 @@ document.getElementById("status-filter").addEventListener("click", e => {
   render();
 });
 
+window.closePanel = id => document.getElementById(id).classList.remove("open");
 document.getElementById("nav-logout").addEventListener("click", () => QQ.logout());
 document.addEventListener("langchange", () => { if (ORDERS.length) render(); });
 document.addEventListener("authchange", () => {
