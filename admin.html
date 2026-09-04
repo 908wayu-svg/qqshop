@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QQSHOP — หลังบ้าน</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="admin-page">
+
+<header>
+  <a class="brand" href="index.html">QQSHOP <small data-i18n="admin_panel">หลังบ้าน</small></a>
+  <div class="header-actions">
+    <button class="btn-lang" onclick="toggleLang()"><span data-lang-label>EN</span></button>
+    <a class="btn-ghost" href="index.html" data-i18n="back_to_shop">กลับหน้าร้าน</a>
+    <button class="btn-ghost" onclick="QQAuth.logout().then(()=>location.href='login.html')" data-i18n="logout">ออกจากระบบ</button>
+  </div>
+</header>
+
+<div id="gate" class="gate"><span data-i18n="loading">กำลังโหลด...</span></div>
+
+<main id="dash" class="admin-main hidden">
+
+  <div class="toolbar">
+    <h2 data-i18n="dashboard">ภาพรวมร้าน</h2>
+    <div class="range-filter" id="range-filter">
+      <button class="range-btn" data-range="7" data-i18n="range_7">7 วันล่าสุด</button>
+      <button class="range-btn active" data-range="30" data-i18n="range_30">30 วันล่าสุด</button>
+      <button class="range-btn" data-range="90" data-i18n="range_90">90 วันล่าสุด</button>
+      <button class="range-btn" data-range="all" data-i18n="range_all">ทั้งหมด</button>
+    </div>
+  </div>
+
+  <!-- ตัวเลขสรุป -->
+  <section class="tiles">
+    <div class="tile">
+      <div class="tile-label" data-i18n="total_sales">ยอดขายรวม</div>
+      <div class="tile-value" id="kpi-sales">—</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label" data-i18n="total_orders">จำนวนออเดอร์</div>
+      <div class="tile-value" id="kpi-orders">—</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label" data-i18n="total_members">สมาชิกทั้งหมด</div>
+      <div class="tile-value" id="kpi-members">—</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label" data-i18n="avg_order">ยอดเฉลี่ยต่อออเดอร์</div>
+      <div class="tile-value" id="kpi-avg">—</div>
+    </div>
+  </section>
+
+  <!-- กราฟ -->
+  <section class="cards-2">
+    <div class="card">
+      <h3 data-i18n="sales_over_time">ยอดขายรายวัน</h3>
+      <div class="chart" id="chart-sales"></div>
+    </div>
+    <div class="card">
+      <h3 data-i18n="new_members">สมาชิกใหม่รายวัน</h3>
+      <div class="chart" id="chart-members"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 data-i18n="top_products">สินค้าขายดี</h3>
+    <div class="chart" id="chart-products"></div>
+  </section>
+
+  <!-- ตาราง -->
+  <section class="card">
+    <h3 data-i18n="recent_orders">ออเดอร์ล่าสุด</h3>
+    <div class="table-wrap"><table id="table-orders"></table></div>
+  </section>
+
+  <section class="card">
+    <h3 data-i18n="members_list">รายชื่อสมาชิก</h3>
+    <div class="table-wrap"><table id="table-members"></table></div>
+  </section>
+
+</main>
+
+<script src="i18n.js"></script>
+<script type="module" src="auth.js"></script>
+<script type="module" src="admin.js"></script>
+</body>
+</html>

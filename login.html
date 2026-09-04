@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QQSHOP — เข้าสู่ระบบ</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="auth-page">
+
+<header>
+  <a class="brand" href="index.html">QQSHOP</a>
+  <button class="btn-lang" onclick="toggleLang()"><span data-lang-label>EN</span></button>
+</header>
+
+<main class="auth-main">
+  <div class="auth-card">
+    <div class="tabs">
+      <button id="tab-login" class="tab active" onclick="showTab('login')" data-i18n="login_title">เข้าสู่ระบบ</button>
+      <button id="tab-register" class="tab" onclick="showTab('register')" data-i18n="register_title">สมัครสมาชิก</button>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <!-- เข้าสู่ระบบ -->
+    <form id="form-login" onsubmit="return doLogin(event)">
+      <label data-i18n="email">อีเมล</label>
+      <input type="email" id="login-email" required autocomplete="email">
+      <label data-i18n="password">รหัสผ่าน</label>
+      <input type="password" id="login-password" required autocomplete="current-password">
+      <button type="submit" class="btn-primary" data-i18n="login_btn">เข้าสู่ระบบ</button>
+      <button type="button" class="btn-link" onclick="doReset()" data-i18n="forgot_password">ลืมรหัสผ่าน?</button>
+    </form>
+
+    <!-- สมัครสมาชิก -->
+    <form id="form-register" class="hidden" onsubmit="return doRegister(event)">
+      <label data-i18n="name">ชื่อ</label>
+      <input type="text" id="reg-name" required autocomplete="name">
+      <label data-i18n="email">อีเมล</label>
+      <input type="email" id="reg-email" required autocomplete="email">
+      <label data-i18n="phone">เบอร์โทร</label>
+      <input type="tel" id="reg-phone" autocomplete="tel">
+      <label data-i18n="password">รหัสผ่าน</label>
+      <input type="password" id="reg-password" required minlength="6" autocomplete="new-password">
+      <button type="submit" class="btn-primary" data-i18n="register_btn">สมัครสมาชิก</button>
+    </form>
+
+    <div class="divider"><span data-i18n="or">หรือ</span></div>
+
+    <button class="btn-social btn-google" onclick="doGoogle()">
+      <span class="ico">G</span><span data-i18n="continue_google">เข้าสู่ระบบด้วย Google</span>
+    </button>
+    <button class="btn-social btn-facebook" onclick="doFacebook()">
+      <span class="ico">f</span><span data-i18n="continue_facebook">เข้าสู่ระบบด้วย Facebook</span>
+    </button>
+
+    <a class="btn-link center" href="index.html" data-i18n="guest_checkout">สั่งซื้อแบบไม่สมัครสมาชิก</a>
+  </div>
+</main>
+
+<script src="i18n.js"></script>
+<script type="module" src="auth.js"></script>
+<script>
+function showTab(which) {
+  document.getElementById("form-login").classList.toggle("hidden", which !== "login");
+  document.getElementById("form-register").classList.toggle("hidden", which !== "register");
+  document.getElementById("tab-login").classList.toggle("active", which === "login");
+  document.getElementById("tab-register").classList.toggle("active", which === "register");
+  setMsg("");
+}
+
+function setMsg(text, kind = "error") {
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = "msg" + (text ? " show " + kind : "");
+}
+
+function afterLogin() {
+  const next = new URLSearchParams(location.search).get("next");
+  location.href = next || "index.html";
+}
+
+async function guard(fn) {
+  if (!window.QQAuth?.isConfigured) {
+    setMsg(getLang() === "th"
+      ? "ยังไม่ได้ตั้งค่า Firebase (แก้ที่ไฟล์ firebase-config.js)"
+      : "Firebase is not configured yet (edit firebase-config.js)");
+    return;
+  }
+  try { await fn(); }
+  catch (e) { setMsg(QQAuth.friendlyError(e)); }
+}
+
+function doLogin(e) {
+  e.preventDefault();
+  guard(async () => {
+    await QQAuth.loginWithEmail(
+      document.getElementById("login-email").value.trim(),
+      document.getElementById("login-password").value
+    );
+    afterLogin();
+  });
+  return false;
+}
+
+function doRegister(e) {
+  e.preventDefault();
+  const pw = document.getElementById("reg-password").value;
+  if (pw.length < 6) { setMsg(t("pw_too_short")); return false; }
+  guard(async () => {
+    await QQAuth.registerWithEmail(
+      document.getElementById("reg-email").value.trim(), pw,
+      document.getElementById("reg-name").value.trim(),
+      document.getElementById("reg-phone").value.trim()
+    );
+    afterLogin();
+  });
+  return false;
+}
+
+function doGoogle() { guard(async () => { await QQAuth.loginWithGoogle(); afterLogin(); }); }
+function doFacebook() { guard(async () => { await QQAuth.loginWithFacebook(); afterLogin(); }); }
+
+function doReset() {
+  const email = document.getElementById("login-email").value.trim();
+  if (!email) { setMsg(t("email")); return; }
+  guard(async () => { await QQAuth.resetPassword(email); setMsg(t("reset_sent"), "ok"); });
+}
+</script>
+</body>
+</html>

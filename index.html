@@ -9,8 +9,14 @@
 <body>
 
 <header>
-  <h1>QQSHOP</h1>
-  <button id="cart-btn" onclick="openCart()">🛒 ตะกร้า (<span id="cart-count">0</span>)</button>
+  <a class="brand" href="index.html">QQSHOP</a>
+  <div class="header-actions">
+    <button class="btn-lang" onclick="toggleLang()"><span data-lang-label>EN</span></button>
+    <a class="btn-ghost hidden" id="nav-admin" href="admin.html" data-i18n="admin_panel">หลังบ้าน</a>
+    <a class="btn-ghost" id="nav-login" href="login.html" data-i18n="login">เข้าสู่ระบบ</a>
+    <button class="btn-ghost hidden" id="nav-logout" onclick="QQAuth.logout()" data-i18n="logout">ออกจากระบบ</button>
+    <button id="cart-btn" onclick="openCart()">🛒 <span data-i18n="cart">ตะกร้า</span> (<span id="cart-count">0</span>)</button>
+  </div>
 </header>
 
 <main>
@@ -21,13 +27,13 @@
 <div class="overlay" id="cart-overlay">
   <div class="panel">
     <button class="btn-close" onclick="closePanel('cart-overlay')">×</button>
-    <h2>ตะกร้าสินค้า</h2>
+    <h2 data-i18n="cart_title">ตะกร้าสินค้า</h2>
     <div id="cart-list"></div>
     <div class="cart-total">
-      <span>รวมทั้งหมด</span>
+      <span data-i18n="total">รวมทั้งหมด</span>
       <span id="cart-total-amount">฿0</span>
     </div>
-    <button class="btn-primary" onclick="openCheckout()">ชำระเงิน</button>
+    <button class="btn-primary" onclick="openCheckout()" data-i18n="checkout">ชำระเงิน</button>
   </div>
 </div>
 
@@ -35,18 +41,20 @@
 <div class="overlay" id="checkout-overlay">
   <div class="panel">
     <button class="btn-close" onclick="closePanel('checkout-overlay')">×</button>
-    <h2>สแกนจ่ายผ่าน PromptPay</h2>
+    <h2 data-i18n="pay_title">สแกนจ่ายผ่าน PromptPay</h2>
     <div id="qr-canvas"></div>
     <div class="qr-info">
       <div id="qr-amount"></div>
-      <div>ร้าน QQSHOP</div>
-      <div>เปิดแอปธนาคาร แล้วสแกน QR นี้เพื่อชำระเงิน</div>
+      <div>QQSHOP</div>
+      <div data-i18n="pay_hint">เปิดแอปธนาคาร แล้วสแกน QR นี้เพื่อชำระเงิน</div>
     </div>
-    <button class="btn-primary" onclick="clearCartAfterOrder()">โอนเงินเรียบร้อยแล้ว</button>
+    <button class="btn-primary" onclick="clearCartAfterOrder()" data-i18n="paid_done">โอนเงินเรียบร้อยแล้ว</button>
   </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="i18n.js"></script>
+<script type="module" src="auth.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

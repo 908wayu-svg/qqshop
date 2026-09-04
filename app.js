@@ -63,13 +63,14 @@ async function loadProducts() {
 
 function renderProducts() {
   const grid = document.getElementById("grid");
+  const lang = getLang();
   grid.innerHTML = PRODUCTS.map(p => `
     <div class="product">
       <div class="emoji">${p.emoji || "🛍️"}</div>
-      <h3>${p.name}</h3>
-      <div class="desc">${p.desc || ""}</div>
+      <h3>${(lang === "en" && p.name_en) || p.name}</h3>
+      <div class="desc">${(lang === "en" && p.desc_en) || p.desc || ""}</div>
       <div class="price">฿${p.price.toLocaleString()}</div>
-      <button onclick="addToCart(${p.id})">เพิ่มลงตะกร้า</button>
+      <button onclick="addToCart(${p.id})">${t("add_to_cart")}</button>
     </div>
   `).join("");
 }
@@ -85,7 +86,7 @@ function renderCartPanel() {
   const list = document.getElementById("cart-list");
   const ids = Object.keys(cart);
   if (ids.length === 0) {
-    list.innerHTML = `<div class="empty">ตะกร้าว่างเปล่า</div>`;
+    list.innerHTML = `<div class="empty">${t("cart_empty")}</div>`;
     document.getElementById("cart-total-amount").textContent = "฿0";
     return;
   }
@@ -113,17 +114,21 @@ function closePanel(id) { document.getElementById(id).classList.remove("open"); 
 
 function openCart() { renderCartPanel(); openPanel("cart-overlay"); }
 
+let PENDING_ORDER = null;
+
 function openCheckout() {
   const cart = getCart();
   const ids = Object.keys(cart);
   if (ids.length === 0) return;
   let total = 0;
-  ids.forEach(id => {
+  const items = ids.map(id => {
     const p = PRODUCTS.find(x => x.id == id);
     total += p.price * cart[id];
+    return { id: p.id, name: p.name, price: p.price, qty: cart[id] };
   });
+  PENDING_ORDER = { items, total };
   closePanel("cart-overlay");
-  document.getElementById("qr-amount").textContent = "ยอดชำระ ฿" + total.toLocaleString();
+  document.getElementById("qr-amount").textContent = t("pay_amount") + " ฿" + total.toLocaleString();
   const payload = promptPayPayload(PROMPTPAY_PHONE, total);
   const box = document.getElementById("qr-canvas");
   box.innerHTML = "";
@@ -131,14 +136,36 @@ function openCheckout() {
   openPanel("checkout-overlay");
 }
 
-function clearCartAfterOrder() {
+async function clearCartAfterOrder() {
+  let orderId = null;
+  try {
+    if (PENDING_ORDER && window.QQAuth?.isConfigured) {
+      orderId = await QQAuth.saveOrder(PENDING_ORDER);
+    }
+  } catch (e) {
+    console.warn("บันทึกออเดอร์ไม่สำเร็จ", e);
+  }
   localStorage.removeItem(CART_KEY);
+  PENDING_ORDER = null;
   renderCartBadge();
   closePanel("checkout-overlay");
-  alert("ขอบคุณสำหรับการสั่งซื้อ! หลังโอนเงินแล้วรบกวนแจ้งสลิปกับทางร้านได้เลยค่ะ");
+  alert(t("thanks") + (orderId ? `\n\n${t("order_no")}: ${orderId.slice(0, 8).toUpperCase()}` : ""));
 }
+
+// อัปเดตปุ่มบนหัวเว็บตามสถานะล็อกอิน
+function syncNav() {
+  const user = window.QQAuth?.user;
+  const isAdmin = window.QQAuth?.isAdmin;
+  document.getElementById("nav-login")?.classList.toggle("hidden", !!user);
+  document.getElementById("nav-logout")?.classList.toggle("hidden", !user);
+  document.getElementById("nav-admin")?.classList.toggle("hidden", !isAdmin);
+}
+
+document.addEventListener("authchange", syncNav);
+document.addEventListener("langchange", () => { renderProducts(); renderCartPanel(); });
 
 document.addEventListener("DOMContentLoaded", () => {
   loadProducts();
   renderCartBadge();
+  syncNav();
 });

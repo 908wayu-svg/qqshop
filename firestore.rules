@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // สมาชิก: อ่าน/แก้ได้เฉพาะของตัวเอง, แอดมินอ่านได้ทั้งหมด
+    match /users/{uid} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      // สมัครใหม่ได้เฉพาะ uid ตัวเอง และห้ามตั้ง role เป็น admin เอง
+      allow create: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.role == 'member';
+      // แก้โปรไฟล์ตัวเองได้ แต่ห้ามเปลี่ยน role (แอดมินเท่านั้นที่เปลี่ยนได้)
+      allow update: if isAdmin()
+                    || (isSignedIn() && request.auth.uid == uid
+                        && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    // ออเดอร์: ใครก็สั่งซื้อได้ (รวมลูกค้าที่ไม่ได้สมัครสมาชิก)
+    match /orders/{orderId} {
+      allow create: if request.resource.data.total is number
+                    && request.resource.data.total > 0
+                    && request.resource.data.status == 'pending';
+      allow read: if isAdmin()
+                  || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+  }
+}
