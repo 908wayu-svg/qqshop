@@ -134,8 +134,10 @@ function barChart(box, items, { color, format }) {
     items.map((d, i) => {
       const w = Math.max((d.value / max) * iw, 3);
       const y = P.t + i * rowH + 6, h = rowH - 14;
+      // ตัดชื่อยาวไม่ให้ล้นออกนอกกราฟ
+      const label = d.label.length > 20 ? d.label.slice(0, 19) + "…" : d.label;
       return `
-        <text class="axis name" x="${P.l - 12}" y="${y + h / 2 + 4}" text-anchor="end">${esc(d.label)}</text>
+        <text class="axis name" x="${P.l - 12}" y="${y + h / 2 + 4}" text-anchor="end">${esc(label)}<title>${esc(d.label)}</title></text>
         <rect class="bar" x="${P.l}" y="${y}" width="${w}" height="${h}" rx="4" fill="${color}"/>
         <text class="value" x="${P.l + w + 10}" y="${y + h / 2 + 4}">${format(d.value)}</text>`;
     }).join("")}</svg>`;
@@ -192,22 +194,40 @@ function renderOrders() {
       <th>${t("date")}</th><th>${t("customer")}</th><th>${t("items")}</th>
       <th class="num">${t("amount")}</th><th>${t("status")}</th><th></th>
     </tr></thead>
-    <tbody>${list.slice(0, 100).map(o => `
+    <tbody>${list.slice(0, 100).map(o => {
+      const pc = priceCheck(o);
+      return `
       <tr>
         <td>${fmtDateTime(o._date)}</td>
         <td>${esc(o.customerName || "—")}<br><small>${esc(o.customerEmail || "")}</small>
             <br><small class="credit-note">${t("credit")}: ${money(creditOf(o.uid))}</small></td>
         <td><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small></td>
-        <td class="num">${money(o.total)}</td>
+        <td class="num">${money(o.total)}${pc && !pc.ok
+          ? `<br><small class="price-warn" title="${t("price_mismatch")}">⚠ ${money(pc.real)}</small>` : ""}</td>
         <td>${statusBadge(o.status)}${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
         <td class="actions">${o.status === "pending" ? `
           <button class="btn-small ok" data-act="approve-order" data-id="${o.id}">${t("approve")}</button>
           <button class="btn-small danger" data-act="reject-order" data-id="${o.id}">${t("reject")}</button>` : ""}
         </td>
-      </tr>`).join("")}</tbody>`;
+      </tr>`;
+    }).join("")}</tbody>`;
 }
 
 const creditOf = uid => Number(USERS.find(u => u.id === uid)?.credit || 0);
+
+// ยอดเงินในออเดอร์ส่งมาจากเบราว์เซอร์ลูกค้า จึงต้องคิดใหม่จากราคาสินค้าจริงเพื่อกันการแก้ราคา
+// คืนค่า null = ตรวจไม่ได้ (สินค้าถูกลบ/เปลี่ยนราคาไปแล้ว)
+function priceCheck(order) {
+  const items = order.items || [];
+  if (!items.length) return null;
+  let real = 0;
+  for (const i of items) {
+    const p = PRODUCTS.find(x => x.id === String(i.id));
+    if (!p) return null;
+    real += Number(p.price) * Number(i.qty);
+  }
+  return { real, ok: Math.abs(real - Number(order.total)) < 0.01 };
+}
 
 // ---------- เติมเงิน ----------
 const METHOD_KEY = { truewallet: "m_truewallet", angpao: "m_angpao", bank: "m_bank", promptpay: "m_promptpay", admin: "m_admin" };
@@ -418,7 +438,11 @@ document.getElementById("p-image-preview").addEventListener("click", e => {
 
 document.getElementById("c-save").addEventListener("click", async () => {
   const amount = Number(document.getElementById("c-amount").value);
-  if (!amount) return setMsg("c-msg", t("amount_invalid"));
+  if (!Number.isFinite(amount) || amount === 0) return setMsg("c-msg", t("amount_invalid"));
+  // ใส่ค่าติดลบได้ (ไว้หักคืน) แต่ห้ามหักจนเครดิตติดลบ
+  if (amount < 0 && Number(CREDIT_TARGET.credit || 0) + amount < 0) {
+    return setMsg("c-msg", t("insufficient_customer_credit"));
+  }
   const btn = document.getElementById("c-save");
   btn.disabled = true;
   try {

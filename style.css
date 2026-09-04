@@ -258,3 +258,6 @@ td.actions{white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap}
   .credit-big{font-size:32px}
   .two-col{grid-template-columns:1fr}
 }
+
+/* เตือนยอดเงินไม่ตรงราคาจริง */
+.price-warn{color:var(--warn-fg);font-weight:600;cursor:help}

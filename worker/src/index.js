@@ -210,13 +210,9 @@ export default {
     } catch (e) {
       const why = e.tmCode || e.message;
 
-      // ปัญหาชั่วคราว -> ปล่อยการจองทิ้ง ลูกค้ายิงซองเดิมใหม่ได้
-      if (["INTERNAL_ERROR", "TRUEMONEY_BAD_RESPONSE", "ZERO_AMOUNT"].includes(why)) {
-        await commit(token, [{ delete: topupDoc }]).catch(() => {});
-      }
       // ทรูบอกว่าเบอร์ร้านรับซองนี้ไปแล้ว = เงินอาจเข้าไปแล้วแต่บันทึกไม่ทัน
-      // ตั้งเป็นรออนุมัติ ให้แอดมินตรวจแล้วกดเติมเครดิตเอง
-      else if (["TARGET_USER_REDEEMED", "VOUCHER_HAS_BEEN_USED"].includes(why)) {
+      // เก็บไว้เป็นรออนุมัติ ให้แอดมินตรวจแล้วกดเติมเครดิตเอง (เคสเดียวที่ต้องเก็บ)
+      if (["TARGET_USER_REDEEMED", "VOUCHER_HAS_BEEN_USED"].includes(why)) {
         await commit(token, [{
           update: {
             name: topupDoc,
@@ -225,12 +221,10 @@ export default {
           updateMask: { fieldPaths: ["status", "note"] },
         }]).catch(() => {});
       }
-      // ซองใช้ไม่ได้จริงๆ -> เก็บไว้เป็นประวัติ
+      // กรณีอื่น (ซองไม่มีจริง/หมดอายุ/ทรูล่ม) -> ลบการจองทิ้ง
+      // ลูกค้ายิงซองเดิมใหม่ได้ และคนยิงลิงก์มั่วก็ถมฐานข้อมูลไม่ได้
       else {
-        await commit(token, [{
-          update: { name: topupDoc, fields: fsFields({ status: "rejected", note: why }) },
-          updateMask: { fieldPaths: ["status", "note"] },
-        }]).catch(() => {});
+        await commit(token, [{ delete: topupDoc }]).catch(() => {});
       }
       return json({ ok: false, error: why }, 400, origin);
     }

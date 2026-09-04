@@ -84,6 +84,7 @@ const I18N = {
     confirm_reject: "ไม่อนุมัติรายการนี้?",
     confirm_approve_topup: "อนุมัติการเติมเงินนี้? เครดิตจะเข้าบัญชีลูกค้าทันที",
     insufficient_customer_credit: "เครดิตลูกค้าไม่พอ อนุมัติไม่ได้",
+    price_mismatch: "ยอดเงินไม่ตรงกับราคาสินค้าปัจจุบัน — ตัวเลขสีส้มคือยอดที่ถูกต้อง",
 
     // จัดการสินค้า
     add_product: "เพิ่มสินค้า", edit_product: "แก้ไขสินค้า", product_name: "ชื่อสินค้า",
@@ -174,6 +175,7 @@ const I18N = {
     confirm_reject: "Reject this item?",
     confirm_approve_topup: "Approve this top-up? Credit will be added to the customer now.",
     insufficient_customer_credit: "Customer doesn't have enough credit",
+    price_mismatch: "Total doesn't match current product prices — the orange figure is the correct total",
 
     add_product: "Add product", edit_product: "Edit product", product_name: "Product name",
     product_name_en: "Product name (English)", product_desc: "Description",
@@ -206,8 +208,14 @@ function t(key) {
   return (I18N[lang] && I18N[lang][key]) || I18N.th[key] || key;
 }
 
-// จัดรูปแบบเงินบาท
-function money(n) { return "฿" + Math.round(Number(n) || 0).toLocaleString(); }
+// จัดรูปแบบเงินบาท — โชว์ทศนิยมเฉพาะตอนที่มีเศษจริง (ซองอั่งเปาอาจได้ 25.50 บาท)
+function money(n) {
+  const v = Number(n) || 0;
+  return "฿" + v.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Number.isInteger(v) ? 0 : 2,
+  });
+}
 
 // แปลทุก element ที่มี data-i18n / data-i18n-placeholder
 function applyLang() {

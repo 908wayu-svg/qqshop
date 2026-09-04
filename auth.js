@@ -8,7 +8,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection,
-  serverTimestamp, query, orderBy, getDocs, limit, onSnapshot, runTransaction, increment, writeBatch,
+  serverTimestamp, query, orderBy, where, getDocs, limit, onSnapshot, runTransaction, increment, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./firebase-config.js";
 
@@ -137,6 +137,10 @@ function resizeImage(file, maxSide = 900, quality = 0.75) {
 
 const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+// เรียงใหม่ไปเก่า (รองรับ createdAt ที่ยังเขียนไม่เสร็จ = null)
+const stamp = x => x?.createdAt?.toMillis?.() ?? 0;
+const sortByCreatedDesc = list => list.sort((a, b) => stamp(b) - stamp(a));
+
 export const QQ = {
   isConfigured,
   get user() { return currentUser; },
@@ -169,9 +173,13 @@ export const QQ = {
   logout: () => signOut(auth),
 
   // ---------- สินค้า ----------
+  // ไม่ใช้ orderBy("sort") เพราะ Firestore จะ "ตัดทิ้ง" สินค้าที่ไม่มีฟิลด์ sort ไปเลย
+  // ดึงทั้งหมดแล้วเรียงเองปลอดภัยกว่า
   async fetchProducts() {
-    const snap = await getDocs(query(collection(db, "products"), orderBy("sort", "asc")));
-    return rows(snap);
+    const snap = await getDocs(collection(db, "products"));
+    return rows(snap).sort((a, b) =>
+      (a.sort ?? Number.MAX_SAFE_INTEGER) - (b.sort ?? Number.MAX_SAFE_INTEGER)
+      || String(a.name || "").localeCompare(String(b.name || "")));
   },
   saveProduct(id, data) {
     return id
@@ -194,12 +202,14 @@ export const QQ = {
   async fetchOrders(max = 500) {
     return rows(await getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(max))));
   },
+  // ต้องกรองด้วย where ให้ Firestore ตั้งแต่ต้น ไม่งั้นกฎความปลอดภัยจะปฏิเสธทั้งคำสั่ง
+  // (ไม่ใส่ orderBy เพื่อเลี่ยง composite index — เรียงเองใน JS แทน)
   async fetchMyOrders(max = 50) {
-    const all = await getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(max)));
-    return rows(all).filter(o => o.uid === currentUser?.uid);
+    const snap = await getDocs(query(collection(db, "orders"), where("uid", "==", currentUser.uid), limit(max)));
+    return sortByCreatedDesc(rows(snap));
   },
 
-  // อนุมัติออเดอร์ = หักเครดิตลูกค้า + เปลี่ยนสถานะ (ทำพร้อมกันแบบ transaction)
+  // อนุมัติออเดอร์ = หักเครดิต + ตัดสต๊อก + เปลี่ยนสถานะ (ทำพร้อมกันแบบ transaction)
   async approveOrder(orderId) {
     return runTransaction(db, async (tx) => {
       const oRef = doc(db, "orders", orderId);
@@ -213,6 +223,22 @@ export const QQ = {
       const credit = Number(uSnap.data()?.credit || 0);
       if (credit < o.total) throw new Error(t("insufficient_customer_credit"));
 
+      // อ่านสินค้าทุกชิ้นก่อน (Firestore บังคับให้อ่านให้ครบก่อนเขียน)
+      const items = o.items || [];
+      const pSnaps = await Promise.all(
+        items.map(i => tx.get(doc(db, "products", String(i.id)))));
+
+      const stockWrites = [];
+      items.forEach((i, idx) => {
+        const snap = pSnaps[idx];
+        if (!snap.exists()) return;                    // สินค้าถูกลบไปแล้ว ข้ามการตัดสต๊อก
+        const stock = snap.data().stock;
+        if (stock === null || stock === undefined) return;  // สินค้าไม่จำกัดจำนวน
+        if (stock < i.qty) throw new Error(`${t("out_of_stock")}: ${i.name}`);
+        stockWrites.push([snap.ref, stock - i.qty]);
+      });
+
+      stockWrites.forEach(([ref, left]) => tx.update(ref, { stock: left }));
       tx.update(uRef, { credit: credit - o.total });
       tx.update(oRef, {
         status: "approved",
@@ -240,8 +266,8 @@ export const QQ = {
     return rows(await getDocs(query(collection(db, "topups"), orderBy("createdAt", "desc"), limit(max))));
   },
   async fetchMyTopups(max = 50) {
-    const all = await getDocs(query(collection(db, "topups"), orderBy("createdAt", "desc"), limit(max)));
-    return rows(all).filter(x => x.uid === currentUser?.uid);
+    const snap = await getDocs(query(collection(db, "topups"), where("uid", "==", currentUser.uid), limit(max)));
+    return sortByCreatedDesc(rows(snap));
   },
 
   // อนุมัติเติมเงิน = เพิ่มเครดิตให้ลูกค้า + เปลี่ยนสถานะ
