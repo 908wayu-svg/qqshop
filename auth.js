@@ -147,6 +147,7 @@ export const QQ = {
       || ADMIN_EMAILS.includes((currentUser?.email || "").toLowerCase());
   },
   whenAuthReady, friendlyError, resizeImage,
+  getIdToken: () => auth.currentUser?.getIdToken(),
 
   // ---------- บัญชี ----------
   async registerWithEmail(email, password, name, phone) {

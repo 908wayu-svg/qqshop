@@ -78,15 +78,20 @@ function renderMethodInfo() {
   } else if (METHOD === "angpao") {
     box.innerHTML = `<div class="info-card">
       ${row(t("transfer_to"), c.angpao.receivePhone, true)}
-      <div class="hint">${t("angpao_hint")}</div>
+      <div class="hint">${botEnabled() ? t("angpao_hint") : t("angpao_hint_manual")}</div>
     </div>`;
   } else {
     box.innerHTML = "";
   }
 
+  const isAngpao = METHOD === "angpao";
   // ซองอั่งเปาไม่ต้องแนบสลิป (ใช้ลิงก์แทน)
-  document.getElementById("angpao-box").classList.toggle("hidden", METHOD !== "angpao");
-  document.getElementById("slip-box").classList.toggle("hidden", METHOD === "angpao");
+  document.getElementById("angpao-box").classList.toggle("hidden", !isAngpao);
+  document.getElementById("slip-box").classList.toggle("hidden", isAngpao);
+  // บอทอ่านยอดเงินจากซองเอง ลูกค้าไม่ต้องกรอก
+  document.getElementById("amount-box").classList.toggle("hidden", isAngpao && botEnabled());
+  document.getElementById("submit-btn").textContent =
+    isAngpao && botEnabled() ? t("angpao_submit") : t("topup_submit");
 }
 
 function renderQR() {
@@ -100,12 +105,49 @@ function renderQR() {
   });
 }
 
+const botEnabled = () => !!SHOP.channels.angpao?.botUrl;
+
+// เรียกบอทให้กดรับซองอั่งเปา แล้วเติมเครดิตอัตโนมัติ
+async function redeemAngpaoViaBot(link) {
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = true;
+  setMsg(t("angpao_working"), "warn");
+  try {
+    const res = await fetch(SHOP.channels.angpao.botUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken: await QQ.getIdToken(), link }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      const key = "e_" + data.error;
+      setMsg(t(key) === key ? (data.error || t("error_generic")) : t(key));
+      return;
+    }
+    setMsg(`${t("angpao_ok")} +${money(data.amount)}`, "ok");
+    document.getElementById("angpao").value = "";
+    await renderHistory();
+  } catch {
+    setMsg(t("e_BOT_UNREACHABLE"));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ---------- ส่งคำขอเติมเงิน ----------
 async function submitTopup() {
   const amount = Number(document.getElementById("amount").value);
   const btn = document.getElementById("submit-btn");
 
   if (!METHOD) return setMsg(t("topup_method"));
+
+  // ซองอั่งเปา + มีบอท = กดรับให้เลย ไม่ต้องกรอกยอด ไม่ต้องรออนุมัติ
+  if (METHOD === "angpao" && botEnabled()) {
+    const link = document.getElementById("angpao").value.trim();
+    if (!parseAngpaoCode(link)) return setMsg(t("angpao_invalid"));
+    return redeemAngpaoViaBot(link);
+  }
+
   if (!amount || amount < SHOP.topup.min || amount > SHOP.topup.max) {
     return setMsg(`${t("amount_invalid")} (${t("min_amount")} ${money(SHOP.topup.min)})`);
   }

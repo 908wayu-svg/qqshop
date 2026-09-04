@@ -1,0 +1,7 @@
+name = "qqshop-angpao-bot"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# ค่าลับตั้งด้วยคำสั่ง (ไม่เก็บในไฟล์นี้):
+#   wrangler secret put SA_KEY
+#   wrangler secret put RECEIVE_PHONE

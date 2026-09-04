@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.dev.vars
+
+# ห้ามเผลอ commit กุญแจของ service account
+*sa-key*.json
+*service-account*.json
+*-key.json
+firebase-debug.log
