@@ -1,14 +1,13 @@
 // ===== ค่าเชื่อมต่อ Firebase =====
-// นำค่าจาก Firebase Console > Project settings > Your apps > Web app มาวางแทนที่ด้านล่าง
-// (ค่าเหล่านี้เปิดเผยได้ ไม่ใช่ความลับ — ความปลอดภัยจริงอยู่ที่ Firestore Rules)
+// ค่าเหล่านี้เปิดเผยได้ ไม่ใช่ความลับ — ความปลอดภัยจริงอยู่ที่ไฟล์ firestore.rules
 
 export const firebaseConfig = {
-  apiKey: "PASTE_API_KEY",
-  authDomain: "PASTE_PROJECT_ID.firebaseapp.com",
-  projectId: "PASTE_PROJECT_ID",
-  storageBucket: "PASTE_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID",
+  apiKey: "AIzaSyClU0JJzyAYUmMSpANGctMVYTcKiVt_lbY",
+  authDomain: "qqshop-ecc92.firebaseapp.com",
+  projectId: "qqshop-ecc92",
+  storageBucket: "qqshop-ecc92.firebasestorage.app",
+  messagingSenderId: "882459509059",
+  appId: "1:882459509059:web:e3920cec1fd7ce490caff6",
 };
 
 // ตรวจว่าตั้งค่าแล้วหรือยัง
