@@ -11,6 +11,10 @@ import {
   serverTimestamp, query, orderBy, where, getDocs, limit, onSnapshot, runTransaction, increment, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./firebase-config.js";
+import { SHOP } from "./shop-config.js";
+
+// เส้นทางสั่งซื้อฝั่งเซิร์ฟเวอร์ (Cloudflare Worker ตัวเดียวกับบอทรับซอง)
+const ORDER_API = (SHOP.channels.angpao?.botUrl || "").replace(/\/$/, "") + "/order";
 
 // อีเมลเจ้าของร้าน — เข้าหลังบ้านได้เสมอ
 // *** ถ้าแก้ตรงนี้ ต้องแก้ ownerEmails() ในไฟล์ firestore.rules ให้ตรงกันด้วย ***
@@ -189,15 +193,20 @@ export const QQ = {
   deleteProduct: id => deleteDoc(doc(db, "products", id)),
 
   // ---------- ออเดอร์ ----------
-  createOrder(order) {
-    return addDoc(collection(db, "orders"), {
-      ...order,
-      uid: currentUser.uid,
-      customerName: currentProfile?.name || "",
-      customerEmail: currentUser.email || "",
-      status: "pending",
-      createdAt: serverTimestamp(),
+  // สั่งซื้อผ่านเซิร์ฟเวอร์ ส่งไปแค่รหัสสินค้ากับจำนวน
+  // ราคา/ยอดรวม/สต๊อก/เครดิต ตรวจและคิดที่ฝั่งเซิร์ฟเวอร์ทั้งหมด ลูกค้าแก้ไม่ได้
+  async createOrder(items) {
+    const res = await fetch(ORDER_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        idToken: await auth.currentUser.getIdToken(),
+        items: items.map(i => ({ id: i.id, qty: i.qty })),
+      }),
     });
+    const data = await res.json().catch(() => ({ ok: false, error: "BOT_UNREACHABLE" }));
+    if (!data.ok) throw Object.assign(new Error(data.error), { orderCode: data.error });
+    return data;
   },
   async fetchOrders(max = 500) {
     return rows(await getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(max))));

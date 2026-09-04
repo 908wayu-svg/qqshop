@@ -46,12 +46,10 @@ service cloud.firestore {
 
     // ===== ออเดอร์ =====
     match /orders/{id} {
-      // สั่งซื้อได้เฉพาะสมาชิกที่ล็อกอิน และต้องเริ่มที่สถานะ pending เสมอ
-      allow create: if isSignedIn()
-                    && request.resource.data.uid == request.auth.uid
-                    && request.resource.data.status == 'pending'
-                    && request.resource.data.total is number
-                    && request.resource.data.total > 0;
+      // เบราว์เซอร์สร้างออเดอร์เองไม่ได้เลย ต้องผ่านเซิร์ฟเวอร์ (Cloudflare Worker)
+      // ที่คิดราคาจากฐานข้อมูลเอง ลูกค้าจึงแก้ราคา/จำนวนก่อนส่งไม่ได้
+      // (เซิร์ฟเวอร์ใช้ service account ซึ่งไม่ถูกกฎนี้บังคับ)
+      allow create: if false;
 
       allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
 

@@ -161,6 +161,91 @@ async function rateLimited(token, uid) {
   return false;
 }
 
+// อ่านเอกสารหลายชิ้นพร้อมกัน
+async function batchGet(token, paths) {
+  const res = await fetch(`${DB}:batchGet`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ documents: paths.map(p => `projects/${PROJECT_ID}/databases/(default)/${p.replace(/^projects\/[^/]+\/databases\/\(default\)\//, "")}`) }),
+  });
+  const rows = await res.json();
+  if (rows.error) throw new Error(rows.error.message);
+  const out = {};
+  for (const r of rows) {
+    if (!r.found) continue;
+    out[r.found.name.split("/").pop()] = r.found.fields || {};
+  }
+  return out;
+}
+
+const num = f => Number(f?.integerValue ?? f?.doubleValue ?? 0);
+
+// ---------- สร้างออเดอร์ (คิดราคาจากฝั่งเซิร์ฟเวอร์) ----------
+// เบราว์เซอร์ส่งมาแค่ "รหัสสินค้า + จำนวน" เท่านั้น ราคาทั้งหมดอ่านจากฐานข้อมูลเอง
+// ลูกค้าจึงแก้ราคาไม่ได้ ต่อให้ดัดแปลงหน้าเว็บ
+async function createOrder(token, user, rawItems) {
+  if (!Array.isArray(rawItems) || !rawItems.length) throw new Error("EMPTY_CART");
+  if (rawItems.length > 50) throw new Error("TOO_MANY_ITEMS");
+
+  // รวมรายการซ้ำและตรวจจำนวน
+  const want = new Map();
+  for (const it of rawItems) {
+    const id = String(it?.id || "");
+    const qty = Math.floor(Number(it?.qty));
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error("BAD_ITEM");
+    if (!Number.isFinite(qty) || qty < 1 || qty > 999) throw new Error("BAD_QTY");
+    want.set(id, (want.get(id) || 0) + qty);
+  }
+
+  const products = await batchGet(token, [...want.keys()].map(id => `documents/products/${id}`));
+
+  let total = 0;
+  const items = [];
+  for (const [id, qty] of want) {
+    const p = products[id];
+    if (!p) throw new Error("PRODUCT_NOT_FOUND");
+    if (p.active?.booleanValue === false) throw new Error("PRODUCT_INACTIVE");
+
+    const stock = p.stock && p.stock.nullValue === undefined ? num(p.stock) : null;
+    if (stock !== null && stock < qty) throw new Error("OUT_OF_STOCK");
+
+    const price = num(p.price);
+    if (price <= 0) throw new Error("BAD_PRICE");
+
+    total += price * qty;
+    items.push({ id, name: p.name?.stringValue || "", price, qty });
+  }
+  if (total <= 0) throw new Error("BAD_TOTAL");
+
+  // เครดิตต้องพอตั้งแต่ตอนสั่ง (หักจริงตอนแอดมินอนุมัติ)
+  const users = await batchGet(token, [`documents/users/${user.uid}`]);
+  const me = users[user.uid];
+  if (!me) throw new Error("NO_PROFILE");
+  if (num(me.credit) < total) throw new Error("NOT_ENOUGH_CREDIT");
+
+  const orderId = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+  await commit(token, [{
+    update: {
+      name: docPath("orders", orderId),
+      fields: {
+        ...fsFields({
+          uid: user.uid,
+          customerName: me.name?.stringValue || user.name || "",
+          customerEmail: me.email?.stringValue || user.email || "",
+          total,
+          status: "pending",
+          createdAt: new Date(),
+          serverPriced: true,     // บอกหลังบ้านว่าออเดอร์นี้ราคาผ่านการตรวจแล้ว
+        }),
+        items: { arrayValue: { values: items.map(i => ({ mapValue: { fields: fsFields(i) } })) } },
+      },
+    },
+    currentDocument: { exists: false },
+  }]);
+
+  return { orderId, total, items };
+}
+
 // ---------- กดรับซองอั่งเปา ----------
 async function redeemAngpao(code, phone) {
   const res = await fetch(`https://gift.truemoney.com/campaign/vouchers/${code}/redeem`, {
@@ -189,7 +274,7 @@ async function redeemAngpao(code, phone) {
 }
 
 // เปิดไว้ให้สคริปต์ทดสอบเรียกใช้ (Cloudflare ใช้แค่ default export)
-export { parseAngpaoCode, getAccessToken, commit, docPath, fsFields, fsValue, redeemAngpao };
+export { parseAngpaoCode, getAccessToken, commit, docPath, fsFields, fsValue, redeemAngpao, createOrder, batchGet };
 
 // ---------- main ----------
 export default {
@@ -203,20 +288,30 @@ export default {
     let body;
     try { body = await request.json(); } catch { return json({ ok: false, error: "BAD_JSON" }, 400, origin); }
 
-    const code = parseAngpaoCode(body.link);
-    if (!code) return json({ ok: false, error: "INVALID_LINK" }, 400, origin);
-
-    // 1) ผู้เรียกต้องเป็นสมาชิกที่ล็อกอินจริง
+    // ผู้เรียกต้องเป็นสมาชิกที่ล็อกอินจริง (ใช้ร่วมกันทุกเส้นทาง)
     let user;
     try { user = await verifyUser(body.idToken); }
     catch { return json({ ok: false, error: "UNAUTHORIZED" }, 401, origin); }
 
     const token = await getAccessToken(env.SA_KEY);
 
-    // 2) จำกัดจำนวนครั้ง กันการยิงรัว
     if (await rateLimited(token, user.uid)) {
       return json({ ok: false, error: "RATE_LIMITED" }, 429, origin);
     }
+
+    // ===== เส้นทางสั่งซื้อ =====
+    if (new URL(request.url).pathname.replace(/\/$/, "") === "/order") {
+      try {
+        const r = await createOrder(token, user, body.items);
+        return json({ ok: true, ...r }, 200, origin);
+      } catch (e) {
+        return json({ ok: false, error: e.message || "ORDER_FAILED" }, 400, origin);
+      }
+    }
+
+    // ===== เส้นทางรับซองอั่งเปา =====
+    const code = parseAngpaoCode(body.link);
+    if (!code) return json({ ok: false, error: "INVALID_LINK" }, 400, origin);
 
     const phone = env.RECEIVE_PHONE;
     const topupDoc = docPath("topups", "angpao_" + code);

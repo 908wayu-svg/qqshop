@@ -19,6 +19,17 @@ const I18N = {
     not_enough_credit: "เครดิตไม่พอ กรุณาเติมเงินก่อน",
     cart_updated: "ราคาหรือจำนวนสินค้าในตะกร้ามีการเปลี่ยนแปลง กรุณาตรวจสอบแล้วกดสั่งซื้ออีกครั้ง",
     topup_now: "เติมเงิน",
+    o_PRODUCT_NOT_FOUND: "มีสินค้าในตะกร้าที่ไม่มีขายแล้ว ระบบเอาออกให้แล้ว",
+    o_PRODUCT_INACTIVE: "มีสินค้าในตะกร้าที่ปิดขายไปแล้ว",
+    o_OUT_OF_STOCK: "สินค้าบางรายการมีไม่พอ กรุณาลดจำนวนลง",
+    o_NOT_ENOUGH_CREDIT: "เครดิตไม่พอ กรุณาเติมเงินก่อน",
+    o_EMPTY_CART: "ตะกร้าว่างเปล่า",
+    o_BAD_QTY: "จำนวนสินค้าไม่ถูกต้อง",
+    o_BAD_ITEM: "ข้อมูลสินค้าไม่ถูกต้อง",
+    o_RATE_LIMITED: "สั่งซื้อถี่เกินไป กรุณารอสักครู่",
+    o_UNAUTHORIZED: "กรุณาเข้าสู่ระบบใหม่",
+    o_BOT_UNREACHABLE: "ติดต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่",
+
 
     // กระเป๋าเงิน / เติมเงิน
     wallet: "กระเป๋าเงิน", my_credit: "เครดิตของฉัน", credit: "เครดิต",
@@ -130,6 +141,17 @@ const I18N = {
     not_enough_credit: "Not enough credit. Please top up first.",
     cart_updated: "Prices or quantities in your cart changed — please review and order again.",
     topup_now: "Top up",
+    o_PRODUCT_NOT_FOUND: "Your cart had a product that is no longer sold — it has been removed",
+    o_PRODUCT_INACTIVE: "Your cart has a product that is no longer listed",
+    o_OUT_OF_STOCK: "Not enough stock for some items — please reduce the quantity",
+    o_NOT_ENOUGH_CREDIT: "Not enough credit. Please top up first.",
+    o_EMPTY_CART: "Your cart is empty",
+    o_BAD_QTY: "Invalid quantity",
+    o_BAD_ITEM: "Invalid product data",
+    o_RATE_LIMITED: "Too many orders — please wait a moment",
+    o_UNAUTHORIZED: "Please sign in again",
+    o_BOT_UNREACHABLE: "Can not reach the server — please try again",
+
 
     wallet: "Wallet", my_credit: "My credit", credit: "Credit",
     topup_title: "Top up", topup_amount: "Amount", topup_method: "Payment method",

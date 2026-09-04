@@ -168,17 +168,19 @@ async function doCheckout() {
     }
     if (QQ.credit < total) { syncCheckoutState(); return; }
 
-    const items = Object.entries(cart).map(([id, qty]) => {
-      const p = findProduct(id);
-      return { id, name: p.name, price: p.price, qty };
-    });
-    const ref = await QQ.createOrder({ items, total });
+    const items = Object.entries(cart).map(([id, qty]) => ({ id, qty }));
+    const res = await QQ.createOrder(items);
+
     localStorage.removeItem(CART_KEY);
     renderCartBadge();
     closePanel("cart-overlay");
-    alert(`${t("order_placed")}\n\n${t("order_no")}: ${ref.id.slice(0, 8).toUpperCase()}`);
+    alert(`${t("order_placed")}\n\n${t("order_no")}: ${res.orderId.slice(0, 8).toUpperCase()}`);
   } catch (e) {
-    alert(QQ.friendlyError(e));
+    // เซิร์ฟเวอร์อาจเจอว่าของหมด/ราคาเปลี่ยน หลังเราเช็คไปแล้ว จึงรีเฟรชให้เห็นของจริง
+    const key = "o_" + (e.orderCode || "");
+    alert(t(key) === key ? QQ.friendlyError(e) : t(key));
+    await loadProducts();
+    renderCartPanel();
   } finally {
     btn.disabled = false;
   }
