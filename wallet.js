@@ -185,7 +185,7 @@ async function submitTopup() {
 
 // ---------- ประวัติ ----------
 async function renderHistory() {
-  const [topups, orders] = await Promise.all([QQ.fetchMyTopups(), QQ.fetchMyOrders()]);
+  const topups = await QQ.fetchMyTopups();
 
   const tt = document.getElementById("table-topups");
   tt.innerHTML = !topups.length
@@ -197,18 +197,6 @@ async function renderHistory() {
          <td>${t(METHOD_META[x.method]?.key || "m_admin")}</td>
          <td class="num">${money(x.amount)}</td>
          <td>${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}</td>
-       </tr>`).join("")}</tbody>`;
-
-  const to = document.getElementById("table-orders");
-  to.innerHTML = !orders.length
-    ? `<tr><td class="empty">${t("no_data")}</td></tr>`
-    : `<thead><tr><th>${t("date")}</th><th>${t("items")}</th>
-         <th class="num">${t("amount")}</th><th>${t("status")}</th></tr></thead>
-       <tbody>${orders.map(o => `<tr>
-         <td>${fmtDate(o.createdAt)}</td>
-         <td><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small></td>
-         <td class="num">${money(o.total)}</td>
-         <td>${statusBadge(o.status)}${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
        </tr>`).join("")}</tbody>`;
 }
 

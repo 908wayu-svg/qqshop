@@ -173,6 +173,7 @@ function syncNav() {
   const user = window.QQ?.user;
   document.getElementById("nav-login")?.classList.toggle("hidden", !!user);
   document.getElementById("nav-logout")?.classList.toggle("hidden", !user);
+  document.getElementById("nav-purchases")?.classList.toggle("hidden", !user);
   document.getElementById("nav-admin")?.classList.toggle("hidden", !window.QQ?.isAdmin);
   const chip = document.getElementById("nav-credit");
   if (chip) {

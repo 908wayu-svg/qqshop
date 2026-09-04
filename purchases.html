@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QQSHOP — ประวัติการซื้อ</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="brand" href="index.html">QQSHOP <small data-i18n="purchases">ประวัติการซื้อ</small></a>
+  <div class="header-actions">
+    <button class="btn-lang" onclick="toggleLang()"><span data-lang-label>EN</span></button>
+    <a class="credit-chip" href="wallet.html">
+      <span class="credit-label" data-i18n="credit">เครดิต</span>
+      <b id="nav-credit-amount">฿0</b>
+    </a>
+    <a class="btn-ghost" href="index.html" data-i18n="back_to_shop">กลับหน้าร้าน</a>
+    <button class="btn-ghost" id="nav-logout" data-i18n="logout">ออกจากระบบ</button>
+  </div>
+</header>
+
+<div id="gate" class="gate"><span data-i18n="loading">กำลังโหลด...</span></div>
+
+<main id="page" class="wallet-main hidden">
+
+  <section class="tiles">
+    <div class="tile">
+      <div class="tile-label" data-i18n="total_spent">ยอดซื้อสะสม</div>
+      <div class="tile-value" id="kpi-spent">—</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label" data-i18n="purchase_count">จำนวนครั้งที่ซื้อ</div>
+      <div class="tile-value" id="kpi-count">—</div>
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <h2 data-i18n="my_purchases">ประวัติการซื้อของฉัน</h2>
+    <div class="range-filter" id="status-filter">
+      <button class="range-btn active" data-st="all" data-i18n="all">ทั้งหมด</button>
+      <button class="range-btn" data-st="approved" data-i18n="st_approved">อนุมัติแล้ว</button>
+      <button class="range-btn" data-st="pending" data-i18n="st_pending">รออนุมัติ</button>
+      <button class="range-btn" data-st="rejected" data-i18n="st_rejected">ไม่อนุมัติ</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+</main>
+
+<script src="i18n.js"></script>
+<script type="module" src="auth.js"></script>
+<script type="module" src="purchases.js"></script>
+</body>
+</html>

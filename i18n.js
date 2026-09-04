@@ -49,6 +49,15 @@ const I18N = {
     e_BOT_UNREACHABLE: "ติดต่อระบบรับซองไม่ได้ ลองใหม่หรือแจ้งแอดมิน",
     transfer_to: "โอนเข้า", account_name: "ชื่อบัญชี", account_no: "เลขที่บัญชี",
     scan_qr: "สแกน QR เพื่อโอน",
+    purchases: "ประวัติการซื้อ", my_purchases: "ประวัติการซื้อของฉัน",
+    no_purchases: "ยังไม่เคยซื้อสินค้า", browse_products: "เลือกดูสินค้า",
+    order_number: "เลขที่", order_items: "สินค้าที่ซื้อ", qty_short: "จำนวน",
+    purchased_on: "ซื้อเมื่อ", ordered_on: "สั่งเมื่อ",
+    total_spent: "ยอดซื้อสะสม", purchase_count: "จำนวนครั้งที่ซื้อ",
+    pending_note: "รอแอดมินอนุมัติ เครดิตจะถูกหักเมื่ออนุมัติแล้ว",
+    approved_note: "ซื้อสำเร็จ หักเครดิตเรียบร้อย",
+    rejected_note: "ไม่อนุมัติ เครดิตไม่ถูกหัก",
+    view_all_purchases: "ดูประวัติการซื้อทั้งหมด",
     topup_history: "ประวัติเติมเงิน", order_history: "ประวัติการสั่งซื้อ",
     min_amount: "จำนวนเงินขั้นต่ำ", amount_invalid: "จำนวนเงินไม่ถูกต้อง",
 
@@ -143,6 +152,15 @@ const I18N = {
     e_BOT_UNREACHABLE: "Can't reach the redeem service — try again or contact an admin",
     transfer_to: "Transfer to", account_name: "Account name", account_no: "Account number",
     scan_qr: "Scan the QR to pay",
+    purchases: "Purchases", my_purchases: "My purchases",
+    no_purchases: "You haven't bought anything yet", browse_products: "Browse products",
+    order_number: "Order", order_items: "Items", qty_short: "Qty",
+    purchased_on: "Purchased", ordered_on: "Ordered",
+    total_spent: "Total spent", purchase_count: "Purchases",
+    pending_note: "Waiting for admin approval — credit is deducted on approval",
+    approved_note: "Purchase complete, credit deducted",
+    rejected_note: "Rejected — no credit was deducted",
+    view_all_purchases: "View all purchases",
     topup_history: "Top-up history", order_history: "Order history",
     min_amount: "Minimum amount", amount_invalid: "Invalid amount",
 
@@ -211,9 +229,10 @@ function t(key) {
 // จัดรูปแบบเงินบาท — โชว์ทศนิยมเฉพาะตอนที่มีเศษจริง (ซองอั่งเปาอาจได้ 25.50 บาท)
 function money(n) {
   const v = Number(n) || 0;
+  const digits = Number.isInteger(v) ? 0 : 2;
   return "฿" + v.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: Number.isInteger(v) ? 0 : 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
 }
 
