@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QQSHOP</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>QQSHOP</h1>
+  <button id="cart-btn" onclick="openCart()">🛒 ตะกร้า (<span id="cart-count">0</span>)</button>
+</header>
+
+<main>
+  <div class="grid" id="grid"></div>
+</main>
+
+<!-- Cart Panel -->
+<div class="overlay" id="cart-overlay">
+  <div class="panel">
+    <button class="btn-close" onclick="closePanel('cart-overlay')">×</button>
+    <h2>ตะกร้าสินค้า</h2>
+    <div id="cart-list"></div>
+    <div class="cart-total">
+      <span>รวมทั้งหมด</span>
+      <span id="cart-total-amount">฿0</span>
+    </div>
+    <button class="btn-primary" onclick="openCheckout()">ชำระเงิน</button>
+  </div>
+</div>
+
+<!-- Checkout / QR Panel -->
+<div class="overlay" id="checkout-overlay">
+  <div class="panel">
+    <button class="btn-close" onclick="closePanel('checkout-overlay')">×</button>
+    <h2>สแกนจ่ายผ่าน PromptPay</h2>
+    <canvas id="qr-canvas"></canvas>
+    <div class="qr-info">
+      <div id="qr-amount"></div>
+      <div>ร้าน QQSHOP</div>
+      <div>เปิดแอปธนาคาร แล้วสแกน QR นี้เพื่อชำระเงิน</div>
+    </div>
+    <button class="btn-primary" onclick="clearCartAfterOrder()">โอนเงินเรียบร้อยแล้ว</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
