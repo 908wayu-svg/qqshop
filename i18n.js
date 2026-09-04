@@ -73,6 +73,7 @@ const I18N = {
     continue_google: "เข้าสู่ระบบด้วย Google", continue_facebook: "เข้าสู่ระบบด้วย Facebook",
     forgot_password: "ลืมรหัสผ่าน?", reset_sent: "ส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลแล้ว",
     pw_too_short: "รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร",
+    enter_email_first: "กรุณากรอกอีเมลก่อน",
     browse_shop: "ดูสินค้าก่อน",
 
     // หลังบ้าน
@@ -95,6 +96,8 @@ const I18N = {
     confirm_approve_topup: "อนุมัติการเติมเงินนี้? เครดิตจะเข้าบัญชีลูกค้าทันที",
     insufficient_customer_credit: "เครดิตลูกค้าไม่พอ อนุมัติไม่ได้",
     price_mismatch: "ยอดเงินไม่ตรงกับราคาสินค้าปัจจุบัน — ตัวเลขสีส้มคือยอดที่ถูกต้อง",
+    price_uncheckable: "มีสินค้าที่ไม่มีอยู่ในระบบแล้ว ตรวจยอดอัตโนมัติไม่ได้ กรุณาตรวจเอง",
+    check_manually: "ตรวจเอง",
     bad_attachment: "ไฟล์แนบผิดปกติ",
 
     // จัดการสินค้า
@@ -106,7 +109,7 @@ const I18N = {
 
     // จัดการสมาชิก
     add_credit: "เพิ่มเครดิต", add_credit_to: "เพิ่มเครดิตให้", credit_amount: "จำนวนเครดิต",
-    make_admin: "ตั้งเป็นแอดมิน", remove_admin: "ถอดสิทธิ์แอดมิน",
+    make_admin: "ตั้งเป็นแอดมิน", remove_admin: "ถอดสิทธิ์แอดมิน", cannot_demote_self: "ถอดสิทธิ์แอดมินของตัวเองไม่ได้",
     role: "สิทธิ์", role_admin: "แอดมิน", role_member: "สมาชิก",
     note: "หมายเหตุ", note_optional: "หมายเหตุ (ไม่บังคับ)",
   },
@@ -176,6 +179,7 @@ const I18N = {
     continue_google: "Continue with Google", continue_facebook: "Continue with Facebook",
     forgot_password: "Forgot password?", reset_sent: "Password reset link sent to your email",
     pw_too_short: "Password must be at least 6 characters",
+    enter_email_first: "Please enter your email first",
     browse_shop: "Browse the shop",
 
     dashboard: "Overview", tab_orders: "Orders", tab_topups: "Top-ups",
@@ -197,6 +201,8 @@ const I18N = {
     confirm_approve_topup: "Approve this top-up? Credit will be added to the customer now.",
     insufficient_customer_credit: "Customer doesn't have enough credit",
     price_mismatch: "Total doesn't match current product prices — the orange figure is the correct total",
+    price_uncheckable: "Contains a product no longer in the catalogue — verify this order by hand",
+    check_manually: "check by hand",
     bad_attachment: "Suspicious attachment",
 
     add_product: "Add product", edit_product: "Edit product", product_name: "Product name",
@@ -206,7 +212,7 @@ const I18N = {
     confirm_delete_product: "Delete this product?", image_too_big: "Image file is too large",
 
     add_credit: "Add credit", add_credit_to: "Add credit to", credit_amount: "Credit amount",
-    make_admin: "Make admin", remove_admin: "Remove admin",
+    make_admin: "Make admin", remove_admin: "Remove admin", cannot_demote_self: "You can not remove your own admin rights",
     role: "Role", role_admin: "Admin", role_member: "Member",
     note: "Note", note_optional: "Note (optional)",
   },

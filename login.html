@@ -80,15 +80,24 @@ function afterLogin() {
   location.href = next || "index.html";
 }
 
+// กันกดปุ่มรัวจนสมัคร/ล็อกอินซ้อนกัน
+let busy = false;
 async function guard(fn) {
+  if (busy) return;
   if (!window.QQ?.isConfigured) {
     setMsg(getLang() === "th"
       ? "ยังไม่ได้ตั้งค่า Firebase (แก้ที่ไฟล์ firebase-config.js)"
       : "Firebase is not configured yet (edit firebase-config.js)");
     return;
   }
+  busy = true;
+  document.querySelectorAll("button").forEach(b => b.disabled = true);
   try { await fn(); }
   catch (e) { setMsg(QQ.friendlyError(e)); }
+  finally {
+    busy = false;
+    document.querySelectorAll("button").forEach(b => b.disabled = false);
+  }
 }
 
 function doLogin(e) {
@@ -123,7 +132,7 @@ function doFacebook() { guard(async () => { await QQ.loginWithFacebook(); afterL
 
 function doReset() {
   const email = document.getElementById("login-email").value.trim();
-  if (!email) { setMsg(t("email")); return; }
+  if (!email) { setMsg(t("enter_email_first")); return; }
   guard(async () => { await QQ.resetPassword(email); setMsg(t("reset_sent"), "ok"); });
 }
 </script>

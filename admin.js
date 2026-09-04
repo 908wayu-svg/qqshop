@@ -216,8 +216,7 @@ function renderOrders() {
         <td>${esc(o.customerName || "—")}<br><small>${esc(o.customerEmail || "")}</small>
             <br><small class="credit-note">${t("credit")}: ${money(creditOf(o.uid))}</small></td>
         <td><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small></td>
-        <td class="num">${money(o.total)}${pc && !pc.ok
-          ? `<br><small class="price-warn" title="${t("price_mismatch")}">⚠ ${money(pc.real)}</small>` : ""}</td>
+        <td class="num">${money(o.total)}${priceWarnLabel(pc)}</td>
         <td>${statusBadge(o.status)}${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
         <td class="actions">${o.status === "pending" ? `
           <button class="btn-small ok" data-act="approve-order" data-id="${o.id}">${t("approve")}</button>
@@ -230,17 +229,26 @@ function renderOrders() {
 const creditOf = uid => Number(USERS.find(u => u.id === uid)?.credit || 0);
 
 // ยอดเงินในออเดอร์ส่งมาจากเบราว์เซอร์ลูกค้า จึงต้องคิดใหม่จากราคาสินค้าจริงเพื่อกันการแก้ราคา
-// คืนค่า null = ตรวจไม่ได้ (สินค้าถูกลบ/เปลี่ยนราคาไปแล้ว)
+// ถ้าอ้างถึงสินค้าที่ไม่มีในระบบ ต้องเตือนด้วย ไม่ใช่เงียบ (ไม่งั้นเลี่ยงการตรวจได้ด้วยรหัสมั่ว)
 function priceCheck(order) {
   const items = order.items || [];
-  if (!items.length) return null;
+  if (!items.length) return { unknown: true, ok: false };
+
   let real = 0;
   for (const i of items) {
     const p = PRODUCTS.find(x => x.id === String(i.id));
-    if (!p) return null;
+    if (!p) return { unknown: true, ok: false };   // สินค้าถูกลบ หรือรหัสไม่มีจริง
     real += Number(p.price) * Number(i.qty);
   }
   return { real, ok: Math.abs(real - Number(order.total)) < 0.01 };
+}
+
+// ป้ายเตือนท้ายยอดเงินในตารางออเดอร์
+function priceWarnLabel(pc) {
+  if (!pc || pc.ok) return "";
+  return pc.unknown
+    ? `<br><small class="price-warn" title="${t("price_uncheckable")}">⚠ ${t("check_manually")}</small>`
+    : `<br><small class="price-warn" title="${t("price_mismatch")}">⚠ ${money(pc.real)}</small>`;
 }
 
 // ---------- เติมเงิน ----------
@@ -504,6 +512,8 @@ document.getElementById("dash").addEventListener("click", async e => {
         document.getElementById("credit-overlay").classList.add("open");
       } else if (act === "toggle-role") {
         const u = USERS.find(x => x.id === id);
+        // กันแอดมินถอดสิทธิ์ตัวเองจนเข้าหลังบ้านไม่ได้
+        if (id === QQ.user.uid) { alert(t("cannot_demote_self")); return; }
         await QQ.setRole(id, u.role === "admin" ? "member" : "admin");
         await reloadAll();
       }
