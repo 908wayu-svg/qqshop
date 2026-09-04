@@ -61,6 +61,22 @@ service cloud.firestore {
 
     // ===== คำขอเติมเงิน =====
     match /topups/{id} {
+      // สลิปต้องเป็นรูปภาพแบบ data: จริงๆ ไม่ใช่สตริงอะไรก็ได้
+      // (กันลูกค้ายัดสคริปต์เข้าหน้าแอดมิน)
+      function slipOk() {
+        return !('slip' in request.resource.data.keys())
+               || (request.resource.data.slip is string
+                   && request.resource.data.slip.matches('^data:image/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$')
+                   && request.resource.data.slip.size() < 1000000);
+      }
+      // ลิงก์ซองต้องเป็นลิงก์ทรูมันนี่เท่านั้น
+      function angpaoOk() {
+        return !('angpaoLink' in request.resource.data.keys())
+               || (request.resource.data.angpaoLink is string
+                   && request.resource.data.angpaoLink.matches('^https://[a-z0-9.-]*truemoney[.]com/.*')
+                   && request.resource.data.angpaoLink.size() < 500);
+      }
+
       // แอดมินสร้างรายการให้ใครก็ได้ (ใช้ตอนเพิ่มเครดิตให้สมาชิก)
       // ลูกค้าสร้างได้เฉพาะของตัวเอง และต้องเริ่มที่สถานะ pending เสมอ
       allow create: if isAdmin()
@@ -68,7 +84,8 @@ service cloud.firestore {
                         && request.resource.data.uid == request.auth.uid
                         && request.resource.data.status == 'pending'
                         && request.resource.data.amount is number
-                        && request.resource.data.amount > 0);
+                        && request.resource.data.amount > 0
+                        && slipOk() && angpaoOk());
 
       allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
       allow update, delete: if isAdmin();

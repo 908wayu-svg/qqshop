@@ -12,6 +12,20 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtNum = n => Number(n || 0).toLocaleString();
 
+// ===== กรองค่าที่มาจากผู้ใช้ก่อนเอาไปใส่ใน src/href =====
+// ลูกค้าเขียนฟิลด์ slip / angpaoLink เองได้ ถ้าไม่กรองจะยัดสคริปต์เข้าหน้าแอดมินได้
+const safeImg = s =>
+  /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/]+=*$/.test(String(s || ""))
+    ? String(s) : null;
+
+const safeLink = u => {
+  try {
+    const url = new URL(String(u));
+    return url.protocol === "https:" && /(^|\.)truemoney\.com$/.test(url.hostname)
+      ? url.href : null;
+  } catch { return null; }
+};
+
 const toDate = ts => !ts ? null : (typeof ts.toDate === "function" ? ts.toDate() : new Date(ts));
 
 // ใช้วันที่ตามเวลาท้องถิ่น (ไม่ใช่ UTC) ไม่งั้นออเดอร์ช่วงเช้าจะถูกนับผิดวัน
@@ -232,6 +246,19 @@ function priceCheck(order) {
 // ---------- เติมเงิน ----------
 const METHOD_KEY = { truewallet: "m_truewallet", angpao: "m_angpao", bank: "m_bank", promptpay: "m_promptpay", admin: "m_admin" };
 
+// ช่อง "สลิป" ในตารางเติมเงิน — ค่าทั้งหมดมาจากลูกค้า จึงต้องกรองก่อนแสดง
+function slipCell(x) {
+  const img = safeImg(x.slip);
+  if (img) return `<img class="slip-thumb" src="${img}" alt="slip">`;
+
+  const link = safeLink(angpaoRedeemUrl(x.angpaoLink));
+  if (link) return `<a class="btn-small" href="${esc(link)}" target="_blank" rel="noopener">🧧 ${t("open_angpao")}</a>`;
+
+  // มีค่าอยู่แต่ไม่ผ่านการตรวจ = ข้อมูลผิดปกติ แจ้งเตือนแทนที่จะแสดงเฉยๆ
+  if (x.slip || x.angpaoLink) return `<span class="badge rejected">${t("bad_attachment")}</span>`;
+  return "—";
+}
+
 function renderTopups() {
   const list = TOPUP_FILTER === "all" ? TOPUPS : TOPUPS.filter(x => x.status === TOPUP_FILTER);
   const el = document.getElementById("table-topups");
@@ -247,11 +274,7 @@ function renderTopups() {
         <td>${fmtDateTime(x._date)}</td>
         <td>${esc(x.name || "—")}<br><small>${esc(x.email || "")}</small></td>
         <td>${t(METHOD_KEY[x.method] || "m_admin")}</td>
-        <td>${x.slip
-              ? `<img class="slip-thumb" src="${x.slip}" alt="slip">`
-              : x.angpaoLink
-                ? `<a class="btn-small" href="${esc(angpaoRedeemUrl(x.angpaoLink))}" target="_blank" rel="noopener">🧧 ${t("open_angpao")}</a>`
-                : "—"}</td>
+        <td>${slipCell(x)}</td>
         <td class="num">${money(x.amount)}</td>
         <td>${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}</td>
         <td class="actions">${x.status === "pending" ? `
@@ -268,9 +291,9 @@ function renderProducts() {
 
   el.innerHTML = PRODUCTS.map(p => `
     <div class="padmin${p.active === false ? " off" : ""}">
-      <div class="padmin-img">${p.image
-        ? `<img src="${p.image}" alt="">`
-        : `<span class="emoji">${p.emoji || "🛍️"}</span>`}</div>
+      <div class="padmin-img">${safeImg(p.image)
+        ? `<img src="${safeImg(p.image)}" alt="">`
+        : `<span class="emoji">${esc(p.emoji) || "🛍️"}</span>`}</div>
       <div class="padmin-body">
         <b>${esc(p.name)}</b>
         <div class="muted">${money(p.price)} · ${t("stock")} ${p.stock ?? "∞"}</div>
@@ -298,8 +321,9 @@ function openProductModal(product) {
 
 function renderProductPreview() {
   const box = document.getElementById("p-image-preview");
-  box.innerHTML = PRODUCT_IMAGE
-    ? `<img src="${PRODUCT_IMAGE}" alt=""><button class="img-clear" id="p-image-clear">×</button>`
+  const img = safeImg(PRODUCT_IMAGE);
+  box.innerHTML = img
+    ? `<img src="${img}" alt=""><button class="img-clear" id="p-image-clear">×</button>`
     : `<span class="muted">${t("choose_image")}</span>`;
 }
 

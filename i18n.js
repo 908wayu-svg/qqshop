@@ -94,6 +94,7 @@ const I18N = {
     confirm_approve_topup: "อนุมัติการเติมเงินนี้? เครดิตจะเข้าบัญชีลูกค้าทันที",
     insufficient_customer_credit: "เครดิตลูกค้าไม่พอ อนุมัติไม่ได้",
     price_mismatch: "ยอดเงินไม่ตรงกับราคาสินค้าปัจจุบัน — ตัวเลขสีส้มคือยอดที่ถูกต้อง",
+    bad_attachment: "ไฟล์แนบผิดปกติ",
 
     // จัดการสินค้า
     add_product: "เพิ่มสินค้า", edit_product: "แก้ไขสินค้า", product_name: "ชื่อสินค้า",
@@ -194,6 +195,7 @@ const I18N = {
     confirm_approve_topup: "Approve this top-up? Credit will be added to the customer now.",
     insufficient_customer_credit: "Customer doesn't have enough credit",
     price_mismatch: "Total doesn't match current product prices — the orange figure is the correct total",
+    bad_attachment: "Suspicious attachment",
 
     add_product: "Add product", edit_product: "Edit product", product_name: "Product name",
     product_name_en: "Product name (English)", product_desc: "Description",

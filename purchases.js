@@ -14,11 +14,17 @@ function fmtDate(ts) {
     : d.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 }
 
+// อนุญาตเฉพาะรูปแบบ data: ของจริงเท่านั้น
+const safeImg = s =>
+  /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/]+=*$/.test(String(s || ""))
+    ? String(s) : null;
+
 // หารูปสินค้าจากคลังปัจจุบัน (สินค้าอาจถูกลบไปแล้ว จึงต้องมีตัวสำรอง)
 function itemThumb(item) {
   const p = PRODUCTS.find(x => x.id === String(item.id));
-  if (p?.image) return `<img src="${p.image}" alt="">`;
-  return `<span class="emoji">${p?.emoji || "🛍️"}</span>`;
+  const img = safeImg(p?.image);
+  if (img) return `<img src="${img}" alt="">`;
+  return `<span class="emoji">${esc(p?.emoji) || "🛍️"}</span>`;
 }
 
 function itemName(item) {

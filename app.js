@@ -47,10 +47,16 @@ const cartTotal = cart => Object.entries(cart)
   .reduce((s, [id, qty]) => s + (findProduct(id)?.price || 0) * qty, 0);
 
 // ---------- แสดงผล ----------
+// อนุญาตเฉพาะรูปแบบ data: ของจริงเท่านั้น กันสตริงแปลกปลอมหลุดเข้าไปใน src
+const safeImg = s =>
+  /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/]+=*$/.test(String(s || ""))
+    ? String(s) : null;
+
 function productImage(p) {
-  return p.image
-    ? `<img class="p-img" src="${p.image}" alt="${escapeHtml(p.name)}" loading="lazy">`
-    : `<div class="emoji">${p.emoji || "🛍️"}</div>`;
+  const img = safeImg(p.image);
+  return img
+    ? `<img class="p-img" src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">`
+    : `<div class="emoji">${escapeHtml(p.emoji) || "🛍️"}</div>`;
 }
 
 function renderProducts() {
