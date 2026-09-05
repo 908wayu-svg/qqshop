@@ -4,6 +4,10 @@ const CART_KEY = "qq_cart";
 let PRODUCTS = [];
 let ACTIVE_CAT = "all";   // หมวดหมู่ที่เลือกอยู่ตอนนี้ ("all" = ทุกหมวด)
 
+// คำค้น / ช่วงราคา / การเรียงลำดับ — ทำงานร่วมกับแท็บหมวดหมู่ (กรองซ้อนกัน ไม่ใช่แทนที่กัน)
+// เก็บไว้ในตัวแปรอย่างเดียว เปิดหน้าใหม่ = เริ่มจากรายการเต็มเสมอ
+const FILTERS = { q: "", min: null, max: null, sort: "default" };
+
 function getCart() {
   let raw;
   try { raw = JSON.parse(localStorage.getItem(CART_KEY) || "{}"); }
@@ -95,13 +99,72 @@ function renderCatTabs() {
     </button>`).join("");
 }
 
+// ---------- ค้นหา / กรองราคา / เรียงลำดับ ----------
+const norm = s => String(s ?? "").trim().toLowerCase();
+
+// พิมพ์หลายคำ = ต้องเจอทุกคำ (พิมพ์ "เพชร 100" แล้วต้องเจอ "เพชร 100 เม็ด")
+// ค้นทั้งชื่อและคำอธิบาย ทั้งไทยและอังกฤษ ลูกค้าจะพิมพ์ภาษาไหนก็เจอ
+function matchesQuery(p) {
+  const q = norm(FILTERS.q);
+  if (!q) return true;
+  const hay = norm([p.name, p.name_en, p.desc, p.desc_en].join(" "));
+  return q.split(/\s+/).every(w => hay.includes(w));
+}
+
+function matchesPrice(p) {
+  const price = Number(p.price) || 0;
+  if (FILTERS.min != null && price < FILTERS.min) return false;
+  if (FILTERS.max != null && price > FILTERS.max) return false;
+  return true;
+}
+
+function sortProducts(list) {
+  const lang = getLang();
+  const nameOf = p => (lang === "en" && p.name_en) || p.name || "";
+  const priceOf = p => Number(p.price) || 0;
+  const arr = [...list];
+  switch (FILTERS.sort) {
+    case "price_asc": return arr.sort((a, b) => priceOf(a) - priceOf(b));
+    case "price_desc": return arr.sort((a, b) => priceOf(b) - priceOf(a));
+    case "name": return arr.sort((a, b) => nameOf(a).localeCompare(nameOf(b), lang === "en" ? "en" : "th"));
+    default: return arr;   // ลำดับที่ร้านจัดไว้ (fetchProducts เรียงมาให้แล้ว)
+  }
+}
+
+const hasFilters = () => !!FILTERS.q || FILTERS.min != null || FILTERS.max != null;
+
+// ปุ่มกากบาทในช่องค้นหา + ปุ่มล้างตัวกรอง โผล่เฉพาะตอนที่มีอะไรให้ล้างจริงๆ
+function syncToolsUI() {
+  document.getElementById("q-clear")?.classList.toggle("hidden", !FILTERS.q);
+  document.getElementById("clear-filters")?.classList.toggle("hidden",
+    !hasFilters() && FILTERS.sort === "default");
+}
+
 function renderProducts() {
   const grid = document.getElementById("grid");
   const lang = getLang();
-  const list = PRODUCTS.filter(p => p.active !== false)
+  const inCat = PRODUCTS.filter(p => p.active !== false)
     .filter(p => ACTIVE_CAT === "all" || p.category === ACTIVE_CAT);
+  const list = sortProducts(inCat.filter(p => matchesQuery(p) && matchesPrice(p)));
 
-  if (!list.length) { grid.innerHTML = `<div class="empty">${t("no_data")}</div>`; return; }
+  syncToolsUI();
+  const count = document.getElementById("result-count");
+  if (count) {
+    // ไม่ต้องบอกจำนวนตอนที่ยังไม่ได้กรองอะไรเลย — รกเปล่าๆ
+    count.textContent = hasFilters() && list.length
+      ? `${t("found_prefix")} ${list.length} ${t("found_suffix")}` : "";
+  }
+
+  if (!list.length) {
+    // แยกให้ชัดว่า "ร้านยังไม่มีของ" กับ "หาไม่เจอเพราะตัวกรอง" คนละเรื่องกัน
+    grid.innerHTML = hasFilters()
+      ? `<div class="empty">${t("no_match")}
+           <div class="hint">${t(FILTERS.min != null && FILTERS.max != null && FILTERS.min > FILTERS.max
+              ? "price_range_invalid" : "no_match_hint")}</div>
+         </div>`
+      : `<div class="empty">${t("no_data")}</div>`;
+    return;
+  }
 
   grid.innerHTML = list.map(p => {
     const name = (lang === "en" && p.name_en) || p.name;
@@ -323,6 +386,41 @@ document.getElementById("cart-list")?.addEventListener("input", e => {
   const id = el.dataset.infoId;
   (CUSTOMER_INFO[id] ||= {})[el.dataset.infoKey] = el.value;
   syncCheckoutState();
+});
+
+// ---------- แถบค้นหา / กรอง / เรียง ----------
+// อ่านค่าจากช่องกรอก: ว่าง/ไม่ใช่ตัวเลข/ติดลบ = ไม่กรอง (null) ไม่ใช่ 0
+function readPrice(id) {
+  const raw = document.getElementById(id)?.value ?? "";
+  if (String(raw).trim() === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function readFilters() {
+  FILTERS.q = document.getElementById("q")?.value ?? "";
+  FILTERS.min = readPrice("pmin");
+  FILTERS.max = readPrice("pmax");
+  FILTERS.sort = document.getElementById("sort")?.value || "default";
+  renderProducts();
+}
+
+["q", "pmin", "pmax"].forEach(id =>
+  document.getElementById(id)?.addEventListener("input", readFilters));
+document.getElementById("sort")?.addEventListener("change", readFilters);
+
+document.getElementById("q-clear")?.addEventListener("click", () => {
+  const box = document.getElementById("q");
+  box.value = "";
+  box.focus();
+  readFilters();
+});
+
+document.getElementById("clear-filters")?.addEventListener("click", () => {
+  ["q", "pmin", "pmax"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  const sort = document.getElementById("sort");
+  if (sort) sort.value = "default";
+  readFilters();
 });
 
 document.getElementById("cat-tabs")?.addEventListener("click", e => {

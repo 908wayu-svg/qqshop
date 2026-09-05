@@ -64,6 +64,9 @@ ok("การ์ดตัวเลขหลังบ้านย่อลงใ�
 ok("ปุ่มติดต่อย่อเป็นวงกลม", has(/\.contact-fab\{[^}]*border-radius:50%/));
 ok("เว้นที่ท้ายหน้าให้ปุ่มลอย", has(/has-contact-fab[^{]*\{[^}]*padding-bottom/));
 ok("สินค้าหน้าร้านเหลือ 2 คอลัมน์", has(/\.grid\{[^}]*minmax\(150px/));
+ok("ช่วงราคาลงมาเต็มบรรทัด", has(/\.price-range\{[^}]*flex:1 1 100%/));
+ok("ช่องราคายืดหดได้ ไม่ดันจอ 320px", has(/\.price-range input\[type=number\]\{[^}]*min-width:0/));
+ok("ตัวเลือกการเรียงยืดหดได้", has(/\.filter-row select\{[^}]*min-width:0/));
 ok("กราฟหลังบ้านเรียงลงมาทีละใบ (กันล้นขอบจอ 320px)", has(/\.cards-2\{[^}]*grid-template-columns:1fr/));
 ok("รายการสินค้าหลังบ้านเหลือคอลัมน์เดียว", has(/\.product-admin-grid\{[^}]*grid-template-columns:1fr/));
 

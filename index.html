@@ -135,6 +135,34 @@
     </div>
   </section>
   <nav class="cat-tabs" id="cat-tabs" aria-label="หมวดหมู่สินค้า"></nav>
+
+  <div class="shop-tools">
+    <div class="search-box">
+      <span class="search-ico" aria-hidden="true">🔍</span>
+      <input type="text" class="search" id="q" autocomplete="off" spellcheck="false"
+             data-i18n-placeholder="search_products" placeholder="ค้นหาชื่อสินค้า...">
+      <button type="button" class="search-x hidden" id="q-clear" data-i18n-title="clear_search" title="ล้างคำค้น">×</button>
+    </div>
+    <div class="filter-row">
+      <div class="price-range">
+        <span class="fl" data-i18n="price_range">ช่วงราคา</span>
+        <input type="number" id="pmin" min="0" step="1" inputmode="numeric"
+               data-i18n-placeholder="price_min" placeholder="ต่ำสุด">
+        <span class="dash" aria-hidden="true">–</span>
+        <input type="number" id="pmax" min="0" step="1" inputmode="numeric"
+               data-i18n-placeholder="price_max" placeholder="สูงสุด">
+      </div>
+      <select id="sort" data-i18n-title="sort_by" title="เรียงลำดับ">
+        <option value="default" data-i18n="sort_default">เรียง: ร้านจัดให้</option>
+        <option value="price_asc" data-i18n="sort_price_asc">ราคา: ถูก → แพง</option>
+        <option value="price_desc" data-i18n="sort_price_desc">ราคา: แพง → ถูก</option>
+        <option value="name" data-i18n="sort_name">ชื่อ: ก → ฮ</option>
+      </select>
+      <button type="button" class="btn-ghost hidden" id="clear-filters" data-i18n="clear_filters">ล้างตัวกรอง</button>
+    </div>
+    <div class="result-count" id="result-count"></div>
+  </div>
+
   <div class="grid" id="grid"><div class="empty" data-i18n="loading">กำลังโหลด...</div></div>
 </main>
 

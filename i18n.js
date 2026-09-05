@@ -20,6 +20,17 @@ const I18N = {
     not_enough_credit: "เครดิตไม่พอ กรุณาเติมเงินก่อน",
     cart_updated: "ราคาหรือจำนวนสินค้าในตะกร้ามีการเปลี่ยนแปลง กรุณาตรวจสอบแล้วกดสั่งซื้ออีกครั้ง",
     topup_now: "เติมเงิน",
+    // ค้นหา / กรอง / เรียงลำดับ หน้าร้าน
+    search_products: "ค้นหาชื่อสินค้า...", clear_search: "ล้างคำค้น",
+    price_range: "ช่วงราคา", price_min: "ต่ำสุด", price_max: "สูงสุด",
+    sort_by: "เรียงลำดับ", sort_default: "เรียง: ร้านจัดให้",
+    sort_price_asc: "ราคา: ถูก → แพง", sort_price_desc: "ราคา: แพง → ถูก",
+    sort_name: "ชื่อ: ก → ฮ",
+    clear_filters: "ล้างตัวกรอง",
+    found_prefix: "พบ", found_suffix: "รายการ",
+    no_match: "ไม่พบสินค้าที่ตรงกับที่ค้นหา",
+    no_match_hint: "ลองพิมพ์คำสั้นลง เปลี่ยนช่วงราคา หรือกดล้างตัวกรอง",
+    price_range_invalid: "ราคาต่ำสุดมากกว่าราคาสูงสุดอยู่ ลองสลับตัวเลขกันดู",
     // แบนเนอร์หน้าร้าน
     hero_title: "ร้านไอดีเกม QQSHOP",
     hero_sub: "ไอดีเกมของแท้ ราคาถูก จ่ายด้วยเครดิต ได้ของทันทีหลังแอดมินอนุมัติ",
@@ -226,6 +237,17 @@ const I18N = {
     not_enough_credit: "Not enough credit. Please top up first.",
     cart_updated: "Prices or quantities in your cart changed — please review and order again.",
     topup_now: "Top up",
+    // Storefront search / filter / sort
+    search_products: "Search products...", clear_search: "Clear search",
+    price_range: "Price", price_min: "Min", price_max: "Max",
+    sort_by: "Sort", sort_default: "Sort: shop order",
+    sort_price_asc: "Price: low → high", sort_price_desc: "Price: high → low",
+    sort_name: "Name: A → Z",
+    clear_filters: "Clear filters",
+    found_prefix: "Found", found_suffix: "items",
+    no_match: "No products match your search",
+    no_match_hint: "Try a shorter word, a different price range, or clear the filters",
+    price_range_invalid: "Min price is higher than max price — try swapping them",
     // Storefront banner
     hero_title: "QQSHOP Game Accounts",
     hero_sub: "Genuine game accounts at low prices. Pay with credit, get your account right after admin approval.",
@@ -442,6 +464,12 @@ function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  // คำอธิบายตอนเอาเมาส์ไปชี้ / ที่โปรแกรมอ่านหน้าจอใช้อ่าน (ปุ่มที่มีแต่ไอคอน)
+  document.querySelectorAll("[data-i18n-title]").forEach(el => {
+    const s = t(el.dataset.i18nTitle);
+    el.title = s;
+    el.setAttribute("aria-label", s);
+  });
   document.querySelectorAll("[data-lang-label]").forEach(el => { el.textContent = lang === "th" ? "EN" : "ไทย"; });
 }
 
