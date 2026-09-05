@@ -227,6 +227,7 @@ td.actions{white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap}
 .badge.approved{color:var(--ok-fg);border-color:var(--ok-bd);background:var(--ok-bg)}
 .badge.pending{color:var(--warn-fg);border-color:var(--warn-bd);background:var(--warn-bg)}
 .badge.rejected{color:var(--bad-fg);border-color:var(--bad-bd);background:var(--bad-bg)}
+.badge.processing{color:var(--warn-fg);border-color:var(--warn-bd);background:var(--warn-bg)}
 .badge.admin{color:#fff;background:var(--brand);border-color:var(--brand)}
 
 /* จัดการสินค้า */
@@ -261,6 +262,9 @@ td.actions{white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap}
 
 /* เตือนยอดเงินไม่ตรงราคาจริง */
 .price-warn{color:var(--warn-fg);font-weight:600;cursor:help}
+/* รูปสินค้าที่ยังโหลดไม่ถึง / โหลดไม่ได้ */
+img.lazy{background:var(--bg)}
+img.img-missing{opacity:.25}
 
 /* ===== หน้าประวัติการซื้อ ===== */
 .btn-ghost.block{display:block;text-align:center;padding:12px}

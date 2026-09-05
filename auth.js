@@ -8,7 +8,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection,
-  serverTimestamp, query, orderBy, where, getDocs, limit, onSnapshot, runTransaction, increment, writeBatch,
+  serverTimestamp, query, orderBy, where, getDocs, limit, onSnapshot, runTransaction, writeBatch, deleteField,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./firebase-config.js";
 import { SHOP } from "./shop-config.js";
@@ -43,7 +43,17 @@ function emit() {
 async function upsertUserDoc(user, extra = {}) {
   const ref = doc(db, "users", user.uid);
   const snap = await getDoc(ref);
-  if (snap.exists()) return snap.data();
+  if (snap.exists()) {
+    // onAuthStateChanged มักสร้างเอกสารให้ก่อนที่ registerWithEmail จะทำงานเสร็จ
+    // ถ้าไม่เติมค่าที่ผู้ใช้กรอกไว้ ชื่อกับเบอร์ที่พิมพ์ตอนสมัครจะหายไปเฉยๆ
+    const cur = snap.data();
+    const patch = {};
+    if (extra.name && extra.name !== cur.name) patch.name = extra.name;
+    if (extra.phone && extra.phone !== cur.phone) patch.phone = extra.phone;
+    if (!Object.keys(patch).length) return cur;
+    await updateDoc(ref, patch);
+    return { ...cur, ...patch };
+  }
 
   const pid = user.providerData[0]?.providerId || "password";
   const data = {
@@ -113,7 +123,7 @@ function friendlyError(err) {
 }
 
 // ย่อรูปให้เล็กพอเก็บใน Firestore (จำกัด 1MB ต่อเอกสาร)
-function resizeImage(file, maxSide = 900, quality = 0.75) {
+function resizeImage(file, maxSide = 800, quality = 0.72) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("อ่านไฟล์ไม่ได้"));
@@ -128,10 +138,10 @@ function resizeImage(file, maxSide = 900, quality = 0.75) {
         c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
         let out = c.toDataURL("image/jpeg", quality);
         // ถ้ายังใหญ่ไป ลดคุณภาพลงอีก
-        for (let q = quality; out.length > 700000 && q > 0.3; q -= 0.15) {
+        for (let q = quality; out.length > 400000 && q > 0.3; q -= 0.12) {
           out = c.toDataURL("image/jpeg", q);
         }
-        out.length > 900000 ? reject(new Error(t("image_too_big"))) : resolve(out);
+        out.length > 700000 ? reject(new Error(t("image_too_big"))) : resolve(out);
       };
       img.src = reader.result;
     };
@@ -141,9 +151,29 @@ function resizeImage(file, maxSide = 900, quality = 0.75) {
 
 const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+// เงินคิดเป็นทศนิยม 2 ตำแหน่งเสมอ กัน 0.1+0.2 = 0.30000000000000004
+const money2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
+// รายการที่ "ยังไม่ถูกตัดสิน" — processing คือรายการที่บอทค้างกลางทาง
+const OPEN_STATES = ["pending", "processing"];
+
 // เรียงใหม่ไปเก่า (รองรับ createdAt ที่ยังเขียนไม่เสร็จ = null)
 const stamp = x => x?.createdAt?.toMillis?.() ?? 0;
 const sortByCreatedDesc = list => list.sort((a, b) => stamp(b) - stamp(a));
+
+// ดึงเฉพาะรายการของตัวเอง เรียงใหม่ไปเก่า
+// ต้องมี where("uid") ตั้งแต่ต้น ไม่งั้นกฎความปลอดภัยปฏิเสธทั้งคำสั่ง
+// ถ้า composite index ยังไม่พร้อม (deploy ใหม่ๆ) ให้ถอย orderBy ออกแทนที่จะพังทั้งหน้า
+async function myQuery(col, max) {
+  const base = [collection(db, col), where("uid", "==", currentUser.uid)];
+  try {
+    return await getDocs(query(...base, orderBy("createdAt", "desc"), limit(max)));
+  } catch (e) {
+    if (e?.code !== "failed-precondition") throw e;
+    console.warn("ยังไม่มี index สำหรับ " + col + " — เรียงเองชั่วคราว", e);
+    return await getDocs(query(...base, limit(max)));
+  }
+}
 
 export const QQ = {
   isConfigured,
@@ -185,12 +215,38 @@ export const QQ = {
       (a.sort ?? Number.MAX_SAFE_INTEGER) - (b.sort ?? Number.MAX_SAFE_INTEGER)
       || String(a.name || "").localeCompare(String(b.name || "")));
   },
-  saveProduct(id, data) {
-    return id
-      ? updateDoc(doc(db, "products", id), { ...data, updatedAt: serverTimestamp() })
-      : addDoc(collection(db, "products"), { ...data, createdAt: serverTimestamp() });
+  // รูปสินค้าเก็บแยกเอกสาร (เหมือนสลิป) — หน้าร้านจะได้ไม่ต้องโหลดรูปทุกใบ
+  // พร้อมกันตอนเปิดเว็บ ร้านที่มีสินค้า 60 ชิ้นเคยต้องโหลดเกือบ 10 MB ก่อนเห็นอะไรเลย
+  // data.image = undefined แปลว่า "ไม่ได้แตะรูป" จะไม่เขียนทับของเดิม
+  async saveProduct(id, data) {
+    const { image, ...rest } = data;
+    const ref = id ? doc(db, "products", id) : doc(collection(db, "products"));
+
+    if (image !== undefined) {
+      if (image) await setDoc(doc(db, "productImages", ref.id), { image, updatedAt: serverTimestamp() });
+      else await deleteDoc(doc(db, "productImages", ref.id)).catch(() => {});
+    }
+
+    const payload = { ...rest };
+    if (image !== undefined) {
+      payload.hasImage = !!image;
+      if (id) payload.image = deleteField();     // ล้างรูปแบบเก่าที่ฝังอยู่ในเอกสาร
+    }
+
+    if (id) await updateDoc(ref, { ...payload, updatedAt: serverTimestamp() });
+    else await setDoc(ref, { ...payload, createdAt: serverTimestamp() });
+    return ref;
   },
-  deleteProduct: id => deleteDoc(doc(db, "products", id)),
+
+  async fetchProductImage(productId) {
+    const s = await getDoc(doc(db, "productImages", productId));
+    return s.exists() ? (s.data().image || null) : null;
+  },
+
+  async deleteProduct(id) {
+    await deleteDoc(doc(db, "products", id));
+    await deleteDoc(doc(db, "productImages", id)).catch(() => {});
+  },
 
   // ---------- คลังสินค้าดิจิทัล (ไอดี/รหัสผ่านรายชิ้น) ----------
   // เก็บเป็น subcollection ของสินค้า อ่านได้เฉพาะแอดมิน
@@ -208,6 +264,17 @@ export const QQ = {
 
   deleteStockItem: (productId, itemId) =>
     deleteDoc(doc(db, "products", productId, "stockItems", itemId)),
+
+  // บันทึกหลายชิ้นพร้อมกัน (Firestore รับได้ 500 การเขียนต่อ 1 batch)
+  async saveStockItemsBulk(productId, changes) {
+    const col = collection(db, "products", productId, "stockItems");
+    for (let i = 0; i < changes.length; i += 400) {
+      const batch = writeBatch(db);
+      changes.slice(i, i + 400).forEach(c =>
+        batch.update(doc(col, c.id), { ...c.data, updatedAt: serverTimestamp() }));
+      await batch.commit();
+    }
+  },
 
   // จำนวนคงเหลือของสินค้าดิจิทัล = จำนวนชิ้นที่ยังไม่ถูกขาย
   // เขียนกลับลงฟิลด์ stock เพื่อให้หน้าร้านและเซิร์ฟเวอร์ใช้ตัวเลขเดียวกัน
@@ -238,10 +305,8 @@ export const QQ = {
     return rows(await getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(max))));
   },
   // ต้องกรองด้วย where ให้ Firestore ตั้งแต่ต้น ไม่งั้นกฎความปลอดภัยจะปฏิเสธทั้งคำสั่ง
-  // (ไม่ใส่ orderBy เพื่อเลี่ยง composite index — เรียงเองใน JS แทน)
   async fetchMyOrders(max = 50) {
-    const snap = await getDocs(query(collection(db, "orders"), where("uid", "==", currentUser.uid), limit(max)));
-    return sortByCreatedDesc(rows(snap));
+    return sortByCreatedDesc(rows(await myQuery("orders", max)));
   },
 
   // อนุมัติออเดอร์ = หักเครดิต + ตัดสต๊อก + ส่งมอบไอดี/รหัสผ่าน + เปลี่ยนสถานะ
@@ -255,17 +320,21 @@ export const QQ = {
     const items = pre.data().items || [];
 
     // เลือกชิ้นที่จะส่งมอบไว้ก่อน เพราะ transaction ฝั่งเบราว์เซอร์ "ค้นหา" เอกสารไม่ได้
+    // รวมจำนวนของสินค้ารหัสเดียวกันก่อน ไม่งั้นจองซ้ำแล้วได้ของไม่ครบ
+    const wanted = new Map();
+    items.forEach(i => wanted.set(String(i.id), (wanted.get(String(i.id)) || 0) + Number(i.qty || 0)));
+
     const claims = {};
-    for (const i of items) {
-      const pid = String(i.id);
+    for (const [pid, qty] of wanted) {
       const pSnap = await getDoc(doc(db, "products", pid));
       if (!pSnap.exists() || !pSnap.data().digital) continue;
 
       const avail = await getDocs(query(
         collection(db, "products", pid, "stockItems"),
-        where("status", "==", "available"), limit(Number(i.qty))));
-      if (avail.size < Number(i.qty)) {
-        throw new Error(`${t("not_enough_stock_items")}: ${i.name}`);
+        where("status", "==", "available"), limit(qty)));
+      if (avail.size < qty) {
+        const nm = items.find(i => String(i.id) === pid)?.name || pid;
+        throw new Error(`${t("not_enough_stock_items")}: ${nm}`);
       }
       claims[pid] = avail.docs.map(d => d.ref);
     }
@@ -290,21 +359,30 @@ export const QQ = {
       }
 
       // ---- ตรวจแล้วค่อยเขียน ----
+      // ตัดสต๊อกทีเดียวต่อสินค้า 1 ชิ้น (รหัสเดียวกันหลายแถวต้องรวมกันก่อน)
       const stockWrites = [];
-      const newItems = items.map((i, idx) => {
+      const stockLeft = new Map();
+      items.forEach((i, idx) => {
         const pid = String(i.id);
         const snap = pSnaps[idx];
-        if (snap.exists()) {
-          const stock = snap.data().stock;
-          if (stock !== null && stock !== undefined) {
-            if (stock < i.qty) throw new Error(`${t("out_of_stock")}: ${i.name}`);
-            stockWrites.push([snap.ref, stock - i.qty]);
-          }
-        }
+        if (!snap.exists()) return;
+        const stock = snap.data().stock;
+        if (stock === null || stock === undefined) return;
+        const left = (stockLeft.has(pid) ? stockLeft.get(pid) : Number(stock)) - Number(i.qty);
+        if (left < 0) throw new Error(`${t("out_of_stock")}: ${i.name}`);
+        stockLeft.set(pid, left);
+        stockWrites.push([snap.ref, left]);
+      });
 
+      const queue = Object.fromEntries(
+        Object.entries(claimSnaps).map(([pid, arr]) => [pid, [...arr]]));
+
+      const newItems = items.map((i) => {
+        const pid = String(i.id);
         // สินค้าดิจิทัล: คัดลอกไอดี/รหัสผ่านเข้าไปในออเดอร์ แล้วตัดชิ้นนั้นออกจากคลัง
-        const picked = claimSnaps[pid];
-        if (!picked) return i;
+        if (!queue[pid]) return i;
+        const picked = queue[pid].splice(0, Number(i.qty));
+        if (picked.length < Number(i.qty)) throw new Error(t("stock_item_taken"));
         const delivered = picked.map(s => {
           if (!s.exists() || s.data().status !== "available") {
             throw new Error(t("stock_item_taken"));   // มีคนคว้าไปก่อน ให้กดใหม่
@@ -322,7 +400,7 @@ export const QQ = {
       Object.entries(claims).forEach(([, refs]) => refs.forEach(r =>
         tx.update(r, { status: "sold", orderId, uid: o.uid, soldAt: serverTimestamp() })));
 
-      tx.update(uRef, { credit: credit - o.total });
+      tx.update(uRef, { credit: money2(credit - o.total) });
       tx.update(oRef, {
         items: newItems,
         status: "approved",
@@ -331,75 +409,128 @@ export const QQ = {
       });
     });
   },
-  rejectOrder: (orderId, note = "") => updateDoc(doc(db, "orders", orderId), {
-    status: "rejected", note, approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
-  }),
+  // ต้องเช็คสถานะก่อนเสมอ — ถ้าเผลอกด "ไม่อนุมัติ" ทับออเดอร์ที่อนุมัติไปแล้ว
+  // เครดิตที่หักไปกับของที่ส่งมอบไปแล้วจะไม่ถูกคืน แต่ประวัติกลับขึ้นว่าไม่อนุมัติ
+  rejectOrder(orderId, note = "") {
+    return runTransaction(db, async (tx) => {
+      const ref = doc(db, "orders", orderId);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error(t("not_found"));
+      if (snap.data().status !== "pending") throw new Error(t("already_handled"));
+      tx.update(ref, {
+        status: "rejected", note,
+        approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
+      });
+    });
+  },
 
   // ---------- เติมเงิน ----------
-  createTopup(data) {
-    return addDoc(collection(db, "topups"), {
-      ...data,
+  async createTopup(data) {
+    const { slip, ...rest } = data;
+    const ref = doc(collection(db, "topups"));
+    // เขียนสลิปก่อน ถ้าพลาดจะไม่มีคำขอค้างแบบไม่มีหลักฐานแนบ
+    if (slip) {
+      await setDoc(doc(db, "topupSlips", ref.id), {
+        uid: currentUser.uid, slip, createdAt: serverTimestamp(),
+      });
+    }
+    await setDoc(ref, {
+      ...rest,
+      hasSlip: !!slip,
       uid: currentUser.uid,
       name: currentProfile?.name || "",
       email: currentUser.email || "",
       status: "pending",
       createdAt: serverTimestamp(),
     });
+    return ref;
+  },
+
+  // สลิปโหลดตอนแอดมินกดดูเท่านั้น (เอกสารเดียว ไม่ใช่ทั้งตาราง)
+  async fetchTopupSlip(topupId) {
+    const s = await getDoc(doc(db, "topupSlips", topupId));
+    return s.exists() ? (s.data().slip || null) : null;
   },
   async fetchTopups(max = 500) {
     return rows(await getDocs(query(collection(db, "topups"), orderBy("createdAt", "desc"), limit(max))));
   },
   async fetchMyTopups(max = 50) {
-    const snap = await getDocs(query(collection(db, "topups"), where("uid", "==", currentUser.uid), limit(max)));
-    return sortByCreatedDesc(rows(snap));
+    return sortByCreatedDesc(rows(await myQuery("topups", max)));
   },
 
   // อนุมัติเติมเงิน = เพิ่มเครดิตให้ลูกค้า + เปลี่ยนสถานะ
-  async approveTopup(topupId) {
+  // amountOverride ใช้กับรายการที่บอทบันทึกยอดไม่ทัน (amount = 0)
+  // ถ้าไม่บังคับให้ใส่ยอด แอดมินจะกดอนุมัติแล้วเครดิตเข้า 0 บาทแบบเงียบๆ
+  async approveTopup(topupId, amountOverride = null) {
     return runTransaction(db, async (tx) => {
       const tRef = doc(db, "topups", topupId);
       const tSnap = await tx.get(tRef);
-      if (!tSnap.exists()) throw new Error("ไม่พบรายการ");
+      if (!tSnap.exists()) throw new Error(t("not_found"));
       const data = tSnap.data();
-      if (data.status !== "pending") throw new Error("รายการนี้ถูกดำเนินการไปแล้ว");
+      if (!OPEN_STATES.includes(data.status)) throw new Error(t("already_handled"));
+
+      const amount = money2(amountOverride ?? data.amount);
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error(t("amount_missing"));
 
       const uRef = doc(db, "users", data.uid);
       const uSnap = await tx.get(uRef);
-      const credit = Number(uSnap.data()?.credit || 0);
+      if (!uSnap.exists()) throw new Error(t("member_not_found"));
+      const credit = Number(uSnap.data().credit || 0);
 
-      tx.update(uRef, { credit: credit + Number(data.amount) });
+      tx.update(uRef, { credit: money2(credit + amount) });
       tx.update(tRef, {
+        amount,
         status: "approved",
         approvedAt: serverTimestamp(),
         approvedBy: currentUser.email || "",
       });
     });
   },
-  rejectTopup: (id, note = "") => updateDoc(doc(db, "topups", id), {
-    status: "rejected", note, approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
-  }),
+
+  // เช็คสถานะก่อนเช่นกัน กัน "ไม่อนุมัติ" ทับรายการที่เติมเครดิตไปแล้ว
+  rejectTopup(id, note = "") {
+    return runTransaction(db, async (tx) => {
+      const ref = doc(db, "topups", id);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error(t("not_found"));
+      if (!OPEN_STATES.includes(snap.data().status)) throw new Error(t("already_handled"));
+      tx.update(ref, {
+        status: "rejected", note,
+        approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
+      });
+    });
+  },
 
   // ---------- สมาชิก (แอดมิน) ----------
+  // ห้ามใส่ orderBy("createdAt") ที่นี่ — สมาชิกที่สมัครไว้ก่อนจะมีฟิลด์นี้
+  // จะถูก Firestore ตัดทิ้งเงียบๆ ทั้งจากรายชื่อ ยอดสมาชิก และเครดิตคงเหลือรวม
+  // (กฎเหล็กข้อ 5) จำนวนสมาชิกไม่เยอะ เรียงเองใน JS ปลอดภัยกว่า
   async fetchUsers(max = 500) {
-    return rows(await getDocs(query(collection(db, "users"), orderBy("createdAt", "desc"), limit(max))));
+    return sortByCreatedDesc(rows(await getDocs(query(collection(db, "users"), limit(max)))));
   },
   // แอดมินปรับเครดิตให้ใครก็ได้ ใส่ค่าติดลบ = หักคืน (บันทึกไว้ในประวัติด้วย)
-  // เขียนสองที่พร้อมกันแบบ batch — สำเร็จทั้งคู่หรือไม่สำเร็จเลย จะได้ไม่มีเครดิตเข้าแบบไม่มีประวัติ
+  // ใช้ transaction ไม่ใช่ batch — ต้องอ่านเครดิตปัจจุบันมาเช็คว่าหักแล้วไม่ติดลบ
+  // ถ้าอ่านนอก transaction แล้วสองหน้าจอกดหักพร้อมกัน เครดิตจะติดลบได้
   async adjustCredit(uid, amount, note = "") {
-    const amt = Number(amount);
-    const u = await getDoc(doc(db, "users", uid));
-    const before = Number(u.data()?.credit || 0);
-    if (before + amt < 0) throw new Error(t("would_go_negative"));
+    const amt = money2(amount);
+    if (!Number.isFinite(amt) || amt === 0) throw new Error(t("amount_invalid"));
+    const logRef = doc(collection(db, "topups"));
 
-    const batch = writeBatch(db);
-    batch.update(doc(db, "users", uid), { credit: increment(amt) });
-    batch.set(doc(collection(db, "topups")), {
-      uid, name: u.data()?.name || "", email: u.data()?.email || "",
-      amount: amt, method: "admin", note,
-      status: "approved", createdAt: serverTimestamp(),
-      approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
+    return runTransaction(db, async (tx) => {
+      const uRef = doc(db, "users", uid);
+      const u = await tx.get(uRef);
+      if (!u.exists()) throw new Error(t("member_not_found"));
+      const before = Number(u.data().credit || 0);
+      if (before + amt < 0) throw new Error(t("would_go_negative"));
+
+      tx.update(uRef, { credit: money2(before + amt) });
+      tx.set(logRef, {
+        uid, name: u.data().name || "", email: u.data().email || "",
+        amount: amt, method: "admin", note,
+        status: "approved", createdAt: serverTimestamp(),
+        approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
+      });
     });
-    await batch.commit();
   },
 
   // ---------- ตั้งค่าร้าน ----------

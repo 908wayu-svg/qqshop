@@ -113,15 +113,28 @@ async function redeemAngpaoViaBot(link) {
   btn.disabled = true;
   setMsg(t("angpao_working"), "warn");
   try {
+    const token = await QQ.getIdToken();
+    if (!token) { setMsg(t("e_UNAUTHORIZED")); return; }
+
     const res = await fetch(SHOP.channels.angpao.botUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken: await QQ.getIdToken(), link }),
+      body: JSON.stringify({ idToken: token, link }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
+    if (!data) { setMsg(t("e_BOT_UNREACHABLE")); return; }
+
     if (!data.ok) {
       const key = "e_" + data.error;
-      setMsg(t(key) === key ? (data.error || t("error_generic")) : t(key));
+      const text = t(key) === key ? (data.error || t("error_generic")) : t(key);
+      // รับซองได้แล้วแต่เติมเครดิตไม่สำเร็จ = ไม่ใช่ความผิดลูกค้า และซองใช้ไปแล้ว
+      // ต้องล้างช่องลิงก์กับรีเฟรชประวัติ ไม่งั้นลูกค้าจะกดยิงซ้ำเรื่อยๆ
+      const claimed = ["CREDIT_PENDING_ADMIN", "CREDIT_FAILED"].includes(data.error);
+      setMsg(text, claimed ? "warn" : "error");
+      if (claimed) {
+        document.getElementById("angpao").value = "";
+        await renderHistory();
+      }
       return;
     }
     setMsg(`${t("angpao_ok")} +${money(data.amount)}`, "ok");

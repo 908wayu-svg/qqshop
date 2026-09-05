@@ -24,6 +24,7 @@ function itemThumb(item) {
   const p = PRODUCTS.find(x => x.id === String(item.id));
   const img = safeImg(p?.image);
   if (img) return `<img src="${img}" alt="">`;
+  if (p?.hasImage) return `<img class="lazy" data-pimg="${esc(p.id)}" src="${window.BLANK_IMG}" alt="">`;
   return `<span class="emoji">${esc(p?.emoji) || "🛍️"}</span>`;
 }
 
@@ -84,6 +85,7 @@ function render() {
         <b>${money(o.total)}</b>
       </footer>
     </article>`).join("");
+  window.watchProductImages?.(box);
 }
 
 // ---------- กล่องแสดงไอดี/รหัสผ่านที่ซื้อมา ----------

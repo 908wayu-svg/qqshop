@@ -3,13 +3,27 @@
 const CART_KEY = "qq_cart";
 let PRODUCTS = [];
 
-const getCart = () => JSON.parse(localStorage.getItem(CART_KEY) || "{}");
-const saveCart = c => localStorage.setItem(CART_KEY, JSON.stringify(c));
+function getCart() {
+  let raw;
+  try { raw = JSON.parse(localStorage.getItem(CART_KEY) || "{}"); }
+  catch { return {}; }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [id, qty] of Object.entries(raw)) {
+    const n = Math.floor(Number(qty));
+    if (Number.isFinite(n) && n > 0 && n <= 999) out[String(id)] = n;
+  }
+  return out;
+}
+function saveCart(c) {
+  try { localStorage.setItem(CART_KEY, JSON.stringify(c)); }
+  catch (e) { console.warn("บันทึกตะกร้าไม่ได้", e); }
+}
 const findProduct = id => PRODUCTS.find(p => p.id === String(id));
 
 function addToCart(id) {
   const p = findProduct(id);
-  if (!p) return;
+  if (!p || p.active === false) return;
   const cart = getCart();
   const next = (cart[id] || 0) + 1;
   if (p.stock != null && next > p.stock) return;  // ไม่ให้เกินสต๊อก
@@ -35,9 +49,9 @@ function pruneCart() {
   let changed = false;
   Object.keys(cart).forEach(id => {
     const p = findProduct(id);
-    if (!p) { delete cart[id]; changed = true; }
-    else if (p.stock != null && cart[id] > p.stock) { cart[id] = p.stock; changed = true; }
-    if (cart[id] === 0) delete cart[id];
+    if (!p || p.active === false) { delete cart[id]; changed = true; return; }
+    if (p.stock != null && cart[id] > p.stock) { cart[id] = Math.max(0, p.stock); changed = true; }
+    if (!cart[id]) { delete cart[id]; changed = true; }
   });
   if (changed) saveCart(cart);
   return cart;
@@ -53,10 +67,15 @@ const safeImg = s =>
     ? String(s) : null;
 
 function productImage(p) {
+  // สินค้าเก่ายังฝังรูปไว้ในเอกสาร ต้องรองรับต่อไป
   const img = safeImg(p.image);
-  return img
-    ? `<img class="p-img" src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">`
-    : `<div class="emoji">${escapeHtml(p.emoji) || "🛍️"}</div>`;
+  if (img) return `<img class="p-img" src="${img}" alt="${escapeHtml(p.name)}" loading="lazy">`;
+  // สินค้าใหม่: ใส่ที่ว่างไว้ก่อน แล้วโหลดรูปตอนเลื่อนมาถึง (img.js)
+  if (p.hasImage) {
+    return `<img class="p-img lazy" data-pimg="${escapeHtml(p.id)}" src="${window.BLANK_IMG}"
+      alt="${escapeHtml(p.name)}" loading="lazy">`;
+  }
+  return `<div class="emoji">${escapeHtml(p.emoji) || "🛍️"}</div>`;
 }
 
 function renderProducts() {
@@ -82,6 +101,7 @@ function renderProducts() {
           : `<button onclick="addToCart('${p.id}')">${t("add_to_cart")}</button>`}
       </div>`;
   }).join("");
+  window.watchProductImages?.(grid);
 }
 
 function renderCartBadge() {

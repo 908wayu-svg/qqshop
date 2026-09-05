@@ -36,17 +36,25 @@
 - `admin.html` + `admin.js` — หลังบ้าน 5 แท็บ (ภาพรวม/ออเดอร์/เติมเงิน/สินค้า/สมาชิก)
 - `auth.js` — ชั้นข้อมูลทั้งหมด เปิดเป็น `window.QQ`
 - `i18n.js` — คำแปลไทย/อังกฤษ + ฟังก์ชัน `t()` และ `money()`
+- `img.js` — โหลดรูปสินค้าตอนเลื่อนมาถึง (`watchProductImages`)
 - `shop-config.js` — บัญชีรับเงินทุกช่องทาง + URL ของ Worker
 - `firestore.rules` — กฎความปลอดภัย (deploy ด้วย `firebase deploy --only firestore:rules`)
+- `firestore.indexes.json` — index ที่ประวัติของลูกค้าต้องใช้ (uid + createdAt)
+- `tests/` — ชุดทดสอบ 350 ข้อ รันด้วย `cd tests && npm test` (ไม่แตะฐานข้อมูลจริง)
 
 ## โครงสร้างข้อมูล (Firestore)
 - `users/{uid}` — email, name, phone, provider, **role**, **credit**
-- `products/{id}` — name, price, image (data URL), stock, active, **digital**
+- `products/{id}` — name, price, stock, active, **digital**, hasImage
+- `productImages/{id}` — image (data URL) ของสินค้ารหัสนั้น **แยกออกมาเพื่อไม่ให้หน้าร้านหนัก**
 - `products/{id}/stockItems/{itemId}` — login, password, note, status (available/sold)
 - `orders/{id}` — uid, items[], total, status (pending/approved/rejected)
-- `topups/{id}` — uid, amount, method, slip, angpaoLink, status
+- `topups/{id}` — uid, amount, method, hasSlip, angpaoLink, status
+  (สถานะ `processing` = บอทกำลังกดรับซองอยู่ ยังไม่จบ)
+- `topupSlips/{topupId}` — slip (data URL) **แยกออกมาเพื่อไม่ให้ตารางหลังบ้านหนัก**
 - `settings/shop` — salesResetAt (จุดเริ่มนับยอดขายใหม่)
 - `ratelimits/{uid}` — ตัวนับกันยิงบอทรัว
+
+> เอกสารรุ่นเก่าที่ยังฝัง `image` / `slip` ไว้ในตัวเอง ต้องรองรับต่อไปเสมอ
 
 ## กฎเหล็ก — อย่าแก้โดยไม่เข้าใจเหตุผล
 1. **ห้ามให้เบราว์เซอร์สร้างออเดอร์เอง** — `orders` มีกฎ `allow create: if false`
@@ -64,10 +72,19 @@
 7. **อีเมลแอดมินอยู่ 2 ที่ ต้องตรงกัน** — `ADMIN_EMAILS` ใน `auth.js` และ
    `ownerEmails()` ใน `firestore.rules`
 8. **วันที่ต้องใช้เวลาท้องถิ่น ไม่ใช่ UTC** ในการนับยอดรายวัน (เคยทำให้ออเดอร์ตอนเช้าหายไป)
+9. **ห้ามเก็บรูป base64 ไว้ในเอกสารที่ต้องดึงมาทั้งลิสต์** (สินค้า/เติมเงิน)
+   ให้แยกไปที่ `productImages` / `topupSlips` แล้วโหลดเฉพาะใบที่ต้องใช้
+   *เหตุผล: เคยทำให้หน้าแอดมินต้องโหลด 57 MB และหน้าร้าน 8.6 MB ก่อนแสดงอะไรเลย*
+10. **ทุกปุ่มที่ "ตัดสิน" รายการ (อนุมัติ/ไม่อนุมัติ) ต้องเช็คสถานะใน transaction**
+   *เหตุผล: กด "ไม่อนุมัติ" ทับออเดอร์ที่อนุมัติไปแล้ว = เครดิตหายโดยไม่มีการคืน*
+11. **เงินต้องปัดเป็นทศนิยม 2 ตำแหน่งทุกครั้งที่บวกลบ** (`money2`)
+12. **รายการเติมเงินที่ยอดเป็น 0 ห้ามกดอนุมัติผ่าน** ต้องบังคับให้แอดมินใส่ยอดก่อน
 
 ## การทดสอบ (สำคัญ)
 - **ต้องทดสอบด้วยบัญชีสมาชิกธรรมดา ไม่ใช่บัญชีแอดมิน** — แอดมินอ่านได้ทุกอย่าง
   บั๊กเรื่องสิทธิ์จะถูกซ่อน เคยหลุดขึ้น production มาแล้ว
+- `cd tests && npm test` ก่อนเสมอ — จำลองกฎความปลอดภัยครบทั้งไฟล์ ทั้งบทบาทสมาชิกและแอดมิน
+  **ถ้าแก้ `firestore.rules` ต้องแก้ `tests/fake/store.mjs` ให้ตรงกันด้วย**
 - ทดสอบยิงจริงกับ Firestore (rules simulator ไม่จับเคส list query)
 - **ฐานข้อมูลนี้มีลูกค้าใช้จริง — ลบข้อมูลทดสอบทุกครั้งหลังเสร็จ**
   บัญชีจริงที่ต้องเก็บไว้: `908wayu@gmail.com`, `daas09164@gmail.com`

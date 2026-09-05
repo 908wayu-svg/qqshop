@@ -130,6 +130,13 @@ async function commit(token, writes) {
 
 const docPath = (col, id) => `projects/${PROJECT_ID}/databases/(default)/documents/${col}/${id}`;
 
+async function getDocFields(token, fullPath) {
+  const res = await fetch(`https://firestore.googleapis.com/v1/${fullPath}`,
+    { headers: { Authorization: "Bearer " + token } });
+  if (!res.ok) return null;
+  return (await res.json()).fields || null;
+}
+
 // ---------- จำกัดจำนวนครั้งต่อคน ----------
 // กันคนยิงลิงก์รัวๆ จนทรูมันนี่บล็อกเซิร์ฟเวอร์เรา
 const RATE_MAX = 8;          // กี่ครั้ง
@@ -180,6 +187,16 @@ async function batchGet(token, paths) {
 
 const num = f => Number(f?.integerValue ?? f?.doubleValue ?? 0);
 
+// ปัดเศษเงินเป็น 2 ตำแหน่ง กัน 19.9 * 3 = 59.699999999999996
+const money2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
+// รหัสข้อผิดพลาดที่ส่งกลับให้หน้าเว็บได้ (นอกเหนือจากนี้ถือเป็นข้อผิดพลาดภายใน)
+const CLIENT_ERRORS = new Set([
+  "EMPTY_CART", "TOO_MANY_ITEMS", "BAD_ITEM", "BAD_QTY", "PRODUCT_NOT_FOUND",
+  "PRODUCT_INACTIVE", "OUT_OF_STOCK", "BAD_PRICE", "BAD_TOTAL",
+  "NO_PROFILE", "NOT_ENOUGH_CREDIT",
+]);
+
 // ---------- สร้างออเดอร์ (คิดราคาจากฝั่งเซิร์ฟเวอร์) ----------
 // เบราว์เซอร์ส่งมาแค่ "รหัสสินค้า + จำนวน" เท่านั้น ราคาทั้งหมดอ่านจากฐานข้อมูลเอง
 // ลูกค้าจึงแก้ราคาไม่ได้ ต่อให้ดัดแปลงหน้าเว็บ
@@ -212,7 +229,7 @@ async function createOrder(token, user, rawItems) {
     const price = num(p.price);
     if (price <= 0) throw new Error("BAD_PRICE");
 
-    total += price * qty;
+    total = money2(total + price * qty);
     items.push({ id, name: p.name?.stringValue || "", price, qty });
   }
   if (total <= 0) throw new Error("BAD_TOTAL");
@@ -293,7 +310,12 @@ export default {
     try { user = await verifyUser(body.idToken); }
     catch { return json({ ok: false, error: "UNAUTHORIZED" }, 401, origin); }
 
-    const token = await getAccessToken(env.SA_KEY);
+    let token;
+    try { token = await getAccessToken(env.SA_KEY); }
+    catch (e) {
+      console.error("getAccessToken", e);
+      return json({ ok: false, error: "SERVER_NOT_READY" }, 503, origin);
+    }
 
     if (await rateLimited(token, user.uid)) {
       return json({ ok: false, error: "RATE_LIMITED" }, 429, origin);
@@ -305,7 +327,10 @@ export default {
         const r = await createOrder(token, user, body.items);
         return json({ ok: true, ...r }, 200, origin);
       } catch (e) {
-        return json({ ok: false, error: e.message || "ORDER_FAILED" }, 400, origin);
+        // ข้อความผิดพลาดภายใน (เช่น Firestore ล่ม) ไม่ควรหลุดออกไปหน้าเว็บ
+        const code = CLIENT_ERRORS.has(e.message) ? e.message : "ORDER_FAILED";
+        if (code === "ORDER_FAILED") console.error("createOrder", e);
+        return json({ ok: false, error: code }, 400, origin);
       }
     }
 
@@ -314,11 +339,20 @@ export default {
     if (!code) return json({ ok: false, error: "INVALID_LINK" }, 400, origin);
 
     const phone = env.RECEIVE_PHONE;
+    if (!phone) return json({ ok: false, error: "SERVER_NOT_READY" }, 503, origin);
+
+    // ต้องมีเอกสารสมาชิกอยู่ก่อน — คำสั่งเพิ่มเครดิตเป็น transform
+    // ถ้ายิงใส่เอกสารที่ยังไม่มี Firestore จะสร้างเอกสารที่มีแค่ credit
+    // กลายเป็นสมาชิกผีที่ไม่มีชื่อ/อีเมล/สิทธิ์ โผล่ในหลังบ้านแบบว่างเปล่า
+    const prof = await batchGet(token, [`documents/users/${user.uid}`]).catch(() => ({}));
+    if (!prof[user.uid]) return json({ ok: false, error: "NO_PROFILE" }, 400, origin);
+
     const topupDoc = docPath("topups", "angpao_" + code);
 
     // 3) จองรหัสซองนี้ไว้ก่อน — ถ้ามีคนใช้ไปแล้วจะเขียนไม่สำเร็จ (กันใช้ซ้ำ/ยิงพร้อมกัน)
+    let reservedAt = null;
     try {
-      await commit(token, [{
+      const r = await commit(token, [{
         update: {
           name: topupDoc,
           fields: fsFields({
@@ -331,6 +365,7 @@ export default {
         },
         currentDocument: { exists: false },
       }]);
+      reservedAt = r?.writeResults?.[0]?.updateTime || null;
     } catch (e) {
       return json({ ok: false, error: "ALREADY_USED" }, 409, origin);
     }
@@ -362,25 +397,55 @@ export default {
     }
 
     // 5) สำเร็จ — เติมเครดิตให้ลูกค้า + ปิดรายการ ในคำสั่งเดียว (atomic)
-    await commit(token, [
+    // currentDocument.updateTime = ต้องยังไม่มีใครแตะเอกสารนี้ตั้งแต่ตอนจอง
+    // ถ้าแอดมินเผลออนุมัติไปก่อน คำสั่งนี้จะถูกปฏิเสธทั้งชุด เครดิตจึงไม่เข้าซ้ำ
+    const amount = money2(result.amount);
+    const closeWrites = [
       {
         update: {
           name: topupDoc,
           fields: fsFields({
-            amount: result.amount, status: "approved",
+            amount, status: "approved",
             approvedAt: new Date(), approvedBy: "angpao-bot",
           }),
         },
         updateMask: { fieldPaths: ["amount", "status", "approvedAt", "approvedBy"] },
+        ...(reservedAt ? { currentDocument: { updateTime: reservedAt } } : {}),
       },
       {
         transform: {
           document: docPath("users", user.uid),
-          fieldTransforms: [{ fieldPath: "credit", increment: fsValue(result.amount) }],
+          fieldTransforms: [{ fieldPath: "credit", increment: fsValue(amount) }],
         },
       },
-    ]);
+    ];
 
-    return json({ ok: true, amount: result.amount }, 200, origin);
+    try {
+      await commit(token, closeWrites);
+      return json({ ok: true, amount }, 200, origin);
+    } catch (e) {
+      // เงินเข้าร้านแล้วแต่บันทึกไม่สำเร็จ — ห้ามปล่อยให้ค้างสถานะ processing เงียบๆ
+      console.error("close angpao failed", e);
+
+      // แอดมินอนุมัติตัดหน้าไปแล้ว = เครดิตเข้าเรียบร้อย ไม่ต้องทำอะไรต่อ
+      const cur = await getDocFields(token, topupDoc).catch(() => null);
+      if (cur?.status?.stringValue === "approved") {
+        return json({ ok: true, amount: num(cur.amount) || amount }, 200, origin);
+      }
+
+      // ที่เหลือ: พักไว้เป็น "รออนุมัติ" พร้อมยอดจริง ให้แอดมินกดยืนยันแทน
+      const parked = await commit(token, [{
+        update: {
+          name: topupDoc,
+          fields: fsFields({
+            amount, status: "pending",
+            note: "บอทรับซองสำเร็จแล้ว (" + amount + " บาท) แต่เติมเครดิตอัตโนมัติไม่สำเร็จ กรุณากดอนุมัติ",
+          }),
+        },
+        updateMask: { fieldPaths: ["amount", "status", "note"] },
+      }]).then(() => true).catch(() => false);
+
+      return json({ ok: false, error: parked ? "CREDIT_PENDING_ADMIN" : "CREDIT_FAILED", amount }, 202, origin);
+    }
   },
 };

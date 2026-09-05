@@ -58,6 +58,12 @@ const I18N = {
     o_RATE_LIMITED: "สั่งซื้อถี่เกินไป กรุณารอสักครู่",
     o_UNAUTHORIZED: "กรุณาเข้าสู่ระบบใหม่",
     o_BOT_UNREACHABLE: "ติดต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่",
+    o_TOO_MANY_ITEMS: "มีสินค้าในตะกร้ามากเกินไป",
+    o_BAD_PRICE: "ราคาสินค้าบางรายการยังไม่ถูกตั้ง กรุณาแจ้งแอดมิน",
+    o_BAD_TOTAL: "ยอดรวมไม่ถูกต้อง",
+    o_NO_PROFILE: "ไม่พบบัญชีของคุณ กรุณาเข้าสู่ระบบใหม่",
+    o_ORDER_FAILED: "สั่งซื้อไม่สำเร็จ กรุณาลองใหม่",
+    o_SERVER_NOT_READY: "ระบบสั่งซื้อยังไม่พร้อม กรุณาแจ้งแอดมิน",
 
 
     // กระเป๋าเงิน / เติมเงิน
@@ -89,6 +95,10 @@ const I18N = {
     e_INTERNAL_ERROR: "ทรูมันนี่ขัดข้องชั่วคราว ลองใหม่อีกครั้ง",
     e_BOT_UNREACHABLE: "ติดต่อระบบรับซองไม่ได้ ลองใหม่หรือแจ้งแอดมิน",
     e_RATE_LIMITED: "ลองบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่",
+    e_SERVER_NOT_READY: "ระบบรับซองยังไม่พร้อม กรุณาแจ้งแอดมิน",
+    e_NO_PROFILE: "ไม่พบบัญชีของคุณ กรุณาเข้าสู่ระบบใหม่",
+    e_CREDIT_PENDING_ADMIN: "รับซองสำเร็จแล้ว แต่เติมเครดิตอัตโนมัติไม่สำเร็จ รายการถูกส่งให้แอดมินอนุมัติแล้ว",
+    e_CREDIT_FAILED: "รับซองสำเร็จแล้ว แต่บันทึกไม่สำเร็จ กรุณาแจ้งแอดมินพร้อมลิงก์ซอง",
     transfer_to: "โอนเข้า", account_name: "ชื่อบัญชี", account_no: "เลขที่บัญชี",
     scan_qr: "สแกน QR เพื่อโอน",
     purchases: "ประวัติการซื้อ", my_purchases: "ประวัติการซื้อของฉัน",
@@ -105,6 +115,16 @@ const I18N = {
 
     // สถานะ
     status: "สถานะ", st_pending: "รออนุมัติ", st_approved: "อนุมัติแล้ว", st_rejected: "ไม่อนุมัติ",
+    st_processing: "กำลังดำเนินการ",
+    not_found: "ไม่พบรายการนี้ (อาจถูกลบไปแล้ว)",
+    already_handled: "รายการนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ",
+    amount_missing: "รายการนี้ยังไม่มียอดเงิน กรุณาใส่ยอดก่อนอนุมัติ",
+    member_not_found: "ไม่พบบัญชีสมาชิกของรายการนี้",
+    view_slip: "ดูสลิป",
+    slip_load_failed: "โหลดสลิปไม่สำเร็จ",
+    needs_amount: "ต้องใส่ยอดเอง",
+    enter_topup_amount: "ใส่ยอดเงินจริงที่ได้รับ (บาท)",
+    stuck_check_first: "รายการนี้ค้างอยู่ระหว่างดำเนินการ ตรวจสอบให้แน่ใจก่อนกดอนุมัติ",
     approve: "อนุมัติ", reject: "ไม่อนุมัติ", approved_by: "อนุมัติโดย",
 
     // เข้าสู่ระบบ
@@ -207,6 +227,12 @@ const I18N = {
     o_RATE_LIMITED: "Too many orders — please wait a moment",
     o_UNAUTHORIZED: "Please sign in again",
     o_BOT_UNREACHABLE: "Can not reach the server — please try again",
+    o_TOO_MANY_ITEMS: "Too many items in the cart",
+    o_BAD_PRICE: "Some products have no price set — please contact an admin",
+    o_BAD_TOTAL: "The order total is invalid",
+    o_NO_PROFILE: "Your account was not found — please sign in again",
+    o_ORDER_FAILED: "The order could not be placed, please try again",
+    o_SERVER_NOT_READY: "The ordering service is not ready — please contact an admin",
 
 
     wallet: "Wallet", my_credit: "My credit", credit: "Credit",
@@ -236,6 +262,10 @@ const I18N = {
     e_INTERNAL_ERROR: "TrueMoney is temporarily unavailable, please try again",
     e_BOT_UNREACHABLE: "Can't reach the redeem service — try again or contact an admin",
     e_RATE_LIMITED: "Too many attempts — please wait a moment and try again",
+    e_SERVER_NOT_READY: "The redeem service is not ready — please contact an admin",
+    e_NO_PROFILE: "Your account was not found — please sign in again",
+    e_CREDIT_PENDING_ADMIN: "Angpao claimed, but the automatic top-up failed. It has been sent to an admin for approval.",
+    e_CREDIT_FAILED: "Angpao claimed, but saving failed. Please contact an admin with the angpao link.",
     transfer_to: "Transfer to", account_name: "Account name", account_no: "Account number",
     scan_qr: "Scan the QR to pay",
     purchases: "Purchases", my_purchases: "My purchases",
@@ -251,6 +281,16 @@ const I18N = {
     min_amount: "Minimum amount", amount_invalid: "Invalid amount",
 
     status: "Status", st_pending: "Pending", st_approved: "Approved", st_rejected: "Rejected",
+    st_processing: "Processing",
+    not_found: "That record no longer exists",
+    already_handled: "This record has already been handled — please refresh",
+    amount_missing: "This record has no amount yet — enter one before approving",
+    member_not_found: "The member for this record was not found",
+    view_slip: "View slip",
+    slip_load_failed: "Could not load the slip",
+    needs_amount: "Amount needed",
+    enter_topup_amount: "Enter the amount actually received (THB)",
+    stuck_check_first: "This record is stuck mid-process — double-check before approving",
     approve: "Approve", reject: "Reject", approved_by: "Approved by",
 
     login_title: "Sign in", register_title: "Create an account", email: "Email",
@@ -320,7 +360,7 @@ function t(key) {
 function money(n) {
   const v = Number(n) || 0;
   const digits = Number.isInteger(v) ? 0 : 2;
-  return "฿" + v.toLocaleString(undefined, {
+  return "฿" + v.toLocaleString(getLang() === "th" ? "th-TH" : "en-US", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });

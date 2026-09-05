@@ -17,11 +17,6 @@ service cloud.firestore {
 
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
 
-    // เช็คว่าฟิลด์เหล่านี้ไม่ถูกแก้
-    function unchanged(fields) {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
-    }
-
     // ===== สมาชิก =====
     match /users/{uid} {
       allow read: if isAdmin() || isOwner(uid);
@@ -31,9 +26,12 @@ service cloud.firestore {
                     && request.resource.data.role == 'member'
                     && request.resource.data.credit == 0;
 
-      // แก้โปรไฟล์ตัวเองได้ แต่ห้ามแตะ role และ credit เด็ดขาด
+      // แก้โปรไฟล์ตัวเองได้เฉพาะชื่อกับเบอร์ (ระบุว่าอะไรแก้ได้ ปลอดภัยกว่าระบุว่าอะไรห้าม)
+      // เดิมห้ามแค่ role/credit ลูกค้าจึงแก้อีเมลตัวเองในฐานข้อมูลให้สับสนหน้าแอดมินได้
       allow update: if isAdmin()
-                    || (isOwner(uid) && unchanged(['role', 'credit']));
+                    || (isOwner(uid)
+                        && request.resource.data.diff(resource.data)
+                             .affectedKeys().hasOnly(['name', 'phone']));
 
       allow delete: if isAdmin();
     }
@@ -49,6 +47,13 @@ service cloud.firestore {
       match /stockItems/{itemId} {
         allow read, write: if isAdmin();
       }
+    }
+
+    // ===== รูปสินค้า (แยกออกจากเอกสารสินค้า) =====
+    // ทุกคนดูได้เหมือนสินค้า แต่หน้าร้านโหลดเฉพาะใบที่เลื่อนมาถึง
+    match /productImages/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // ===== ตั้งค่าร้าน (เช่น จุดเริ่มนับยอดขาย) =====
@@ -88,6 +93,17 @@ service cloud.firestore {
                    && request.resource.data.angpaoLink.size() < 500);
       }
 
+      // ต้องมีหลักฐานแนบเสมอ: สลิป (เก็บแยกที่ topupSlips) หรือลิงก์ซองอั่งเปา
+      // ไม่งั้นลูกค้าสร้างรายการเปล่าๆ ยอดเท่าไหร่ก็ได้ ให้ดูเหมือนแอดมินเป็นคนเติมให้
+      // hasSlip = แบบใหม่ (สลิปอยู่ที่ topupSlips) / slip = แบบเก่าที่ยังฝังในเอกสาร
+      // ต้องรับทั้งสองแบบ ไม่งั้นคนที่ยังเปิดหน้าเว็บเวอร์ชันเก่าค้างไว้จะเติมเงินไม่ได้
+      function hasProof() {
+        return request.resource.data.method == 'angpao'
+          ? ('angpaoLink' in request.resource.data.keys())
+          : (request.resource.data.get('hasSlip', false) == true
+             || 'slip' in request.resource.data.keys());
+      }
+
       // แอดมินสร้างรายการให้ใครก็ได้ (ใช้ตอนเพิ่มเครดิตให้สมาชิก)
       // ลูกค้าสร้างได้เฉพาะของตัวเอง และต้องเริ่มที่สถานะ pending เสมอ
       allow create: if isAdmin()
@@ -96,10 +112,32 @@ service cloud.firestore {
                         && request.resource.data.status == 'pending'
                         && request.resource.data.amount is number
                         && request.resource.data.amount > 0
+                        && request.resource.data.amount <= 100000
+                        && request.resource.data.method in
+                             ['truewallet', 'bank', 'promptpay', 'angpao']
+                        && hasProof()
                         && slipOk() && angpaoOk());
 
       allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
       allow update, delete: if isAdmin();
+    }
+
+    // ===== ภาพสลิป (แยกออกจาก topups) =====
+    // สลิปเป็น base64 ก้อนใหญ่ ถ้าเก็บรวมในเอกสาร topups หน้าแอดมินจะต้องโหลด
+    // รูปทุกใบพร้อมกันตอนเปิดตาราง — หลายสิบ MB จนเบราว์เซอร์ค้าง
+    // แยกไว้ที่นี่ แล้วโหลดเฉพาะใบที่แอดมินกดดู
+    match /topupSlips/{id} {
+      allow create: if isSignedIn()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.slip is string
+                    && request.resource.data.slip.matches('^data:image/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$')
+                    && request.resource.data.slip.size() < 1000000;
+
+      allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+
+      // สลิปที่แนบไปแล้วห้ามแก้ (กันเปลี่ยนหลักฐานหลังแอดมินดูแล้ว)
+      allow update: if false;
+      allow delete: if isAdmin();
     }
   }
 }

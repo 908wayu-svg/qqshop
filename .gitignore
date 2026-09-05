@@ -7,3 +7,4 @@ node_modules/
 *service-account*.json
 *-key.json
 firebase-debug.log
+tests/sandbox/

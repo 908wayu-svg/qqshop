@@ -1,0 +1,7 @@
+{
+  "name": "qqshop-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node run-all.mjs" },
+  "devDependencies": { "jsdom": "^26.0.0" }
+}

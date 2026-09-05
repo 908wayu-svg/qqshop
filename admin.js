@@ -5,7 +5,7 @@ import { angpaoRedeemUrl } from "./shop-config.js";
 let ORDERS = [], USERS = [], TOPUPS = [], PRODUCTS = [], SETTINGS = {};
 let RANGE = 30;
 let ORDER_FILTER = "pending", TOPUP_FILTER = "pending";
-let EDITING_PRODUCT = null, PRODUCT_IMAGE = null, CREDIT_TARGET = null;
+let EDITING_PRODUCT = null, PRODUCT_IMAGE = null, CREDIT_TARGET = null, IMAGE_CHANGED = false;
 let STOCK_ITEMS = [];
 
 // ---------- utils ----------
@@ -56,6 +56,14 @@ function rangeStart() {
 }
 
 const statusBadge = s => `<span class="badge ${s}">${t("st_" + s)}</span>`;
+
+// processing = บอทเริ่มทำแล้วแต่ยังไม่จบ ต้องโผล่ในตัวกรอง "รออนุมัติ"
+// ไม่งั้นรายการค้างจะหายไปจากสายตาแอดมินทั้งที่ลูกค้าเสียเงินไปแล้ว
+const OPEN_STATES = ["pending", "processing"];
+const matchFilter = (status, filter) =>
+  filter === "all" ? true
+  : filter === "pending" ? OPEN_STATES.includes(status)
+  : status === filter;
 
 function dailySeries(records, valueFn) {
   const start = RANGE === "all"
@@ -185,8 +193,8 @@ function renderOverview() {
   set("kpi-orders", fmtNum(approved.length));
   set("kpi-avg", approved.length ? money(sales / approved.length) : "—");
   set("kpi-members", fmtNum(USERS.length));
-  set("kpi-pending-orders", fmtNum(ORDERS.filter(o => o.status === "pending").length));
-  set("kpi-pending-topups", fmtNum(TOPUPS.filter(x => x.status === "pending").length));
+  set("kpi-pending-orders", fmtNum(ORDERS.filter(o => OPEN_STATES.includes(o.status)).length));
+  set("kpi-pending-topups", fmtNum(TOPUPS.filter(x => OPEN_STATES.includes(x.status)).length));
   set("kpi-credit", money(USERS.reduce((s, u) => s + Number(u.credit || 0), 0)));
 
   lineChart(document.getElementById("chart-sales"),
@@ -207,13 +215,13 @@ function renderOverview() {
     const el = document.getElementById(id);
     el.textContent = n; el.classList.toggle("hidden", !n);
   };
-  pill("pill-orders", ORDERS.filter(o => o.status === "pending").length);
-  pill("pill-topups", TOPUPS.filter(x => x.status === "pending").length);
+  pill("pill-orders", ORDERS.filter(o => OPEN_STATES.includes(o.status)).length);
+  pill("pill-topups", TOPUPS.filter(x => OPEN_STATES.includes(x.status)).length);
 }
 
 // ---------- ออเดอร์ ----------
 function renderOrders() {
-  const list = ORDER_FILTER === "all" ? ORDERS : ORDERS.filter(o => o.status === ORDER_FILTER);
+  const list = ORDERS.filter(o => matchFilter(o.status, ORDER_FILTER));
   const el = document.getElementById("table-orders");
   if (!list.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
 
@@ -270,8 +278,15 @@ const METHOD_KEY = { truewallet: "m_truewallet", angpao: "m_angpao", bank: "m_ba
 
 // ช่อง "สลิป" ในตารางเติมเงิน — ค่าทั้งหมดมาจากลูกค้า จึงต้องกรองก่อนแสดง
 function slipCell(x) {
+  // รายการเก่าเก็บสลิปไว้ในเอกสารเดียวกัน — ยังต้องรองรับ
   const img = safeImg(x.slip);
   if (img) return `<img class="slip-thumb" src="${img}" alt="slip">`;
+
+  // รายการใหม่เก็บสลิปแยกเอกสาร โหลดเฉพาะตอนกดดู
+  // (ถ้าโหลดมาพร้อมตาราง 500 รายการ = รูป base64 หลายสิบ MB เบราว์เซอร์ค้าง)
+  if (x.hasSlip) {
+    return `<button class="btn-small" data-slip="${esc(x.id)}">🧾 ${t("view_slip")}</button>`;
+  }
 
   const link = safeLink(angpaoRedeemUrl(x.angpaoLink));
   if (link) return `<a class="btn-small" href="${esc(link)}" target="_blank" rel="noopener">🧧 ${t("open_angpao")}</a>`;
@@ -282,7 +297,7 @@ function slipCell(x) {
 }
 
 function renderTopups() {
-  const list = TOPUP_FILTER === "all" ? TOPUPS : TOPUPS.filter(x => x.status === TOPUP_FILTER);
+  const list = TOPUPS.filter(x => matchFilter(x.status, TOPUP_FILTER));
   const el = document.getElementById("table-topups");
   if (!list.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
 
@@ -297,9 +312,11 @@ function renderTopups() {
         <td>${esc(x.name || "—")}<br><small>${esc(x.email || "")}</small></td>
         <td>${t(METHOD_KEY[x.method] || "m_admin")}</td>
         <td>${slipCell(x)}</td>
-        <td class="num">${money(x.amount)}</td>
-        <td>${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}</td>
-        <td class="actions">${x.status === "pending" ? `
+        <td class="num">${money(x.amount)}${OPEN_STATES.includes(x.status) && !(Number(x.amount) > 0)
+          ? `<br><small class="price-warn">⚠ ${t("needs_amount")}</small>` : ""}</td>
+        <td>${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}${
+          x.status === "processing" ? `<br><small class="price-warn">${t("stuck_check_first")}</small>` : ""}</td>
+        <td class="actions">${OPEN_STATES.includes(x.status) ? `
           <button class="btn-small ok" data-act="approve-topup" data-id="${x.id}">${t("approve")}</button>
           <button class="btn-small danger" data-act="reject-topup" data-id="${x.id}">${t("reject")}</button>` : ""}
         </td>
@@ -307,15 +324,21 @@ function renderTopups() {
 }
 
 // ---------- สินค้า ----------
+// รูปสินค้าเก็บแยกเอกสาร โหลดตอนเลื่อนมาถึงเท่านั้น (img.js)
+function productThumb(p) {
+  const legacy = safeImg(p.image);
+  if (legacy) return `<img src="${legacy}" alt="">`;
+  if (p.hasImage) return `<img class="lazy" data-pimg="${esc(p.id)}" src="${window.BLANK_IMG}" alt="">`;
+  return `<span class="emoji">${esc(p.emoji) || "🛍️"}</span>`;
+}
+
 function renderProducts() {
   const el = document.getElementById("product-list");
   if (!PRODUCTS.length) { el.innerHTML = `<div class="empty">${t("no_data")}</div>`; return; }
 
   el.innerHTML = PRODUCTS.map(p => `
     <div class="padmin${p.active === false ? " off" : ""}">
-      <div class="padmin-img">${safeImg(p.image)
-        ? `<img src="${safeImg(p.image)}" alt="">`
-        : `<span class="emoji">${esc(p.emoji) || "🛍️"}</span>`}</div>
+      <div class="padmin-img">${productThumb(p)}</div>
       <div class="padmin-body">
         <b>${esc(p.name)}</b>
         <div class="muted">${money(p.price)} · ${t("stock")} ${p.stock ?? "∞"}</div>
@@ -323,11 +346,13 @@ function renderProducts() {
       </div>
       <button class="btn-small" data-act="edit-product" data-id="${p.id}">${t("edit")}</button>
     </div>`).join("");
+  window.watchProductImages?.(el);
 }
 
 async function openProductModal(product) {
   EDITING_PRODUCT = product;
-  PRODUCT_IMAGE = product?.image || null;
+  PRODUCT_IMAGE = product?.image || null;   // สินค้าเก่าที่ยังฝังรูปไว้ในเอกสาร
+  IMAGE_CHANGED = false;                    // ยังไม่ได้แตะรูป = ตอนบันทึกจะไม่เขียนทับ
   STOCK_ITEMS = [];
   const v = (id, val) => { document.getElementById(id).value = val ?? ""; };
   document.getElementById("product-modal-title").textContent = product ? t("edit_product") : t("add_product");
@@ -342,6 +367,12 @@ async function openProductModal(product) {
   renderProductPreview();
   syncDigitalUI();
   document.getElementById("product-overlay").classList.add("open");
+
+  // รูปเดิมโหลดตอนเปิดหน้าต่างเท่านั้น
+  if (!PRODUCT_IMAGE && product?.hasImage) {
+    PRODUCT_IMAGE = await QQ.fetchProductImage(product.id).catch(() => null);
+    renderProductPreview();
+  }
 
   // คลังสินค้าโหลดได้เฉพาะสินค้าที่บันทึกแล้ว
   if (product?.digital) await loadStockItems();
@@ -394,6 +425,7 @@ function renderStockItems() {
 async function saveStockItems() {
   if (!EDITING_PRODUCT) return;
   const rows = [...document.querySelectorAll("#si-list .si-row:not(.sold)")];
+  const changes = [];
   for (const row of rows) {
     const id = row.dataset.id;
     const data = {};
@@ -401,9 +433,11 @@ async function saveStockItems() {
     const orig = STOCK_ITEMS.find(i => i.id === id) || {};
     if (data.login !== (orig.login || "") || data.password !== (orig.password || "")
         || data.note !== (orig.note || "")) {
-      await QQ.saveStockItem(EDITING_PRODUCT.id, id, data);
+      changes.push({ id, data });
     }
   }
+  // เขียนทีเดียวทั้งชุด เร็วกว่าและถ้าพลาดก็ไม่บันทึกครึ่งๆ กลางๆ
+  if (changes.length) await QQ.saveStockItemsBulk(EDITING_PRODUCT.id, changes);
   await QQ.syncDigitalStock(EDITING_PRODUCT.id);
 }
 
@@ -428,13 +462,16 @@ async function saveProduct() {
     desc_en: document.getElementById("p-desc-en").value.trim(),
     price: num("p-price") || 0,
     emoji: document.getElementById("p-emoji").value.trim(),
-    image: PRODUCT_IMAGE,
+    // ส่งรูปไปเฉพาะตอนที่แอดมินเปลี่ยนจริง (ไม่งั้นเขียนรูปเดิมทับทุกครั้งที่กดบันทึก)
+    ...(IMAGE_CHANGED || !EDITING_PRODUCT ? { image: PRODUCT_IMAGE } : {}),
     active: document.getElementById("p-active").checked,
     digital,
     sort: EDITING_PRODUCT?.sort ?? PRODUCTS.length,
   };
   // สินค้าดิจิทัลไม่ให้พิมพ์สต๊อกเอง ระบบนับจากคลังให้
   if (!digital) data.stock = num("p-stock");
+  // สินค้าดิจิทัลชิ้นใหม่ยังไม่มีของในคลัง ต้องเริ่มที่ 0 ไม่ใช่ "ไม่จำกัด"
+  else if (!EDITING_PRODUCT) data.stock = 0;
 
   if (!data.name) return setMsg("p-msg", t("product_name"));
   if (data.price <= 0) return setMsg("p-msg", t("amount_invalid"));
@@ -616,12 +653,13 @@ document.getElementById("c-amount").addEventListener("input", () => {
 document.getElementById("p-image").addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file) return;
-  try { PRODUCT_IMAGE = await QQ.resizeImage(file, 900, 0.75); renderProductPreview(); }
+  try { PRODUCT_IMAGE = await QQ.resizeImage(file, 800, 0.72); IMAGE_CHANGED = true; renderProductPreview(); }
   catch (err) { setMsg("p-msg", err.message || t("error_generic")); }
+  finally { e.target.value = ""; }   // เลือกไฟล์เดิมซ้ำต้องทำงานได้อีก
 });
 
 document.getElementById("p-image-preview").addEventListener("click", e => {
-  if (e.target.id === "p-image-clear") { PRODUCT_IMAGE = null; renderProductPreview(); }
+  if (e.target.id === "p-image-clear") { PRODUCT_IMAGE = null; IMAGE_CHANGED = true; renderProductPreview(); }
 });
 
 document.getElementById("c-save").addEventListener("click", async () => {
@@ -652,14 +690,29 @@ document.getElementById("dash").addEventListener("click", async e => {
         await QQ.approveOrder(id); await reloadAll();
       } else if (act === "reject-order" && confirm(t("confirm_reject"))) {
         await QQ.rejectOrder(id); await reloadAll();
-      } else if (act === "approve-topup" && confirm(t("confirm_approve_topup"))) {
-        await QQ.approveTopup(id); await reloadAll();
+      } else if (act === "approve-topup") {
+        const row = TOPUPS.find(x => x.id === id);
+        let amount = null;
+        // บอทรับซองสำเร็จแต่บันทึกยอดไม่ทัน = amount เป็น 0
+        // ถ้าปล่อยให้กดอนุมัติเลย เครดิตจะเข้า 0 บาทแบบไม่มีใครรู้
+        if (!(Number(row?.amount) > 0)) {
+          const typed = prompt(t("enter_topup_amount"), "");
+          if (typed === null) return;
+          amount = Number(typed);
+          if (!Number.isFinite(amount) || amount <= 0) return alert(t("amount_invalid"));
+        }
+        if (!confirm(t("confirm_approve_topup"))) return;
+        await QQ.approveTopup(id, amount); await reloadAll();
       } else if (act === "reject-topup" && confirm(t("confirm_reject"))) {
         await QQ.rejectTopup(id); await reloadAll();
       } else if (act === "edit-product") {
-        await openProductModal(PRODUCTS.find(p => p.id === id));
+        const prod = PRODUCTS.find(p => p.id === id);
+        // ตารางอาจค้างอยู่หลังสินค้าถูกลบจากอีกหน้าจอ ถ้าไม่กันไว้จะกลายเป็นหน้าต่าง "เพิ่มสินค้า"
+        if (!prod) { alert(t("not_found")); await reloadProducts(); return; }
+        await openProductModal(prod);
       } else if (act === "add-credit") {
         CREDIT_TARGET = USERS.find(u => u.id === id);
+        if (!CREDIT_TARGET) { alert(t("not_found")); await reloadAll(); return; }
         document.getElementById("credit-target").textContent =
           `${CREDIT_TARGET.name || CREDIT_TARGET.email} · ${t("credit")} ${money(CREDIT_TARGET.credit)}`;
         document.getElementById("c-amount").value = "";
@@ -668,9 +721,10 @@ document.getElementById("dash").addEventListener("click", async e => {
         setMsg("c-msg", "");
         document.getElementById("credit-overlay").classList.add("open");
       } else if (act === "toggle-role") {
-        const u = USERS.find(x => x.id === id);
         // กันแอดมินถอดสิทธิ์ตัวเองจนเข้าหลังบ้านไม่ได้
         if (id === QQ.user.uid) { alert(t("cannot_demote_self")); return; }
+        const u = USERS.find(x => x.id === id);
+        if (!u) { alert(t("not_found")); await reloadAll(); return; }
         await QQ.setRole(id, u.role === "admin" ? "member" : "admin");
         await reloadAll();
       }
@@ -678,11 +732,31 @@ document.getElementById("dash").addEventListener("click", async e => {
     finally { btn.disabled = false; }
     return;
   }
-  // คลิกรูปสลิปเพื่อดูขนาดเต็ม
+  // คลิกรูปสลิปเพื่อดูขนาดเต็ม (รายการเก่าที่ฝังรูปไว้ในเอกสาร)
   const img = e.target.closest(".slip-thumb");
   if (img) {
     document.getElementById("img-full").src = img.src;
     document.getElementById("img-overlay").classList.add("open");
+    return;
+  }
+
+  // รายการใหม่: โหลดสลิปตอนกดดู
+  const slipBtn = e.target.closest("[data-slip]");
+  if (slipBtn) {
+    const old = slipBtn.textContent;
+    slipBtn.disabled = true;
+    slipBtn.textContent = t("loading");
+    try {
+      const data = safeImg(await QQ.fetchTopupSlip(slipBtn.dataset.slip));
+      if (!data) { alert(t("slip_load_failed")); return; }
+      document.getElementById("img-full").src = data;
+      document.getElementById("img-overlay").classList.add("open");
+    } catch (err) {
+      alert(QQ.friendlyError(err));
+    } finally {
+      slipBtn.disabled = false;
+      slipBtn.textContent = old;
+    }
   }
 });
 
@@ -690,7 +764,17 @@ document.getElementById("nav-logout").addEventListener("click", () =>
   QQ.logout().then(() => location.href = "login.html"));
 
 document.addEventListener("langchange", () => { if (USERS.length || ORDERS.length) renderAll(); });
-window.addEventListener("resize", () => { if (ORDERS.length || USERS.length) renderOverview(); });
+let resizeTimer = null;
+let lastWidth = window.innerWidth;
+window.addEventListener("resize", () => {
+  // มือถือยิง resize ทุกครั้งที่แถบที่อยู่ยืด/หด ถ้าวาดกราฟใหม่ทุกครั้งจะกระตุก
+  if (window.innerWidth === lastWidth) return;
+  lastWidth = window.innerWidth;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (ORDERS.length || USERS.length) renderOverview();
+  }, 200);
+});
 
 window.closePanel = id => document.getElementById(id).classList.remove("open");
 
