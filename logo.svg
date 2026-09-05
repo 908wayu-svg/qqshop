@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="โลโก้ QQSHOP">
+  <g fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- หู -->
+    <path d="M30 44 L24 15 Q23 11 27 13 L54 27 Z" fill="#ffffff"/>
+    <path d="M90 44 L96 15 Q97 11 93 13 L66 27 Z" fill="#ffffff"/>
+    <!-- หัว -->
+    <ellipse cx="60" cy="66" rx="42" ry="37" fill="#ffffff"/>
+    <!-- ตา -->
+    <ellipse cx="46" cy="64" rx="6" ry="8" fill="#ef7c17" stroke="none"/>
+    <ellipse cx="74" cy="64" rx="6" ry="8" fill="#ef7c17" stroke="none"/>
+    <!-- จมูก + ปาก -->
+    <path d="M56 78 L64 78 L60 83 Z" fill="#ef7c17" stroke="none"/>
+    <path d="M60 84 Q55 90 51 85" stroke="#ef7c17" stroke-width="4"/>
+    <path d="M60 84 Q65 90 69 85" stroke="#ef7c17" stroke-width="4"/>
+  </g>
+</svg>

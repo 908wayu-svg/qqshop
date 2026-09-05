@@ -8,3 +8,6 @@ node_modules/
 *-key.json
 firebase-debug.log
 tests/sandbox/
+
+# ไฟล์ต้นฉบับสติ๊กเกอร์จาก Gemini (ตัวที่ใช้จริงคือ cat.png / girl-1.png / hero-banner.jpg)
+Gemini_Generated_Image_*

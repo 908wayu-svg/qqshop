@@ -20,6 +20,10 @@ const I18N = {
     not_enough_credit: "เครดิตไม่พอ กรุณาเติมเงินก่อน",
     cart_updated: "ราคาหรือจำนวนสินค้าในตะกร้ามีการเปลี่ยนแปลง กรุณาตรวจสอบแล้วกดสั่งซื้ออีกครั้ง",
     topup_now: "เติมเงิน",
+    // แบนเนอร์หน้าร้าน
+    hero_title: "ร้านไอดีเกม QQSHOP",
+    hero_sub: "ไอดีเกมของแท้ ราคาถูก จ่ายด้วยเครดิต ได้ของทันทีหลังแอดมินอนุมัติ",
+    hero_b1: "⚡ ได้ของไว", hero_b2: "🔒 ปลอดภัย", hero_b3: "💬 แอดมินตอบตลอด",
     // คลังสินค้าดิจิทัล
     is_digital: "สินค้าดิจิทัล (มีไอดี/รหัสผ่านรายชิ้น)",
     digital_hint: "เมื่อเปิด สต๊อกจะนับจากจำนวนชิ้นในคลังอัตโนมัติ ลูกค้าจะเห็นไอดี/รหัสผ่านในประวัติการซื้อทันทีที่คุณอนุมัติออเดอร์",
@@ -199,6 +203,10 @@ const I18N = {
     not_enough_credit: "Not enough credit. Please top up first.",
     cart_updated: "Prices or quantities in your cart changed — please review and order again.",
     topup_now: "Top up",
+    // Storefront banner
+    hero_title: "QQSHOP Game Accounts",
+    hero_sub: "Genuine game accounts at low prices. Pay with credit, get your account right after admin approval.",
+    hero_b1: "⚡ Fast delivery", hero_b2: "🔒 Secure", hero_b3: "💬 Admin always online",
     is_digital: "Digital product (per-item login / password)",
     digital_hint: "When on, stock is counted from the items below automatically. Buyers see the login and password in their purchase history as soon as you approve the order.",
     stock_items: "Inventory",
