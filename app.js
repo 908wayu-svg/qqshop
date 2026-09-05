@@ -2,6 +2,7 @@
 
 const CART_KEY = "qq_cart";
 let PRODUCTS = [];
+let ACTIVE_CAT = "all";   // หมวดหมู่ที่เลือกอยู่ตอนนี้ ("all" = ทุกหมวด)
 
 function getCart() {
   let raw;
@@ -78,10 +79,27 @@ function productImage(p) {
   return `<div class="emoji">${escapeHtml(p.emoji) || "🛍️"}</div>`;
 }
 
+// ปุ่มแท็บหมวดหมู่เหนือตะแกรงสินค้า — รายชื่อหมวดมาจาก shop-config.js (ผ่าน window.QQ.CATEGORIES)
+function renderCatTabs() {
+  const box = document.getElementById("cat-tabs");
+  if (!box) return;
+  const cats = window.QQ?.CATEGORIES || [];
+  if (!cats.length) { box.innerHTML = ""; box.classList.add("hidden"); return; }
+  // เผื่อสินค้าถูกลบหมวดที่กำลังเลือกอยู่ทิ้งไป กลับไปโชว์ "ทั้งหมด" แทนหน้าว่าง
+  if (ACTIVE_CAT !== "all" && !cats.some(c => c.id === ACTIVE_CAT)) ACTIVE_CAT = "all";
+  box.classList.remove("hidden");
+  const tabs = [{ id: "all", icon: "🗂️" }, ...cats];
+  box.innerHTML = tabs.map(c => `
+    <button type="button" class="cat-tab${c.id === ACTIVE_CAT ? " active" : ""}" data-cat="${c.id}">
+      <span class="cat-ico">${c.icon}</span>${t("cat_" + c.id)}
+    </button>`).join("");
+}
+
 function renderProducts() {
   const grid = document.getElementById("grid");
   const lang = getLang();
-  const list = PRODUCTS.filter(p => p.active !== false);
+  const list = PRODUCTS.filter(p => p.active !== false)
+    .filter(p => ACTIVE_CAT === "all" || p.category === ACTIVE_CAT);
 
   if (!list.length) { grid.innerHTML = `<div class="empty">${t("no_data")}</div>`; return; }
 
@@ -248,11 +266,20 @@ document.getElementById("cart-list")?.addEventListener("click", e => {
   if (btn) changeQty(btn.dataset.id, Number(btn.dataset.qty));
 });
 
+document.getElementById("cat-tabs")?.addEventListener("click", e => {
+  const btn = e.target.closest("[data-cat]");
+  if (!btn || btn.dataset.cat === ACTIVE_CAT) return;
+  ACTIVE_CAT = btn.dataset.cat;
+  renderCatTabs();
+  renderProducts();
+});
+
 document.addEventListener("authchange", syncNav);
-document.addEventListener("langchange", () => { renderProducts(); renderCartPanel(); });
+document.addEventListener("langchange", () => { renderCatTabs(); renderProducts(); renderCartPanel(); });
 
 document.addEventListener("DOMContentLoaded", async () => {
   renderCartBadge();
+  renderCatTabs();
   if (window.QQ?.isConfigured) { await QQ.whenAuthReady(); await loadProducts(); }
   syncNav();
 });

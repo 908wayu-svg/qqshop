@@ -1,6 +1,6 @@
 // ===== หลังบ้าน: ภาพรวม / ออเดอร์ / เติมเงิน / สินค้า / สมาชิก =====
 import { QQ } from "./auth.js";
-import { angpaoRedeemUrl } from "./shop-config.js";
+import { angpaoRedeemUrl, CATEGORIES } from "./shop-config.js";
 
 let ORDERS = [], USERS = [], TOPUPS = [], PRODUCTS = [], SETTINGS = {};
 let RANGE = 30;
@@ -234,12 +234,12 @@ function renderOrders() {
       const pc = priceCheck(o);
       return `
       <tr>
-        <td>${fmtDateTime(o._date)}</td>
-        <td>${esc(o.customerName || "—")}<br><small>${esc(o.customerEmail || "")}</small>
+        <td data-label="${t("date")}">${fmtDateTime(o._date)}</td>
+        <td data-label="${t("customer")}">${esc(o.customerName || "—")}<br><small>${esc(o.customerEmail || "")}</small>
             <br><small class="credit-note">${t("credit")}: ${money(creditOf(o.uid))}</small></td>
-        <td><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small></td>
-        <td class="num">${money(o.total)}${priceWarnLabel(pc)}</td>
-        <td>${statusBadge(o.status)}${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
+        <td data-label="${t("items")}"><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small></td>
+        <td class="num" data-label="${t("amount")}">${money(o.total)}${priceWarnLabel(pc)}</td>
+        <td data-label="${t("status")}">${statusBadge(o.status)}${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
         <td class="actions">${o.status === "pending" ? `
           <button class="btn-small ok" data-act="approve-order" data-id="${o.id}">${t("approve")}</button>
           <button class="btn-small danger" data-act="reject-order" data-id="${o.id}">${t("reject")}</button>` : ""}
@@ -308,13 +308,13 @@ function renderTopups() {
     </tr></thead>
     <tbody>${list.slice(0, 100).map(x => `
       <tr>
-        <td>${fmtDateTime(x._date)}</td>
-        <td>${esc(x.name || "—")}<br><small>${esc(x.email || "")}</small></td>
-        <td>${t(METHOD_KEY[x.method] || "m_admin")}</td>
-        <td>${slipCell(x)}</td>
-        <td class="num">${money(x.amount)}${OPEN_STATES.includes(x.status) && !(Number(x.amount) > 0)
+        <td data-label="${t("date")}">${fmtDateTime(x._date)}</td>
+        <td data-label="${t("customer")}">${esc(x.name || "—")}<br><small>${esc(x.email || "")}</small></td>
+        <td data-label="${t("method")}">${t(METHOD_KEY[x.method] || "m_admin")}</td>
+        <td data-label="${t("slip")}">${slipCell(x)}</td>
+        <td class="num" data-label="${t("amount")}">${money(x.amount)}${OPEN_STATES.includes(x.status) && !(Number(x.amount) > 0)
           ? `<br><small class="price-warn">⚠ ${t("needs_amount")}</small>` : ""}</td>
-        <td>${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}${
+        <td data-label="${t("status")}">${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}${
           x.status === "processing" ? `<br><small class="price-warn">${t("stuck_check_first")}</small>` : ""}</td>
         <td class="actions">${OPEN_STATES.includes(x.status) ? `
           <button class="btn-small ok" data-act="approve-topup" data-id="${x.id}">${t("approve")}</button>
@@ -324,6 +324,21 @@ function renderTopups() {
 }
 
 // ---------- สินค้า ----------
+// รายชื่อหมวดหมู่มาจาก shop-config.js ที่เดียว — เติมช่อง select ตอนโหลดหน้าครั้งเดียว
+function populateCategorySelect() {
+  const sel = document.getElementById("p-category");
+  if (!sel) return;
+  const keep = sel.value;   // อย่าให้ค่าที่เลือกไว้หายตอนสลับภาษา
+  sel.innerHTML = `<option value="">${t("category_none")}</option>`
+    + CATEGORIES.map(c => `<option value="${esc(c.id)}">${c.icon} ${t("cat_" + c.id)}</option>`).join("");
+  sel.value = keep;
+}
+populateCategorySelect();
+document.addEventListener("langchange", populateCategorySelect);
+
+const categoryLabel = id => id ? (CATEGORIES.find(c => c.id === id)
+  ? `${CATEGORIES.find(c => c.id === id).icon} ${t("cat_" + id)}` : id) : t("category_none");
+
 // รูปสินค้าเก็บแยกเอกสาร โหลดตอนเลื่อนมาถึงเท่านั้น (img.js)
 function productThumb(p) {
   const legacy = safeImg(p.image);
@@ -342,7 +357,7 @@ function renderProducts() {
       <div class="padmin-body">
         <b>${esc(p.name)}</b>
         <div class="muted">${money(p.price)} · ${t("stock")} ${p.stock ?? "∞"}</div>
-        <div class="muted">${p.active === false ? t("inactive") : t("active")}</div>
+        <div class="muted">${p.active === false ? t("inactive") : t("active")} · ${categoryLabel(p.category)}</div>
       </div>
       <button class="btn-small" data-act="edit-product" data-id="${p.id}">${t("edit")}</button>
     </div>`).join("");
@@ -360,6 +375,7 @@ async function openProductModal(product) {
   v("p-desc", product?.desc); v("p-desc-en", product?.desc_en);
   v("p-price", product?.price ?? ""); v("p-stock", product?.stock ?? "");
   v("p-emoji", product?.emoji); v("p-image", "");
+  v("p-category", product?.category);
   document.getElementById("p-active").checked = product ? product.active !== false : true;
   document.getElementById("p-digital").checked = !!product?.digital;
   document.getElementById("p-delete").classList.toggle("hidden", !product);
@@ -465,6 +481,7 @@ async function saveProduct() {
     desc_en: document.getElementById("p-desc-en").value.trim(),
     price: num("p-price") || 0,
     emoji: document.getElementById("p-emoji").value.trim(),
+    category: document.getElementById("p-category").value,
     // ส่งรูปไปเฉพาะตอนที่แอดมินเปลี่ยนจริง (ไม่งั้นเขียนรูปเดิมทับทุกครั้งที่กดบันทึก)
     ...(IMAGE_CHANGED || !EDITING_PRODUCT ? { image: PRODUCT_IMAGE } : {}),
     active: document.getElementById("p-active").checked,
@@ -494,7 +511,7 @@ async function saveProduct() {
       return;
     }
     if (digital) await QQ.syncDigitalStock(EDITING_PRODUCT.id);
-    closePanel("product-overlay");
+    window.closePanel("product-overlay");
     await reloadProducts();
   } catch (e) { setMsg("p-msg", QQ.friendlyError(e)); }
   finally { btn.disabled = false; }
@@ -516,12 +533,12 @@ function renderMembers() {
     </tr></thead>
     <tbody>${list.slice(0, 200).map(u => `
       <tr>
-        <td>${esc(u.name || "—")}</td>
-        <td>${esc(u.email || "—")}</td>
-        <td><span class="badge provider">${esc(u.provider || "email")}</span></td>
-        <td class="num"><b>${money(u.credit)}</b></td>
-        <td>${u.role === "admin" ? `<span class="badge admin">${t("role_admin")}</span>` : t("role_member")}</td>
-        <td>${fmtDateTime(u._date)}</td>
+        <td data-label="${t("name")}">${esc(u.name || "—")}</td>
+        <td data-label="${t("email")}">${esc(u.email || "—")}</td>
+        <td data-label="${t("signup_method")}"><span class="badge provider">${esc(u.provider || "email")}</span></td>
+        <td class="num" data-label="${t("credit")}"><b>${money(u.credit)}</b></td>
+        <td data-label="${t("role")}">${u.role === "admin" ? `<span class="badge admin">${t("role_admin")}</span>` : t("role_member")}</td>
+        <td data-label="${t("joined")}">${fmtDateTime(u._date)}</td>
         <td class="actions">
           <button class="btn-small primary" data-act="add-credit" data-id="${u.id}">+ ${t("credit")}</button>
           <button class="btn-small" data-act="toggle-role" data-id="${u.id}">
@@ -618,7 +635,7 @@ document.getElementById("p-delete").addEventListener("click", async () => {
   btn.disabled = true;
   try {
     await QQ.deleteProduct(EDITING_PRODUCT.id);
-    closePanel("product-overlay");
+    window.closePanel("product-overlay");
     await reloadProducts();
   } catch (e) { setMsg("p-msg", QQ.friendlyError(e)); }
   finally { btn.disabled = false; }
@@ -710,7 +727,7 @@ document.getElementById("c-save").addEventListener("click", async () => {
   try {
     const uid = CREDIT_TARGET.id;
     const logId = await QQ.adjustCredit(uid, amount, document.getElementById("c-note").value.trim());
-    closePanel("credit-overlay");
+    window.closePanel("credit-overlay");
     await refreshAfter(async () => {
       await patchUser(uid);
       if (logId) await patchRow(TOPUPS, "topups", logId);

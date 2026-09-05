@@ -1,0 +1,79 @@
+// ===== ทดสอบการแสดงผลบนจอมือถือ =====
+// jsdom ไม่คำนวณ layout จริง จึงตรวจ 2 อย่างที่ตรวจได้แน่นอน:
+//   1. ทุกช่องในตารางต้องมี data-label (มือถือเอาไปโชว์เป็นชื่อคอลัมน์หน้าค่า)
+//   2. กฎ CSS ในบล็อกจอมือถือยังอยู่ครบ (เคยแก้ทีนึงแล้วหลุดหายไปเงียบๆ)
+import { buildSandbox, makeDom, loadI18n, tick } from "./harness.mjs";
+import * as store from "./fake/store.mjs";
+import * as fs2 from "./fake/firestore.mjs";
+import fs from "fs";
+import path from "path";
+import { SRC } from "./harness.mjs";
+
+const css = fs.readFileSync(path.join(SRC, "style.css"), "utf8");
+const mobile = css.slice(css.indexOf("@media(max-width:600px)")).replace(/\s*\n\s*/g, " ");
+const TS = n => new fs2.Timestamp(Date.now() - n * 1000);
+
+let pass = 0, fail = 0;
+const ok = (n, c, x = "") => { c ? (pass++, console.log("  ok  " + n)) : (fail++, console.log("  XX  " + n + (x ? "  -> " + x : ""))); };
+const section = s => console.log("\n== " + s + " ==");
+const has = re => re.test(mobile);
+
+buildSandbox(); makeDom("admin.html"); loadI18n();
+const { QQ } = await import("./sandbox/auth.mjs");
+globalThis.QQ = QQ;
+
+await QQ.registerWithEmail("908wayu@gmail.com", "adminpass", "เจ้าของร้าน", "");
+await tick(6);
+
+store.put("users/c1", { uid: "c1", email: "c1@x.com", name: "ลูกค้า หนึ่ง", role: "member", credit: 500, createdAt: TS(300), provider: "google" });
+store.put("products/pA", { name: "ไอดีเกม A", price: 300, stock: 3, active: true, category: "game_id" });
+store.put("orders/o1", { uid: "c1", customerName: "ลูกค้า หนึ่ง", customerEmail: "c1@x.com", total: 300,
+  status: "pending", createdAt: TS(100), items: [{ id: "pA", name: "ไอดีเกม A", price: 300, qty: 1 }] });
+store.put("topups/t1", { uid: "c1", name: "ลูกค้า หนึ่ง", email: "c1@x.com", amount: 500, method: "bank",
+  hasSlip: true, status: "pending", createdAt: TS(50) });
+store.put("topupSlips/t1", { uid: "c1", slip: "data:image/jpeg;base64," + "A".repeat(80) + "==" });
+
+await import("./sandbox/admin.mjs");
+await tick(14);
+
+section("ทุกช่องในตารางหลังบ้านต้องมีชื่อคอลัมน์กำกับ (data-label)");
+for (const [name, id] of [["ออเดอร์", "table-orders"], ["เติมเงิน", "table-topups"], ["สมาชิก", "table-members"]]) {
+  const rows = [...document.querySelectorAll(`#${id} tbody tr`)];
+  ok(`ตาราง${name} มีแถวข้อมูลให้ตรวจ`, rows.length > 0, "ได้ " + rows.length + " แถว");
+  const cells = rows.flatMap(r => [...r.querySelectorAll("td")]);
+  // ช่องปุ่มกดไม่ต้องมีป้าย (ปุ่มบอกตัวเองอยู่แล้ว)
+  const needLabel = cells.filter(td => !td.classList.contains("actions") && !td.classList.contains("empty"));
+  const missing = needLabel.filter(td => !td.getAttribute("data-label"));
+  ok(`ตาราง${name} ทุกช่องมี data-label`, missing.length === 0,
+    missing.map(td => td.textContent.trim().slice(0, 20)).join(" | "));
+  // ป้ายต้องเป็นคำแปล ไม่ใช่รหัส key ดิบๆ
+  const rawKeys = needLabel.filter(td => /^[a-z_]+$/.test(td.getAttribute("data-label") || ""));
+  ok(`ตาราง${name} ป้ายถูกแปลแล้ว ไม่ใช่ชื่อ key`, rawKeys.length === 0,
+    rawKeys.map(td => td.getAttribute("data-label")).join(","));
+}
+
+section("กฎ CSS สำหรับจอมือถือยังอยู่ครบ");
+ok("ตารางแปลงเป็นการ์ด (ซ่อนหัวตาราง)", has(/\.table-wrap thead\{[^}]*display:none/));
+ok("ช่องตารางเรียงเป็นบรรทัด", has(/\.table-wrap[^{]*td\{[^}]*display:block/));
+ok("เอา data-label มาโชว์เป็นป้าย", has(/\.table-wrap td::before\{[^}]*content:attr\(data-label\)/));
+ok("ป้ายลอยซ้าย (ไม่ใช้ flex เพราะ <br> จะแตกคอลัมน์)", has(/\.table-wrap td::before\{[^}]*float:left/));
+ok("ตารางไม่ต้องเลื่อนแนวนอนแล้ว", has(/\.table-wrap\{[^}]*overflow-x:visible/));
+ok("แถบแท็บหมวดหมู่เฟดขอบขวาบอกว่าเลื่อนต่อได้", has(/\.cat-tabs\{[^}]*mask-image/));
+ok("แถบแท็บหลังบ้านเฟดขอบขวาด้วย", has(/\.tabs-main\{[^}]*mask-image/));
+ok("การ์ดตัวเลขหลังบ้านย่อลงให้ได้ 2 ใบต่อแถว", has(/\.tiles\{[^}]*minmax\(150px/));
+ok("ปุ่มติดต่อย่อเป็นวงกลม", has(/\.contact-fab\{[^}]*border-radius:50%/));
+ok("เว้นที่ท้ายหน้าให้ปุ่มลอย", has(/has-contact-fab[^{]*\{[^}]*padding-bottom/));
+ok("สินค้าหน้าร้านเหลือ 2 คอลัมน์", has(/\.grid\{[^}]*minmax\(150px/));
+ok("กราฟหลังบ้านเรียงลงมาทีละใบ (กันล้นขอบจอ 320px)", has(/\.cards-2\{[^}]*grid-template-columns:1fr/));
+ok("รายการสินค้าหลังบ้านเหลือคอลัมน์เดียว", has(/\.product-admin-grid\{[^}]*grid-template-columns:1fr/));
+
+section("กันการ์ดถูกดันกว้างเกินจอ (ชื่อไทยยาวๆ ไม่มีที่ตัดคำ)");
+const flat = css.replace(/\s*\n\s*/g, " ");
+ok(".padmin ยอมหดได้ (min-width:0)", /\.padmin\{[^}]*min-width:0/.test(flat));
+ok(".padmin-body ตัดคำได้ทุกจุดถ้าจำเป็น", /\.padmin-body\{[^}]*overflow-wrap:anywhere/.test(flat));
+
+section("ไม่มีกฎเก่าที่ขัดกันหลงเหลือ");
+ok("ไม่มี .table-wrap td แบบ flex ค้างอยู่", !has(/\.table-wrap td\{[^}]*display:flex/));
+
+console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
+if (fail) process.exitCode = 1;

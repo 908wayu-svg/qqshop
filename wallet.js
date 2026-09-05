@@ -215,10 +215,10 @@ async function renderHistory() {
     : `<thead><tr><th>${t("date")}</th><th>${t("method")}</th>
          <th class="num">${t("amount")}</th><th>${t("status")}</th></tr></thead>
        <tbody>${topups.map(x => `<tr>
-         <td>${fmtDate(x.createdAt)}</td>
-         <td>${t(METHOD_META[x.method]?.key || "m_admin")}</td>
-         <td class="num">${money(x.amount)}</td>
-         <td>${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}</td>
+         <td data-label="${t("date")}">${fmtDate(x.createdAt)}</td>
+         <td data-label="${t("method")}">${t(METHOD_META[x.method]?.key || "m_admin")}</td>
+         <td class="num" data-label="${t("amount")}">${money(x.amount)}</td>
+         <td data-label="${t("status")}">${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}</td>
        </tr>`).join("")}</tbody>`;
 }
 

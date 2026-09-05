@@ -183,6 +183,9 @@ const I18N = {
     product_desc_en: "คำอธิบาย (อังกฤษ)", price: "ราคา", stock: "สต๊อก",
     product_image: "รูปสินค้า", active: "เปิดขาย", inactive: "ปิดขาย",
     confirm_delete_product: "ลบสินค้านี้?", image_too_big: "ไฟล์รูปใหญ่เกินไป",
+    // หมวดหมู่สินค้า
+    product_category: "หมวดหมู่", category_none: "ยังไม่ระบุหมวด",
+    cat_all: "ทั้งหมด", cat_game_id: "ไอดีเกม", cat_topup: "เติมเกม",
 
     // จัดการสมาชิก
     add_credit: "เพิ่มเครดิต", add_credit_to: "เพิ่มเครดิตให้", credit_amount: "จำนวนเครดิต",
@@ -362,6 +365,9 @@ const I18N = {
     product_desc_en: "Description (English)", price: "Price", stock: "Stock",
     product_image: "Product image", active: "Listed", inactive: "Hidden",
     confirm_delete_product: "Delete this product?", image_too_big: "Image file is too large",
+    // Product categories
+    product_category: "Category", category_none: "No category",
+    cat_all: "All", cat_game_id: "Game accounts", cat_topup: "Game top-up",
 
     add_credit: "Add credit", add_credit_to: "Add credit to", credit_amount: "Credit amount",
     make_admin: "Make admin", remove_admin: "Remove admin", cannot_demote_self: "You can not remove your own admin rights",

@@ -11,7 +11,7 @@ import {
   serverTimestamp, query, orderBy, where, getDocs, limit, onSnapshot, runTransaction, writeBatch, deleteField,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./firebase-config.js";
-import { SHOP } from "./shop-config.js";
+import { SHOP, CATEGORIES } from "./shop-config.js";
 
 // เส้นทางสั่งซื้อฝั่งเซิร์ฟเวอร์ (Cloudflare Worker ตัวเดียวกับบอทรับซอง)
 const ORDER_API = (SHOP.channels.angpao?.botUrl || "").replace(/\/$/, "") + "/order";
@@ -187,6 +187,7 @@ async function myQuery(col, max) {
 
 export const QQ = {
   isConfigured,
+  CATEGORIES,   // หมวดหมู่สินค้า — app.js (สคริปต์ธรรมดา) อ่านผ่าน window.QQ.CATEGORIES
   get user() { return currentUser; },
   get profile() { return currentProfile; },
   get credit() { return Number(currentProfile?.credit || 0); },
