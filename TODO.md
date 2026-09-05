@@ -190,8 +190,13 @@
 เปลี่ยน `hero-banner.jpg` หรือ `cat.png` แล้วสั่ง:
 `cd tools && npm i --no-save jimp && node make-share-images.mjs`
 
-### อยากให้ Google เก็บเว็บเร็วขึ้น (ต้องทำเองในเบราว์เซอร์ ทำแทนไม่ได้)
-- เข้า https://search.google.com/search-console → เพิ่มเว็บ https://908wayu-svg.github.io/qqshop/
-  → ส่ง sitemap: https://908wayu-svg.github.io/qqshop/sitemap.xml
+### Google Search Console — ทำแล้ว (5 ก.ย. 2569)
+- [x] ยืนยันความเป็นเจ้าของเว็บด้วยไฟล์ `google7927e7e3fa345a6c.html` (อยู่ในโฟลเดอร์หลัก **ห้ามลบ**)
+- [x] ส่ง sitemap `https://908wayu-svg.github.io/qqshop/sitemap.xml`
+- [x] ขอให้ Google เก็บหน้าร้านเข้าดัชนี (Request indexing)
+- สถานะ sitemap ตอนส่งใหม่ๆ ขึ้นว่า "ดึงข้อมูลไม่ได้" เป็นเรื่องปกติ — ทดสอบด้วยเครื่องมือ
+  ของ Google แล้วขึ้น "URL พร้อมใช้งานสำหรับ Google" สถานะจะเปลี่ยนเองภายใน 1-2 วัน
+- เว็บใหม่ปกติใช้เวลาหลายวันถึงสัปดาห์กว่าจะค้นหาเจอบน Google
+  เช็คได้โดยค้นคำว่า `site:908wayu-svg.github.io/qqshop` ใน Google
 - แชร์ลิงก์แล้วรูปไม่ขึ้น/ขึ้นรูปเก่า (เฟซบุ๊กจำรูปเดิมไว้):
   https://developers.facebook.com/tools/debug/ → วางลิงก์ร้าน → กด Scrape Again
