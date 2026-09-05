@@ -125,12 +125,10 @@ header{position:sticky;top:0;background:var(--card);
 .hero-badges{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
 .hero-badges span{background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.35);
   backdrop-filter:blur(4px);border-radius:20px;padding:6px 13px;font-size:13px;font-weight:600}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
 
 /* ===== สติ๊กเกอร์ตกแต่ง ===== */
-/* กล่องว่าง (ยังไม่มีสินค้า / ตะกร้าว่าง) — วางสติ๊กเกอร์ไว้เหนือข้อความ */
-#grid .empty{padding-top:180px;background:url("girl-1.png") top center/auto 160px no-repeat}
-.empty-box{padding-top:190px;background:url("girl-1.png") top center/auto 170px no-repeat}
+/* (สติ๊กเกอร์ของกล่องว่าง อยู่ท้ายบล็อก .empty / .empty-box ด้านล่าง
+   ต้องประกาศหลังกฎที่ตั้ง padding แบบย่อ ไม่งั้นรูปจะทับตัวหนังสือ) */
 /* หน้าเข้าสู่ระบบ — มาสคอตโผล่หลังการ์ด */
 .auth-main{position:relative}
 .auth-main::before{content:"";display:block;height:150px;margin-bottom:-26px;
@@ -195,6 +193,9 @@ main{max-width:1080px;margin:0 auto;padding:26px 20px 52px}
   padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:14px;
   font-variant-numeric:tabular-nums}
 .empty{color:var(--muted);text-align:center;padding:30px;font-size:14px;grid-column:1/-1}
+/* สติ๊กเกอร์เหนือข้อความตอนหน้าร้านว่าง/โหลดไม่ได้ — ต้องอยู่หลัง .empty ด้านบน
+   เพราะ .empty ประกาศ padding แบบย่อ ถ้าอยู่ก่อนจะโดนล้าง แล้วรูปทับตัวหนังสือ */
+#grid .empty{padding-top:180px;background:url("girl-1.png") top center/auto 160px no-repeat}
 
 /* ===== ปุ่ม / ฟอร์ม ===== */
 .btn-primary{width:100%;background:var(--grad);color:#fff;border:none;border-radius:13px;
@@ -415,7 +416,10 @@ img.img-missing{opacity:.25}
 
 /* ===== หน้าประวัติการซื้อ ===== */
 .btn-ghost.block{display:block;text-align:center;padding:13px}
-.empty-box{text-align:center}
+/* กล่องว่างหน้าประวัติการซื้อ — ต้องอยู่หลัง .card เพราะ .card ประกาศ padding แบบย่อ
+   ถ้าอยู่ก่อน padding-top ตรงนี้จะโดนล้าง แล้วสติ๊กเกอร์จะทับตัวหนังสือ */
+.empty-box{text-align:center;padding-top:190px;
+  background:url("girl-1.png") top center/auto 170px no-repeat}
 .empty-box .btn-primary{max-width:240px;margin:0 auto}
 .purchase{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
   padding:18px;margin-bottom:15px;box-shadow:var(--shadow);transition:border-color .18s,transform .18s}
@@ -469,8 +473,40 @@ img.img-missing{opacity:.25}
 .cred-note{margin-top:9px;padding-top:9px;border-top:1px solid rgba(0,0,0,.08);
   font-size:13px;color:var(--text-2)}
 
+/* ===== ปุ่มติดต่อแอดมิน (ลอยมุมขวาล่าง) ===== */
+/* z-index ต่ำกว่า .overlay (100) เพื่อไม่ให้ปุ่มลอยทับกล่องตะกร้า/กล่องติดต่อ */
+.contact-fab{position:fixed;right:18px;bottom:18px;z-index:90;
+  display:flex;align-items:center;gap:8px;
+  background:var(--grad);color:#fff;border:none;border-radius:30px;
+  padding:12px 18px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;
+  box-shadow:0 14px 30px -10px rgba(242,112,26,.9);
+  transition:transform .15s,box-shadow .15s,filter .15s}
+.contact-fab:hover{transform:translateY(-2px);filter:brightness(1.05);
+  box-shadow:0 18px 36px -10px rgba(242,112,26,.95)}
+.contact-fab:active{transform:translateY(0)}
+.contact-fab-ico{font-size:18px;line-height:1}
+/* เว้นที่ท้ายหน้าไว้ให้ปุ่มลอย ไม่ให้บังปุ่มของแถวสุดท้ายตอนเลื่อนสุด */
+body.has-contact-fab main,body.has-contact-fab .wallet-main{padding-bottom:96px}
+
+.contact-panel{max-width:410px}
+.contact-panel .hint{margin-top:0}
+.contact-list{display:flex;flex-direction:column;gap:10px;margin:16px 0 14px}
+.contact-item{display:flex;align-items:center;gap:13px;text-decoration:none;
+  background:var(--field);border:1px solid var(--border);border-radius:15px;
+  padding:13px 15px;color:var(--text);
+  transition:border-color .15s,transform .15s,box-shadow .15s}
+.contact-item:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:var(--shadow)}
+.contact-ico{flex:0 0 auto;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+  background:var(--grad);color:#fff;font-family:var(--font-display);font-size:20px;font-weight:700}
+.contact-facebook .contact-ico{background:linear-gradient(135deg,#1877f2,#0d5fd1)}
+.contact-line .contact-ico{background:linear-gradient(135deg,#38d430,#06c755)}
+.contact-meta{display:flex;flex-direction:column;flex:1;min-width:0}
+.contact-meta b{font-size:15px;font-weight:600}
+.contact-meta small{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.contact-go{color:var(--muted);font-size:22px;line-height:1}
+.contact-note{margin-bottom:0}
+
 @media(max-width:600px){
-  .hero{padding:26px 20px;min-height:180px}
   #grid .empty{padding-top:150px;background-size:auto 130px}
   .empty-box{padding-top:160px;background-size:auto 140px}
   .auth-main::before{height:120px;background-size:auto 142px}
@@ -480,7 +516,7 @@ img.img-missing{opacity:.25}
   .brand{font-size:19px}
   .brand::before{width:34px;height:34px;font-size:17px}
   .admin-main,main,.wallet-main{padding:16px 14px 40px}
-  .hero{padding:24px 20px;border-radius:20px;margin-bottom:20px}
+  .hero{padding:24px 20px;min-height:180px;border-radius:20px;margin-bottom:20px}
   .hero h1{font-size:26px}
   .hero p{font-size:14px}
 
@@ -491,6 +527,12 @@ img.img-missing{opacity:.25}
   .purchase-foot{flex-direction:column;align-items:flex-start;gap:6px}
   .si-row{grid-template-columns:22px 1fr auto;gap:5px}
   .si-row .si-note{grid-column:2 / 4}
+  /* มือถือ: เหลือแค่ไอคอน กันปุ่มบังสินค้าแถวล่าง */
+  .contact-fab{right:14px;bottom:14px;width:52px;height:52px;padding:0;
+    justify-content:center;border-radius:50%}
+  .contact-fab-ico{font-size:21px}
+  .contact-fab-text{display:none}
+  body.has-contact-fab main,body.has-contact-fab .wallet-main{padding-bottom:86px}
 }
 
 @media (prefers-reduced-motion:reduce){

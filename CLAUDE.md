@@ -37,7 +37,8 @@
 - `auth.js` — ชั้นข้อมูลทั้งหมด เปิดเป็น `window.QQ`
 - `i18n.js` — คำแปลไทย/อังกฤษ + ฟังก์ชัน `t()` และ `money()`
 - `ui.js` — ตัวช่วยหน้าเว็บ: โหลดรูปสินค้าตอนเลื่อนถึง + ปิดกล่องลอยด้วย Esc/กดพื้นที่มืด
-- `shop-config.js` — บัญชีรับเงินทุกช่องทาง + URL ของ Worker
+- `shop-config.js` — บัญชีรับเงินทุกช่องทาง + URL ของ Worker + ช่องทางติดต่อแอดมิน (`SHOP.contact`)
+- `contact.js` — ปุ่ม "ติดต่อแอดมิน" ลอยมุมจอ + กล่องช่องทางติดต่อ (โหลดหน้าไหน หน้านั้นมีปุ่มเลย)
 - `firestore.rules` — กฎความปลอดภัย (deploy ด้วย `firebase deploy --only firestore:rules`)
 - `firestore.indexes.json` — index ที่ประวัติของลูกค้าต้องใช้ (uid + createdAt)
 - `tests/` — ชุดทดสอบทุกหน้า รันด้วย `cd tests && npm test` (ไม่แตะฐานข้อมูลจริง)
