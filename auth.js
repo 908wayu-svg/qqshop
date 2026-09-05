@@ -126,10 +126,10 @@ function friendlyError(err) {
 function resizeImage(file, maxSide = 800, quality = 0.72) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error("อ่านไฟล์ไม่ได้"));
+    reader.onerror = () => reject(new Error(t("file_read_failed")));
     reader.onload = () => {
       const img = new Image();
-      img.onerror = () => reject(new Error("ไฟล์นี้ไม่ใช่รูปภาพ"));
+      img.onerror = () => reject(new Error(t("not_an_image")));
       img.onload = () => {
         const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
         const c = document.createElement("canvas");
@@ -301,6 +301,11 @@ export const QQ = {
     if (!data.ok) throw Object.assign(new Error(data.error), { orderCode: data.error });
     return data;
   },
+  // อ่านทีละเอกสาร (หลังบ้านใช้รีเฟรชเฉพาะแถวที่เพิ่งกด ไม่ต้องโหลดใหม่ทั้งตาราง)
+  async fetchOne(col, id) {
+    const s = await getDoc(doc(db, col, id));
+    return s.exists() ? { id: s.id, ...s.data() } : null;
+  },
   async fetchOrders(max = 500) {
     return rows(await getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(max))));
   },
@@ -314,8 +319,8 @@ export const QQ = {
   async approveOrder(orderId) {
     const oRef = doc(db, "orders", orderId);
     const pre = await getDoc(oRef);
-    if (!pre.exists()) throw new Error("ไม่พบออเดอร์");
-    if (pre.data().status !== "pending") throw new Error("ออเดอร์นี้ถูกดำเนินการไปแล้ว");
+    if (!pre.exists()) throw new Error(t("not_found"));
+    if (pre.data().status !== "pending") throw new Error(t("already_handled"));
 
     const items = pre.data().items || [];
 
@@ -342,13 +347,15 @@ export const QQ = {
     return runTransaction(db, async (tx) => {
       // ---- อ่านให้ครบก่อน (Firestore บังคับ) ----
       const oSnap = await tx.get(oRef);
-      if (!oSnap.exists()) throw new Error("ไม่พบออเดอร์");
+      if (!oSnap.exists()) throw new Error(t("not_found"));
       const o = oSnap.data();
-      if (o.status !== "pending") throw new Error("ออเดอร์นี้ถูกดำเนินการไปแล้ว");
+      if (o.status !== "pending") throw new Error(t("already_handled"));
 
       const uRef = doc(db, "users", o.uid);
       const uSnap = await tx.get(uRef);
-      const credit = Number(uSnap.data()?.credit || 0);
+      // ไม่มีเอกสารสมาชิก = ต้องบอกให้ตรงเหตุ ไม่ใช่ขึ้นว่า "เครดิตไม่พอ"
+      if (!uSnap.exists()) throw new Error(t("member_not_found"));
+      const credit = Number(uSnap.data().credit || 0);
       if (credit < o.total) throw new Error(t("insufficient_customer_credit"));
 
       const pSnaps = await Promise.all(items.map(i => tx.get(doc(db, "products", String(i.id)))));
@@ -530,7 +537,7 @@ export const QQ = {
         status: "approved", createdAt: serverTimestamp(),
         approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
       });
-    });
+    }).then(() => logRef.id);
   },
 
   // ---------- ตั้งค่าร้าน ----------

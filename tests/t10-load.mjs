@@ -99,3 +99,21 @@ ok("ไม่ค้างเกิน 5 วินาที", Date.now() - t2 < 5
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
+
+section("กดอนุมัติ 1 ครั้ง ต้องไม่อ่านฐานข้อมูลใหม่ทั้งก้อน");
+click(document.querySelector('#tabs [data-tab="topups"]'));
+click(document.querySelector('#topups-filter [data-st="pending"]'));
+await tick(4);
+globalThis.__confirm = true;
+const btn = $("table-topups").querySelector('[data-act="approve-topup"]');
+const readsBefore = store.state.reads;
+click(btn);
+await tick(25);
+const used = store.state.reads - readsBefore;
+console.log("   อ่านฐานข้อมูล " + used + " รายการต่อการกด 1 ครั้ง");
+ok("อ่านไม่เกิน 50 รายการ (เดิมพันกว่า)", used < 50, used + " รายการ");
+ok("อนุมัติสำเร็จจริง", btn.dataset.id ? store.raw("topups/" + btn.dataset.id).status === "approved" : false);
+ok("ยอดเครดิตบนจอถูกอัปเดต", $("kpi-credit").textContent !== "—");
+
+console.log("\nสรุป(รวมท้าย): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
+if (fail) process.exitCode = 1;

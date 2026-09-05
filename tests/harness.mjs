@@ -28,10 +28,11 @@ export function makeDom(page) {
   const dom = new JSDOM(html, { url: "https://908wayu-svg.github.io/qqshop/" + page, pretendToBeVisual: true });
   const w = dom.window;
   for (const k of ["window", "document", "CustomEvent", "Event", "localStorage",
-                   "HTMLElement", "Node", "Image", "FileReader", "getComputedStyle"]) {
+                   "HTMLElement", "Node", "Image", "FileReader", "getComputedStyle", "MutationObserver"]) {
     try { globalThis[k] = w[k]; } catch { Object.defineProperty(globalThis, k, { value: w[k], configurable: true }); }
   }
   try { Object.defineProperty(globalThis, "navigator", { value: w.navigator, configurable: true }); } catch {}
+  try { Object.defineProperty(globalThis, "location", { value: w.location, configurable: true }); } catch {}
   globalThis.alert = (...a) => { globalThis.__alerts.push(a.join(" ")); };
   globalThis.confirm = () => globalThis.__confirm;
   globalThis.prompt = () => globalThis.__prompt;
@@ -54,7 +55,7 @@ export function loadI18n() {
 }
 
 // img.js เป็นสคริปต์ธรรมดาเหมือนกัน
-export function loadImgHelper() { return runClassic("img.js"); }
+export function loadImgHelper() { return runClassic("ui.js"); }
 
 // สคริปต์ธรรมดา (app.js) — รันในบริบท global เดียวกัน
 export function runClassic(file) {

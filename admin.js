@@ -548,6 +548,32 @@ async function reloadAll() {
 
 async function reloadProducts() { PRODUCTS = await QQ.fetchProducts(); renderProducts(); }
 
+// ---------- รีเฟรชเฉพาะแถวที่เพิ่งเปลี่ยน ----------
+// เดิมกดอนุมัติ 1 ครั้ง = โหลดใหม่ทั้งออเดอร์+เติมเงิน+สมาชิก+สินค้า (พันกว่ารายการ)
+// ร้านที่มีลูกค้าเยอะจะช้าและกินโควตาอ่านของ Firestore จนหมดวันได้
+async function patchRow(list, col, id, extra) {
+  const fresh = await QQ.fetchOne(col, id);
+  const at = list.findIndex(x => x.id === id);
+  if (!fresh) { if (at >= 0) list.splice(at, 1); return; }
+  const row = { ...fresh, _date: toDate(fresh.createdAt), ...(extra || {}) };
+  if (at >= 0) list[at] = row; else list.unshift(row);
+}
+
+async function patchUser(uid) {
+  if (!uid) return;
+  const fresh = await QQ.fetchOne("users", uid);
+  const at = USERS.findIndex(u => u.id === uid);
+  if (!fresh) { if (at >= 0) USERS.splice(at, 1); return; }
+  const row = { ...fresh, _date: toDate(fresh.createdAt) };
+  if (at >= 0) USERS[at] = row; else USERS.unshift(row);
+}
+
+// ถ้ารีเฟรชแบบเจาะจงพลาด ค่อยถอยไปโหลดใหม่ทั้งหมด (ข้อมูลบนจอต้องตรงเสมอ)
+async function refreshAfter(fn) {
+  try { await fn(); renderAll(); }
+  catch (e) { console.warn("รีเฟรชเฉพาะแถวไม่สำเร็จ โหลดใหม่ทั้งหมด", e); await reloadAll(); }
+}
+
 function renderAll() {
   renderOverview(); renderOrders(); renderTopups(); renderProducts(); renderMembers();
 }
@@ -672,9 +698,13 @@ document.getElementById("c-save").addEventListener("click", async () => {
   const btn = document.getElementById("c-save");
   btn.disabled = true;
   try {
-    await QQ.adjustCredit(CREDIT_TARGET.id, amount, document.getElementById("c-note").value.trim());
+    const uid = CREDIT_TARGET.id;
+    const logId = await QQ.adjustCredit(uid, amount, document.getElementById("c-note").value.trim());
     closePanel("credit-overlay");
-    await reloadAll();
+    await refreshAfter(async () => {
+      await patchUser(uid);
+      if (logId) await patchRow(TOPUPS, "topups", logId);
+    });
   } catch (e) { setMsg("c-msg", QQ.friendlyError(e)); }
   finally { btn.disabled = false; }
 });
@@ -687,9 +717,17 @@ document.getElementById("dash").addEventListener("click", async e => {
     btn.disabled = true;
     try {
       if (act === "approve-order" && confirm(t("confirm_approve_order"))) {
-        await QQ.approveOrder(id); await reloadAll();
+        const uid = ORDERS.find(o => o.id === id)?.uid;
+        await QQ.approveOrder(id);
+        // อนุมัติแล้วสต๊อกเปลี่ยนด้วย จึงต้องดึงรายการสินค้าใหม่
+        await refreshAfter(async () => {
+          await patchRow(ORDERS, "orders", id);
+          await patchUser(uid);
+          PRODUCTS = await QQ.fetchProducts();
+        });
       } else if (act === "reject-order" && confirm(t("confirm_reject"))) {
-        await QQ.rejectOrder(id); await reloadAll();
+        await QQ.rejectOrder(id);
+        await refreshAfter(() => patchRow(ORDERS, "orders", id));
       } else if (act === "approve-topup") {
         const row = TOPUPS.find(x => x.id === id);
         let amount = null;
@@ -702,9 +740,14 @@ document.getElementById("dash").addEventListener("click", async e => {
           if (!Number.isFinite(amount) || amount <= 0) return alert(t("amount_invalid"));
         }
         if (!confirm(t("confirm_approve_topup"))) return;
-        await QQ.approveTopup(id, amount); await reloadAll();
+        await QQ.approveTopup(id, amount);
+        await refreshAfter(async () => {
+          await patchRow(TOPUPS, "topups", id);
+          await patchUser(row?.uid);
+        });
       } else if (act === "reject-topup" && confirm(t("confirm_reject"))) {
-        await QQ.rejectTopup(id); await reloadAll();
+        await QQ.rejectTopup(id);
+        await refreshAfter(() => patchRow(TOPUPS, "topups", id));
       } else if (act === "edit-product") {
         const prod = PRODUCTS.find(p => p.id === id);
         // ตารางอาจค้างอยู่หลังสินค้าถูกลบจากอีกหน้าจอ ถ้าไม่กันไว้จะกลายเป็นหน้าต่าง "เพิ่มสินค้า"
@@ -726,7 +769,7 @@ document.getElementById("dash").addEventListener("click", async e => {
         const u = USERS.find(x => x.id === id);
         if (!u) { alert(t("not_found")); await reloadAll(); return; }
         await QQ.setRole(id, u.role === "admin" ? "member" : "admin");
-        await reloadAll();
+        await refreshAfter(() => patchUser(id));
       }
     } catch (err) { alert(QQ.friendlyError(err)); }
     finally { btn.disabled = false; }

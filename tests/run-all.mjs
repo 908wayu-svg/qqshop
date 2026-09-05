@@ -3,7 +3,7 @@ const tests = [
   ["t1-auth.mjs", []], ["t2-admin.mjs", []], ["t3-worker.mjs", []], ["t4-angpao.mjs", []],
   ["t5-shop.mjs", []], ["t6-purchases.mjs", []], ["t7-admin-ui.mjs", []],
   ["t8-wallet.mjs", []], ["t9-gates.mjs", ["member"]], ["t9-gates.mjs", ["guest"]],
-  ["t10-load.mjs", []], ["t11-images.mjs", []],
+  ["t10-load.mjs", []], ["t11-images.mjs", []], ["t12-login.mjs", []], ["t13-overlay.mjs", []],
 ];
 let P = 0, F = 0, bad = [];
 for (const [f, args] of tests) {

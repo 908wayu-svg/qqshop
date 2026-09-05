@@ -36,11 +36,11 @@
 - `admin.html` + `admin.js` — หลังบ้าน 5 แท็บ (ภาพรวม/ออเดอร์/เติมเงิน/สินค้า/สมาชิก)
 - `auth.js` — ชั้นข้อมูลทั้งหมด เปิดเป็น `window.QQ`
 - `i18n.js` — คำแปลไทย/อังกฤษ + ฟังก์ชัน `t()` และ `money()`
-- `img.js` — โหลดรูปสินค้าตอนเลื่อนมาถึง (`watchProductImages`)
+- `ui.js` — ตัวช่วยหน้าเว็บ: โหลดรูปสินค้าตอนเลื่อนถึง + ปิดกล่องลอยด้วย Esc/กดพื้นที่มืด
 - `shop-config.js` — บัญชีรับเงินทุกช่องทาง + URL ของ Worker
 - `firestore.rules` — กฎความปลอดภัย (deploy ด้วย `firebase deploy --only firestore:rules`)
 - `firestore.indexes.json` — index ที่ประวัติของลูกค้าต้องใช้ (uid + createdAt)
-- `tests/` — ชุดทดสอบ 350 ข้อ รันด้วย `cd tests && npm test` (ไม่แตะฐานข้อมูลจริง)
+- `tests/` — ชุดทดสอบทุกหน้า รันด้วย `cd tests && npm test` (ไม่แตะฐานข้อมูลจริง)
 
 ## โครงสร้างข้อมูล (Firestore)
 - `users/{uid}` — email, name, phone, provider, **role**, **credit**

@@ -51,3 +51,40 @@ window.BLANK_IMG = BLANK_IMG;
 window.isSafeImage = isSafeImage;
 window.loadProductImage = loadProductImage;
 window.watchProductImages = watchProductImages;
+
+// ===== กล่องลอย (overlay): ปิดด้วยปุ่ม Esc / กดพื้นที่มืดรอบๆ =====
+// เดิมปิดได้ทางเดียวคือกดกากบาทมุมขวาบน บนมือถือต้องเอื้อมไกล
+function closeTopOverlay() {
+  const open = [...document.querySelectorAll(".overlay.open")];
+  if (!open.length) return false;
+  open[open.length - 1].classList.remove("open");
+  syncScrollLock();
+  return true;
+}
+
+// ล็อกไม่ให้หน้าหลังเลื่อนตามตอนกล่องลอยเปิดอยู่
+function syncScrollLock() {
+  const any = document.querySelector(".overlay.open");
+  document.body.style.overflow = any ? "hidden" : "";
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeTopOverlay();
+});
+
+document.addEventListener("click", e => {
+  // กดโดนพื้นที่มืด (ตัว .overlay เอง ไม่ใช่กล่องข้างใน) = ปิด
+  if (!e.target.classList?.contains("overlay") || !e.target.classList.contains("open")) return;
+  e.target.classList.remove("open");
+  syncScrollLock();
+});
+
+// เปิด/ปิดจากโค้ดหน้าอื่นก็ต้องล็อกการเลื่อนให้ถูก
+document.addEventListener("DOMContentLoaded", () => {
+  if (typeof MutationObserver !== "function") return;
+  const watcher = new MutationObserver(syncScrollLock);
+  document.querySelectorAll(".overlay").forEach(el =>
+    watcher.observe(el, { attributes: true, attributeFilter: ["class"] }));
+});
+
+window.closeTopOverlay = closeTopOverlay;
