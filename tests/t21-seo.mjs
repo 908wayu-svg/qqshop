@@ -16,6 +16,7 @@ const PAGES = {
   "index.html": { indexable: true },
   "login.html": { indexable: true },
   "privacy.html": { indexable: true },
+  "terms.html": { indexable: true },
   "wallet.html": { indexable: false },
   "purchases.html": { indexable: false },
   "admin.html": { indexable: false },

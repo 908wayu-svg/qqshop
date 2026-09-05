@@ -41,7 +41,11 @@ function buildContact() {
       <p class="hint" id="contact-hours"></p>
       <div class="contact-list"></div>
       <p class="hint contact-note" data-i18n="contact_note">แจ้งเลขที่คำสั่งซื้อหรืออีเมลที่สมัครไว้ด้วย จะได้ตรวจให้เร็วขึ้น</p>
-      <a class="contact-policy" href="privacy.html" data-i18n="privacy_link">นโยบายความเป็นส่วนตัว</a>
+      <div class="contact-policy">
+        <a href="terms.html" data-i18n="terms_link">เงื่อนไข &amp; การคืนสินค้า</a>
+        <span aria-hidden="true">·</span>
+        <a href="privacy.html" data-i18n="privacy_link">นโยบายความเป็นส่วนตัว</a>
+      </div>
     </div>`;
 
   const list = overlay.querySelector(".contact-list");

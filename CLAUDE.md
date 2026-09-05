@@ -40,6 +40,8 @@
 - `shop-config.js` — บัญชีรับเงินทุกช่องทาง + URL ของ Worker + ช่องทางติดต่อแอดมิน (`SHOP.contact`)
   + หมวดหมู่สินค้าหน้าร้าน (`CATEGORIES`)
 - `contact.js` — ปุ่ม "ติดต่อแอดมิน" ลอยมุมจอ + กล่องช่องทางติดต่อ (โหลดหน้าไหน หน้านั้นมีปุ่มเลย)
+- `privacy.html` + `terms.html` — นโยบายความเป็นส่วนตัว / เงื่อนไขการให้บริการ+คืนสินค้า
+  (สองภาษาในไฟล์เดียว สลับด้วย `data-lang-block` · ตัวเลขเงื่อนไขมาจาก `SHOP.policy`)
 - `firestore.rules` — กฎความปลอดภัย (deploy ด้วย `firebase deploy --only firestore:rules`)
 - `firestore.indexes.json` — index ที่ประวัติของลูกค้าต้องใช้ (uid + createdAt)
 - `og-image.jpg` — รูปที่ขึ้นตอนแชร์ลิงก์ (1200x630) · `favicon.svg` + `favicon-32/96/180.png` — ไอคอนเว็บ
