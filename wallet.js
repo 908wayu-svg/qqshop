@@ -206,12 +206,12 @@ async function renderHistory() {
   try { topups = await QQ.fetchMyTopups(); }
   catch (e) {
     console.warn("โหลดประวัติเติมเงินไม่ได้", e);
-    tt.innerHTML = `<tr><td class="empty">${t("load_failed")}</td></tr>`;
+    tt.innerHTML = `<tr class="empty-row"><td class="empty">${t("load_failed")}</td></tr>`;
     return;
   }
 
   tt.innerHTML = !topups.length
-    ? `<tr><td class="empty">${t("no_data")}</td></tr>`
+    ? `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`
     : `<thead><tr><th>${t("date")}</th><th>${t("method")}</th>
          <th class="num">${t("amount")}</th><th>${t("status")}</th></tr></thead>
        <tbody>${topups.map(x => `<tr>
@@ -236,13 +236,7 @@ document.getElementById("method-grid").addEventListener("click", e => {
   setMsg("");
 });
 
-document.getElementById("method-info").addEventListener("click", async e => {
-  const btn = e.target.closest(".copy");
-  if (!btn) return;
-  try { await navigator.clipboard.writeText(btn.dataset.copy); btn.textContent = "✓"; }
-  catch { /* บางเบราว์เซอร์ไม่รองรับ */ }
-  setTimeout(() => { btn.textContent = "⧉"; }, 1200);
-});
+// ปุ่มคัดลอก (.copy) จัดการรวมที่ ui.js — มีทางสำรองให้เบราว์เซอร์ที่ใช้ clipboard ไม่ได้
 
 document.getElementById("amount").addEventListener("input", () => {
   if (METHOD === "promptpay") renderQR();

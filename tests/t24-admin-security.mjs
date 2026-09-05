@@ -248,5 +248,30 @@ ok("บันทึกมียอดก่อน/หลังของราย
       .every(l => typeof l.before === "number" && typeof l.after === "number"));
 await allowed(() => fs2.getDoc(fs2.doc(db, "adminLogs", "log1")), "แอดมินอ่านบันทึกได้");
 
+section("สคริปต์จากเว็บนอกต้องตรึงเวอร์ชัน + ตรวจลายเซ็นไฟล์");
+{
+  // เว็บนี้รับเงินจริง ถ้า CDN ถูกแฮกแล้วสลับไฟล์สคริปต์
+  // คนร้ายเปลี่ยน QR/เลขบัญชีที่โชว์ให้ลูกค้าโอนได้เลย — integrity ปิดทางนี้
+  const fsNode = await import("fs");
+  const pathNode = await import("path");
+  const { SRC: ROOT } = await import("./harness.mjs");
+  const files = fsNode.readdirSync(ROOT).filter(f => /\.(html|js)$/.test(f));
+  const problems = [];
+  for (const f of files) {
+    const src = fsNode.readFileSync(pathNode.join(ROOT, f), "utf8");
+    // แท็กสคริปต์ในไฟล์ HTML
+    for (const m of src.matchAll(/<script\b[^>]*\bsrc="(https?:\/\/[^"]+)"[^>]*>/g)) {
+      if (!/\bintegrity=/.test(m[0])) problems.push(f + " → ไม่มี integrity: " + m[1]);
+      if (!/\d+\.\d+\.\d+/.test(m[1])) problems.push(f + " → ไม่ได้ตรึงเวอร์ชัน: " + m[1]);
+    }
+    // สคริปต์ที่โหลดเองจาก JS (เช่น ตัวอ่านสลิป)
+    for (const m of src.matchAll(/\.src\s*=\s*"(https?:\/\/[^"]+\.js)"/g)) {
+      if (!/\.integrity\s*=/.test(src)) problems.push(f + " → โหลดสคริปต์เองแต่ไม่ตั้ง integrity: " + m[1]);
+      if (!/\d+\.\d+\.\d+/.test(m[1])) problems.push(f + " → ไม่ได้ตรึงเวอร์ชัน: " + m[1]);
+    }
+  }
+  ok("ทุกสคริปต์ภายนอกตรึงเวอร์ชันและมีลายเซ็นครบ", problems.length === 0, problems.join(" · "));
+}
+
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;

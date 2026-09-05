@@ -23,6 +23,11 @@ function loadOcrLib() {
   ocrLibPromise = new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+    // ตรึงเวอร์ชัน + ตรวจลายเซ็นไฟล์ ถ้า CDN ถูกสลับไฟล์ เบราว์เซอร์จะไม่ยอมรัน
+    // (โหลดไม่ได้ = แค่อ่านสลิปอัตโนมัติไม่ได้ ยังกดดูรูปสลิปเองได้ตามปกติ)
+    s.integrity = "sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F";
+    s.crossOrigin = "anonymous";
+    s.referrerPolicy = "no-referrer";
     s.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error("โหลดตัวอ่านสลิปไม่สำเร็จ"));
     s.onerror = () => reject(new Error("โหลดตัวอ่านสลิปไม่สำเร็จ"));
     document.head.appendChild(s);
@@ -114,10 +119,14 @@ function renderSlipOcr(info) {
 // ตัวอ่านสลิปต้องโหลดไลบรารี + ชุดภาษาหลายสิบ MB จากอินเทอร์เน็ต
 // เน็ตช้า/หลุดกลางทาง = ค้างที่ "กำลังอ่าน..." ตลอดกาล ต้องมีเพดานเวลาเสมอ
 const OCR_TIMEOUT_MS = 90000;
-const withTimeout = (p, ms) => Promise.race([
-  p,
-  new Promise((_, reject) => setTimeout(() => reject(new Error("อ่านสลิปนานเกินไป")), ms)),
-]);
+// ต้องเคลียร์ตัวจับเวลาทิ้งเมื่องานเสร็จ ไม่งั้นจะมีตัวจับเวลาค้างอยู่ 90 วินาทีทุกครั้งที่เปิดดูสลิป
+const withTimeout = (p, ms) => {
+  let timer;
+  return Promise.race([
+    Promise.resolve(p).finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("อ่านสลิปนานเกินไป")), ms); }),
+  ]);
+};
 
 let slipOcrSeq = 0;
 async function showSlip(dataUrl) {

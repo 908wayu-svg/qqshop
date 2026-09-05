@@ -81,5 +81,18 @@ ok(".padmin-body ตัดคำได้ทุกจุดถ้าจำเป
 section("ไม่มีกฎเก่าที่ขัดกันหลงเหลือ");
 ok("ไม่มี .table-wrap td แบบ flex ค้างอยู่", !has(/\.table-wrap td\{[^}]*display:flex/));
 
+section("แถว 'ยังไม่มีข้อมูล' ต้องมีคลาสที่ CSS มือถือใช้จริง");
+// เดิมใช้ตัวเลือก :has() ซึ่งเบราว์เซอร์เก่าไม่รู้จัก เลยเปลี่ยนมาผูกกับคลาสที่แถวแทน
+// ถ้าใครเพิ่มตารางใหม่แล้วลืมใส่คลาส แถวว่างบนมือถือจะกลายเป็นการ์ดเปล่าๆ
+ok("CSS มือถือผูกกับคลาส .empty-row (ไม่ใช่ :has())", has(/\.table-wrap tr\.empty-row\{/));
+ok("ไม่เหลือ :has() ที่แถวว่าง", !has(/tr:has\(td\.empty\)/));
+for (const file of ["admin.js", "wallet.js"]) {
+  const js = fs.readFileSync(path.join(SRC, file), "utf8");
+  const rows = [...js.matchAll(/<tr([^>]*)><td class="empty"/g)];
+  ok(file + " สร้างแถวว่าง " + rows.length + " จุด และใส่คลาสครบทุกจุด",
+    rows.length > 0 && rows.every(m => m[1].includes("empty-row")),
+    rows.map(m => m[1].trim() || "(ไม่มีคลาส)").join(" · "));
+}
+
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;

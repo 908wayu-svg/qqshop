@@ -121,13 +121,7 @@ document.getElementById("list").addEventListener("click", e => {
   openCredentials(orderId, Number(idx));
 });
 
-document.getElementById("cred-list").addEventListener("click", async e => {
-  const btn = e.target.closest(".copy");
-  if (!btn) return;
-  try { await navigator.clipboard.writeText(btn.dataset.copy); btn.textContent = "✓"; }
-  catch { /* บางเบราว์เซอร์ไม่รองรับ */ }
-  setTimeout(() => { btn.textContent = "⧉"; }, 1200);
-});
+// ปุ่มคัดลอก (.copy) จัดการรวมที่ ui.js — มีทางสำรองให้เบราว์เซอร์ที่ใช้ clipboard ไม่ได้
 
 document.getElementById("status-filter").addEventListener("click", e => {
   const btn = e.target.closest(".range-btn");

@@ -88,3 +88,39 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 window.closeTopOverlay = closeTopOverlay;
+
+// ===== ปุ่มคัดลอก =====
+// navigator.clipboard ใช้ไม่ได้บนเบราว์เซอร์เก่า/เว็บวิวบางตัว (และต้องเป็น https เท่านั้น)
+// ถ้าใช้ไม่ได้ต้องมีทางสำรอง ไม่ใช่กดแล้วเงียบไปเฉยๆ จนคนกดไม่รู้ว่าคัดลอกได้หรือยัง
+// คืนค่า true เมื่อคัดลอกสำเร็จจริง
+async function copyText(text) {
+  const s = String(text ?? "");
+  if (!s) return false;
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(s); return true; }
+  } catch { /* ตกไปใช้ทางสำรองข้างล่าง */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = s;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-1000px;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, s.length);      // iOS ไม่เลือกข้อความให้ถ้าไม่ระบุช่วง
+    const done = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return !!done;
+  } catch { return false; }
+}
+
+// ปุ่ม .copy ทุกปุ่มในหน้า (มอบหมายคลิกไว้ที่ document จึงใช้ได้กับปุ่มที่วาดใหม่ทีหลังด้วย)
+// บอกผลด้วยสัญลักษณ์เสมอ: ✓ = คัดลอกแล้ว · ✕ = เบราว์เซอร์นี้คัดลอกให้ไม่ได้ (ให้ลากเลือกเอง)
+document.addEventListener("click", async e => {
+  const btn = e.target.closest?.(".copy");
+  if (!btn || !btn.dataset.copy) return;
+  const old = btn.textContent;
+  btn.textContent = (await copyText(btn.dataset.copy)) ? "✓" : "✕";
+  setTimeout(() => { btn.textContent = old; }, 1200);
+});
+
+window.copyText = copyText;

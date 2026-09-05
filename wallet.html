@@ -104,7 +104,12 @@
   <div class="panel img-panel"><img id="img-full" alt=""></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- ไลบรารีสร้าง QR — ตรึงเวอร์ชัน + ตรวจลายเซ็นไฟล์ (integrity)
+     หน้านี้เป็นหน้าจ่ายเงิน ถ้า CDN ถูกแฮกแล้วสลับสคริปต์ เบราว์เซอร์จะปฏิเสธไม่โหลดให้
+     โหลดไม่ได้ = หน้าเว็บขึ้นข้อความให้โอนตามเบอร์ด้านบนแทน (ไม่พังทั้งหน้า) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+        integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="i18n.js"></script>
 <script src="ui.js"></script>
 <script type="module" src="auth.js"></script>

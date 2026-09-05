@@ -16,6 +16,9 @@ const click = el => el.dispatchEvent(new window.MouseEvent("click", { bubbles: t
 const TS = n => new fs2.Timestamp(Date.now() - n * 1000);
 const IMG = "data:image/jpeg;base64," + "A".repeat(100) + "==";
 
+// ตัวอ่านสลิปจำลอง — เทสต้องไม่ยิงเน็ตจริงไปโหลดไลบรารี OCR (และไม่ต้องรอเพดานเวลา)
+window.Tesseract = { recognize: async () => ({ data: { text: "จำนวนเงิน\n500.00 บาท\n5 ก.ย. 69 10:00" } }) };
+
 await QQ.registerWithEmail("908wayu@gmail.com", "adminpass", "เจ้าของร้าน", "");
 installAdminServer();
 await makeAdmin(QQ, store);
@@ -36,7 +39,8 @@ store.put("products/pA/stockItems/s3", { login: "u3", password: "p3", note: "", 
 store.put("orders/o1", { uid: "c1", customerName: "ลูกค้า หนึ่ง", customerEmail: "c1@x.com", total: 600, status: "pending",
   createdAt: TS(100), items: [{ id: "pA", name: "ไอดีเกม A", price: 300, qty: 2 }] });
 store.put("orders/o2", { uid: "c1", customerName: "ลูกค้า หนึ่ง", customerEmail: "c1@x.com", total: 1, status: "pending",
-  createdAt: TS(90), items: [{ id: "pA", name: "ไอดีเกม A", price: 300, qty: 2 }] });   // ยอดไม่ตรงราคาจริง
+  createdAt: TS(90),
+  items: [{ id: "pA", name: "ไอดีเกม A", price: 300, qty: 2, gameUid: "99887766" }] });   // ยอดไม่ตรงราคาจริง + มีไอดีเกมให้คัดลอก
 store.put("orders/o3", { uid: "c2", customerName: "ลูกค้า สอง", customerEmail: "c2@x.com", total: 50, status: "approved",
   createdAt: TS(80), approvedAt: TS(70), items: [{ id: "pB", name: "ของทั่วไป", price: 50, qty: 1 }] });
 store.put("orders/o4", { uid: "c2", customerName: "ลูกค้า สอง", customerEmail: "c2@x.com", total: 5, status: "pending",
@@ -96,6 +100,9 @@ section("กดดูสลิป (โหลดตอนกด)");
 click($("table-topups").querySelector("[data-slip]"));
 await tick(6);
 ok("เปิดรูปสลิปเต็มจอได้", $("img-overlay").classList.contains("open") && $("img-full").src === IMG);
+await tick(6);
+ok("อ่านตัวเลขในสลิปมาโชว์ให้ด้วย", $("slip-ocr").textContent.includes("500"), $("slip-ocr").textContent);
+ok("มีคำเตือนว่าต้องเทียบกับแอปธนาคารก่อนอนุมัติ", $("slip-ocr").textContent.includes("ธนาคาร"));
 
 section("อนุมัติเติมเงินที่ยังไม่มียอด — ต้องถามยอดก่อน");
 globalThis.__confirm = true;
@@ -221,6 +228,25 @@ ok("ตารางเปลี่ยนเป็นอังกฤษ", $("tabl
 window.toggleLang();
 await tick(4);
 ok("กลับมาไทยได้", $("kpi-sales").textContent.includes("฿"));
+
+section("ปุ่มคัดลอกข้อมูลลูกค้า (ของเติมเกม) ต้องคัดลอกได้จริง");
+{
+  // เคยเป็นบั๊ก: หน้าหลังบ้านวาดปุ่มคัดลอกไว้ แต่ไม่มีตัวรับคลิกเลย กดแล้วเงียบ
+  const btn = document.querySelector('#table-orders .copy[data-copy="99887766"]');
+  ok("มีปุ่มคัดลอกไอดีเกมในออเดอร์", !!btn);
+
+  if (btn) {
+    let copied = null;
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async v => { copied = v; } },
+    });
+    click(btn);
+    await tick(4);
+    ok("กดแล้วคัดลอกค่าที่ถูกต้อง", copied === "99887766", String(copied));
+    ok("ปุ่มบอกผลว่าคัดลอกแล้ว", btn.textContent === "✓", btn.textContent);
+  }
+}
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
