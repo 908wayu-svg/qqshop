@@ -1,5 +1,6 @@
 // ===== ทดสอบภาระงานเมื่อมีผู้ใช้เยอะ (หน้าเว็บต้องไม่ค้าง) =====
-import { buildSandbox, makeDom, loadI18n, tick } from "./harness.mjs";
+import { buildSandbox, makeDom, loadI18n, tick, makeAdmin } from "./harness.mjs";
+import { installAdminServer } from "./fake/admin-server.mjs";
 import * as store from "./fake/store.mjs";
 import * as fs2 from "./fake/firestore.mjs";
 
@@ -15,6 +16,8 @@ const bytes = o => Buffer.byteLength(JSON.stringify(o, (k, v) => v?.ms ? v.ms : 
 const mb = n => (n / 1048576).toFixed(1) + " MB";
 
 await QQ.registerWithEmail("908wayu@gmail.com", "adminpass", "เจ้าของร้าน", "");
+installAdminServer();
+await makeAdmin(QQ, store);
 await tick(6);
 
 // สลิปจริงหลังย่อรูปแล้วอยู่ราว 120 KB

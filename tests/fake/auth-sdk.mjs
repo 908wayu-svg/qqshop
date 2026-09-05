@@ -1,5 +1,5 @@
 // ===== ตัวแทน firebase-auth.js สำหรับการทดสอบ =====
-import { state } from "./store.mjs";
+import { state, claimsOf } from "./store.mjs";
 
 const accounts = new Map();   // email -> { uid, password, displayName }
 let seq = 0;
@@ -7,14 +7,19 @@ const cbs = new Set();
 export const authObj = { currentUser: null };
 
 const fire = () => cbs.forEach(cb => cb(authObj.currentUser));
-const mkUser = (email, extra = {}) => ({
-  uid: extra.uid || "u" + (++seq),
-  email,
-  displayName: extra.displayName || null,
-  phoneNumber: null,
-  providerData: [{ providerId: extra.providerId || "password" }],
-  getIdToken: async () => "token:" + (extra.uid || email),
-});
+const mkUser = (email, extra = {}) => {
+  const uid = extra.uid || "u" + (++seq);
+  return {
+    uid,
+    email,
+    displayName: extra.displayName || null,
+    phoneNumber: null,
+    providerData: [{ providerId: extra.providerId || "password" }],
+    getIdToken: async () => "token:" + uid,
+    // สิทธิ์ที่ติดมากับโทเคน — อ่านสดจาก store ทุกครั้ง เหมือนขอโทเคนใบใหม่
+    getIdTokenResult: async () => ({ token: "token:" + uid, claims: { ...claimsOf(uid) } }),
+  };
+};
 
 export const getAuth = () => authObj;
 export function onAuthStateChanged(auth, cb) { cbs.add(cb); cb(authObj.currentUser); return () => cbs.delete(cb); }

@@ -1,17 +1,31 @@
 /**
- * QQSHOP Angpao Bot — Cloudflare Worker
+ * QQSHOP Server — Cloudflare Worker
  *
- * ลูกค้าวางลิงก์ซองอั่งเปาแล้วกดส่ง → Worker นี้กดรับซองเข้าเบอร์ทรูมันนี่ของร้าน
- * แล้วเติมเครดิตให้ลูกค้าอัตโนมัติ (ไม่ต้องรอแอดมิน)
+ * ที่นี่คือ "ฝั่งเซิร์ฟเวอร์" ที่เดียวของร้าน ทุกอย่างที่แตะเงินหรือสิทธิ์ต้องผ่านที่นี่:
+ *   - ลูกค้า: สร้างออเดอร์ (/order) · กดรับซองอั่งเปา (/)
+ *   - แอดมิน: อนุมัติออเดอร์/เติมเงิน · ปรับเครดิต · ตั้ง-ถอดสิทธิ์แอดมิน (/admin/*)
+ *
+ * ทำไมทุกอย่างต้องผ่านที่นี่:
+ *   firestore.rules ปิดไม่ให้เบราว์เซอร์เขียน credit / role ของใครทั้งสิ้น (แม้แต่แอดมินเอง)
+ *   ต่อให้บัญชีแอดมินหลุดมือ คนที่ได้ไปก็เติมเครดิตให้ตัวเองผ่าน Firestore ตรงๆ ไม่ได้
+ *   ต้องยิงผ่านเส้นทาง /admin/* นี้ ซึ่งตรวจสิทธิ์ 2 ชั้นและบันทึกทุกครั้งลง adminLogs
  *
  * ค่าลับที่ต้องตั้ง (wrangler secret put ...):
- *   SA_KEY          - เนื้อไฟล์ JSON ของ service account (angpao-bot)
- *   RECEIVE_PHONE   - เบอร์ทรูมันนี่ที่รับเงิน เช่น 0918200409
+ *   SA_KEY            - เนื้อไฟล์ JSON ของ service account
+ *                       ต้องมีสิทธิ์ Firestore + Firebase Authentication Admin
+ *                       (อย่างหลังใช้ตั้ง custom claim ของแอดมิน)
+ *   RECEIVE_PHONE     - เบอร์ทรูมันนี่ที่รับเงิน เช่น 0918200409
+ *   ADMIN_BOOTSTRAP   - รหัสลับตั้งแอดมินคนแรก / กู้คืนตอนหลุดสิทธิ์ทั้งหมด (อย่างน้อย 16 ตัว)
  */
 
 const PROJECT_ID = "qqshop-ecc92";
 const FIREBASE_API_KEY = "AIzaSyClU0JJzyAYUmMSpANGctMVYTcKiVt_lbY";
 const DB = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+const IDTOOLKIT = "https://identitytoolkit.googleapis.com/v1";
+
+// สิทธิ์ที่ขอจาก Google — แยกใบตามงาน ไม่ขอเกินที่ต้องใช้
+const SCOPE_DB = "https://www.googleapis.com/auth/datastore";
+const SCOPE_AUTH = "https://www.googleapis.com/auth/identitytoolkit";
 
 const ALLOWED_ORIGINS = [
   "https://908wayu-svg.github.io",
@@ -51,6 +65,17 @@ function parseAngpaoCode(link) {
   return m ? m[1] : null;
 }
 
+// เทียบความลับแบบไม่ให้เดาจากเวลาที่ใช้ตอบ (กันเดารหัสทีละตัวอักษร)
+function safeEqual(a, b) {
+  const x = String(a ?? ""), y = String(b ?? "");
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
+const isId = s => /^[A-Za-z0-9_-]{1,64}$/.test(String(s ?? ""));
+
 // ---------- Google service account -> access token ----------
 function b64url(buf) {
   const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
@@ -67,17 +92,19 @@ function pemToArrayBuffer(pem) {
   return buf.buffer;
 }
 
-let cachedToken = null; // { token, exp }
+// เก็บโทเคนแยกตามสิทธิ์ที่ขอ (ฐานข้อมูล / ระบบสมาชิก) ใบหนึ่งใช้แทนอีกใบไม่ได้
+const tokenCache = new Map();
 
-async function getAccessToken(saKeyJson) {
-  if (cachedToken && cachedToken.exp > Date.now() / 1000 + 60) return cachedToken.token;
+async function getAccessToken(saKeyJson, scope = SCOPE_DB) {
+  const hit = tokenCache.get(scope);
+  if (hit && hit.exp > Date.now() / 1000 + 60) return hit.token;
 
   const sa = JSON.parse(saKeyJson);
   const now = Math.floor(Date.now() / 1000);
   const header = b64url(new TextEncoder().encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
   const claim = b64url(new TextEncoder().encode(JSON.stringify({
     iss: sa.client_email,
-    scope: "https://www.googleapis.com/auth/datastore",
+    scope,
     aud: "https://oauth2.googleapis.com/token",
     exp: now + 3600,
     iat: now,
@@ -100,19 +127,37 @@ async function getAccessToken(saKeyJson) {
   const data = await res.json();
   if (!data.access_token) throw new Error("ขอ access token ไม่สำเร็จ: " + JSON.stringify(data).slice(0, 200));
 
-  cachedToken = { token: data.access_token, exp: now + (data.expires_in || 3600) };
-  return cachedToken.token;
+  tokenCache.set(scope, { token: data.access_token, exp: now + (data.expires_in || 3600) });
+  return data.access_token;
 }
 
 // ---------- ตรวจว่าใครเป็นคนเรียก ----------
+// อ่าน custom claim จาก "บัญชีจริง" ที่ Firebase ไม่ใช่จากโทเคนที่เบราว์เซอร์ส่งมา
+// เพราะโทเคนที่ออกก่อนถอนสิทธิ์จะยังมี admin:true ค้างอยู่ได้ถึง 1 ชั่วโมง
+// อ่านจากบัญชีจริง = ถอนสิทธิ์แล้วยิงเส้นทางแอดมินไม่ผ่านทันที
 async function verifyUser(idToken) {
   const res = await fetchWithTimeout(
-    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
+    `${IDTOOLKIT}/accounts:lookup?key=${FIREBASE_API_KEY}`,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
   const data = await res.json();
   const u = data.users?.[0];
   if (!u) throw new Error("unauthorized");
-  return { uid: u.localId, email: u.email || "", name: u.displayName || "" };
+  if (u.disabled === true) throw new Error("unauthorized");   // บัญชีถูกปิด = โทเคนเดิมใช้ต่อไม่ได้
+
+  let claims = {};
+  try {
+    const s = u.customAttributes || "{}";
+    if (typeof s === "string" && s.length <= 1000) claims = JSON.parse(s) || {};
+  } catch { claims = {}; }
+  if (typeof claims !== "object" || Array.isArray(claims) || claims === null) claims = {};
+
+  return {
+    uid: u.localId,
+    email: u.email || "",
+    name: u.displayName || "",
+    emailVerified: u.emailVerified === true,
+    claims,
+  };
 }
 
 // ---------- Firestore ----------
@@ -121,19 +166,60 @@ const fsValue = v =>
   : typeof v === "boolean" ? { booleanValue: v }
   : typeof v === "number" ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v })
   : v instanceof Date ? { timestampValue: v.toISOString() }
+  : Array.isArray(v) ? { arrayValue: { values: v.map(fsValue) } }
+  : typeof v === "object" ? { mapValue: { fields: fsFields(v) } }
   : { stringValue: String(v) };
 
 const fsFields = obj => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, fsValue(v)]));
 
-async function commit(token, writes) {
+// แปลงค่าจาก Firestore กลับเป็นค่า JS ธรรมดา (ใช้ตอนอ่าน items[] ของออเดอร์)
+function fsRead(v) {
+  if (!v || typeof v !== "object") return v;
+  if ("nullValue" in v) return null;
+  if ("booleanValue" in v) return v.booleanValue;
+  if ("integerValue" in v) return Number(v.integerValue);
+  if ("doubleValue" in v) return Number(v.doubleValue);
+  if ("timestampValue" in v) return v.timestampValue;
+  if ("stringValue" in v) return v.stringValue;
+  if ("arrayValue" in v) return (v.arrayValue.values || []).map(fsRead);
+  if ("mapValue" in v) return Object.fromEntries(
+    Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, fsRead(x)]));
+  return null;
+}
+
+async function commit(token, writes, transaction = null) {
   const res = await fetch(`${DB}:commit`, {
     method: "POST",
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-    body: JSON.stringify({ writes }),
+    body: JSON.stringify({ writes, ...(transaction ? { transaction } : {}) }),
   });
   const data = await res.json();
   if (data.error) throw Object.assign(new Error(data.error.message), { fsCode: data.error.status });
   return data;
+}
+
+// ---------- transaction จริงของ Firestore ----------
+// อ่านทุกอย่างในหมายเลข transaction เดียวกัน แล้วค่อย commit ทีเดียว
+// ถ้ามีใครแก้เอกสารที่เราอ่านไว้ระหว่างทาง Firestore จะปฏิเสธทั้งชุด
+// จำเป็นกับทุกงานที่แตะเครดิต: กดอนุมัติสองหน้าจอพร้อมกันต้องเข้าได้แค่ครั้งเดียว
+async function beginTx(token) {
+  const res = await fetch(`${DB}:beginTransaction`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ options: { readWrite: {} } }),
+  });
+  const data = await res.json();
+  if (!data.transaction) throw new Error("TX_BEGIN_FAILED");
+  return data.transaction;
+}
+
+async function rollbackTx(token, transaction) {
+  if (!transaction) return;
+  await fetch(`${DB}:rollback`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ transaction }),
+  }).catch(() => {});
 }
 
 const docPath = (col, id) => `projects/${PROJECT_ID}/databases/(default)/documents/${col}/${id}`;
@@ -145,12 +231,54 @@ async function getDocFields(token, fullPath) {
   return (await res.json()).fields || null;
 }
 
+// อ่านเอกสารหลายชิ้นพร้อมกัน (ใส่ transaction ได้ ถ้าต้องการอ่านแบบล็อก)
+async function batchGet(token, paths, transaction = null) {
+  const res = await fetch(`${DB}:batchGet`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      documents: paths.map(p => `projects/${PROJECT_ID}/databases/(default)/${p.replace(/^projects\/[^/]+\/databases\/\(default\)\//, "")}`),
+      ...(transaction ? { transaction } : {}),
+    }),
+  });
+  const rows = await res.json();
+  if (rows.error) throw new Error(rows.error.message);
+  const out = {};
+  for (const r of rows) {
+    if (!r.found) continue;
+    out[r.found.name.split("/").pop()] = r.found.fields || {};
+  }
+  return out;
+}
+
+// ค้นเอกสารในคอลเลกชันย่อย (ใช้หาไอดีในคลังที่ยังไม่ถูกขาย)
+async function runQuery(token, parent, structuredQuery, transaction = null) {
+  const res = await fetch(`${DB}/${parent}:runQuery`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ structuredQuery, ...(transaction ? { transaction } : {}) }),
+  });
+  const rows = await res.json();
+  if (rows?.error) throw new Error(rows.error.message);
+  if (!Array.isArray(rows)) return [];
+  return rows.filter(r => r.document)
+    .map(r => ({ name: r.document.name, fields: r.document.fields || {} }));
+}
+
+const num = f => Number(f?.integerValue ?? f?.doubleValue ?? 0);
+const str = f => String(f?.stringValue ?? "");
+
+// ปัดเศษเงินเป็น 2 ตำแหน่ง กัน 19.9 * 3 = 59.699999999999996
+const money2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
 // ---------- จำกัดจำนวนครั้งต่อคน ----------
 // กันคนยิงลิงก์รัวๆ จนทรูมันนี่บล็อกเซิร์ฟเวอร์เรา
-const RATE_MAX = 8;          // กี่ครั้ง
+// แอดมินได้โควตาสูงกว่า เพราะกดอนุมัติทีละหลายรายการติดกันเป็นเรื่องปกติ
+const RATE_MAX = 8;           // กี่ครั้ง (ลูกค้า)
+const RATE_MAX_ADMIN = 120;   // กี่ครั้ง (แอดมิน)
 const RATE_WINDOW_MS = 60000; // ต่อกี่มิลลิวินาที
 
-async function rateLimited(token, uid) {
+async function rateLimited(token, uid, max = RATE_MAX) {
   const path = docPath("ratelimits", uid);
   const now = Date.now();
 
@@ -168,7 +296,7 @@ async function rateLimited(token, uid) {
     }
   } catch { /* อ่านไม่ได้ก็ปล่อยผ่าน ดีกว่าปิดระบบทั้งหมด */ }
 
-  if (count >= RATE_MAX) return true;
+  if (count >= max) return true;
 
   await commit(token, [{
     update: { name: path, fields: fsFields({ count: count + 1, windowStart, uid }) },
@@ -176,33 +304,21 @@ async function rateLimited(token, uid) {
   return false;
 }
 
-// อ่านเอกสารหลายชิ้นพร้อมกัน
-async function batchGet(token, paths) {
-  const res = await fetch(`${DB}:batchGet`, {
-    method: "POST",
-    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-    body: JSON.stringify({ documents: paths.map(p => `projects/${PROJECT_ID}/databases/(default)/${p.replace(/^projects\/[^/]+\/databases\/\(default\)\//, "")}`) }),
-  });
-  const rows = await res.json();
-  if (rows.error) throw new Error(rows.error.message);
-  const out = {};
-  for (const r of rows) {
-    if (!r.found) continue;
-    out[r.found.name.split("/").pop()] = r.found.fields || {};
-  }
-  return out;
-}
-
-const num = f => Number(f?.integerValue ?? f?.doubleValue ?? 0);
-
-// ปัดเศษเงินเป็น 2 ตำแหน่ง กัน 19.9 * 3 = 59.699999999999996
-const money2 = n => Math.round((Number(n) || 0) * 100) / 100;
-
 // รหัสข้อผิดพลาดที่ส่งกลับให้หน้าเว็บได้ (นอกเหนือจากนี้ถือเป็นข้อผิดพลาดภายใน)
 const CLIENT_ERRORS = new Set([
   "EMPTY_CART", "TOO_MANY_ITEMS", "BAD_ITEM", "BAD_QTY", "PRODUCT_NOT_FOUND",
   "PRODUCT_INACTIVE", "OUT_OF_STOCK", "BAD_PRICE", "BAD_TOTAL",
   "NO_PROFILE", "NOT_ENOUGH_CREDIT", "NEED_CUSTOMER_INFO",
+]);
+
+// รหัสข้อผิดพลาดของเส้นทางแอดมิน (หน้าเว็บแปลเป็นข้อความไทย/อังกฤษเอง)
+const ADMIN_ERRORS = new Set([
+  "ADMIN_ONLY", "NOT_FOUND", "ALREADY_HANDLED", "MEMBER_NOT_FOUND",
+  "INSUFFICIENT_CUSTOMER_CREDIT", "NOT_ENOUGH_STOCK_ITEMS", "STOCK_ITEM_TAKEN",
+  "EMPTY_STOCK_ITEM", "OUT_OF_STOCK", "AMOUNT_MISSING", "AMOUNT_INVALID",
+  "AMOUNT_TOO_LARGE", "WOULD_GO_NEGATIVE", "CANNOT_CHANGE_SELF", "BAD_REQUEST",
+  "CLAIMS_PERMISSION", "CLAIMS_FAILED", "BOOTSTRAP_DISABLED", "BOOTSTRAP_BAD_SECRET",
+  "BUSY",
 ]);
 
 // ---------- สร้างออเดอร์ (คิดราคาจากฝั่งเซิร์ฟเวอร์) ----------
@@ -287,6 +403,528 @@ async function createOrder(token, user, rawItems) {
   return { orderId, total, items };
 }
 
+// ================= เส้นทางแอดมิน =================
+
+// ---------- ตรวจสิทธิ์แอดมิน 2 ชั้น ----------
+// ชั้นที่ 1: custom claim `admin: true` ในบัญชี Firebase Auth
+//           ตั้งได้จากเซิร์ฟเวอร์เท่านั้น เบราว์เซอร์ปลอมไม่ได้เพราะเซ็นมากับโทเคน
+// ชั้นที่ 2: users/{uid}.role == 'admin' ในฐานข้อมูล
+//           เขียนได้จากเซิร์ฟเวอร์เท่านั้นเช่นกัน (กฎปิดทุกคน)
+//
+// ทำไมต้องสองชั้น: ถอนสิทธิ์แล้วต้องมีผล "ทันที" ทั้งที่นี่และที่ firestore.rules
+// โทเคนใบเก่าที่ยังไม่หมดอายุจะมี claim ค้างได้ถึง 1 ชั่วโมง แต่พอเอกสารถูกลดเป็น member
+// กฎฝั่ง Firestore ก็ปฏิเสธทันที ส่วนฝั่งนี้อ่าน claim จากบัญชีจริงอยู่แล้ว
+async function requireAdmin(token, user) {
+  if (user?.claims?.admin !== true) throw new Error("ADMIN_ONLY");
+  const got = await batchGet(token, [`documents/users/${user.uid}`]);
+  const me = got[user.uid];
+  if (!me || str(me.role) !== "admin") throw new Error("ADMIN_ONLY");
+  return me;
+}
+
+// บันทึกทุกการกระทำของแอดมิน — ลบไม่ได้ แก้ไม่ได้ อ่านได้เฉพาะแอดมิน
+function auditWrite(admin, action, detail = {}) {
+  // ใช้ UUID เต็ม ไม่ตัดสั้น — ถ้า id ชนกันแม้ครั้งเดียว คำสั่งทั้งชุดจะถูกปฏิเสธ
+  // (เขียนด้วยเงื่อนไข "ต้องยังไม่มีเอกสารนี้" เพื่อไม่ให้บันทึกเก่าถูกทับหาย)
+  const id = crypto.randomUUID().replace(/-/g, "");
+  return {
+    update: {
+      name: docPath("adminLogs", id),
+      fields: fsFields({
+        at: new Date(),
+        action,
+        byUid: admin.uid,
+        byEmail: admin.email || "",
+        ...detail,
+      }),
+    },
+    currentDocument: { exists: false },
+  };
+}
+
+// ---------- ตั้ง/ถอด custom claim ----------
+async function setAdminClaim(env, uid, on) {
+  const authToken = await getAccessToken(env.SA_KEY, SCOPE_AUTH);
+  const res = await fetchWithTimeout(`${IDTOOLKIT}/projects/${PROJECT_ID}/accounts:update`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + authToken, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      localId: uid,
+      customAttributes: JSON.stringify(on ? { admin: true } : {}),
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) {
+    const msg = data?.error?.message || ("HTTP " + res.status);
+    const denied = /PERMISSION_DENIED|insufficient|IAM|forbidden/i.test(msg) || res.status === 403;
+    throw Object.assign(new Error(denied ? "CLAIMS_PERMISSION" : "CLAIMS_FAILED"), { detail: msg });
+  }
+  return true;
+}
+
+// ---------- แอดมิน: ปรับเครดิตให้สมาชิก ----------
+// ใส่ค่าติดลบ = หักคืน · บันทึกลงประวัติเติมเงิน (method=admin) + adminLogs
+async function adminAdjustCredit(token, admin, { uid, amount, note = "" }) {
+  if (!isId(uid)) throw new Error("BAD_REQUEST");
+  const amt = money2(amount);
+  if (!Number.isFinite(amt) || amt === 0) throw new Error("AMOUNT_INVALID");
+  if (Math.abs(amt) > 100000) throw new Error("AMOUNT_TOO_LARGE");
+  const memo = String(note ?? "").slice(0, 300);
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/users/${uid}`], tx);
+    const u = got[uid];
+    if (!u) throw new Error("MEMBER_NOT_FOUND");
+
+    const before = money2(num(u.credit));
+    const after = money2(before + amt);
+    if (after < 0) throw new Error("WOULD_GO_NEGATIVE");
+
+    const logId = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+    await commit(token, [
+      {
+        update: { name: docPath("users", uid), fields: fsFields({ credit: after }) },
+        updateMask: { fieldPaths: ["credit"] },
+      },
+      {
+        update: {
+          name: docPath("topups", logId),
+          fields: fsFields({
+            uid,
+            name: str(u.name),
+            email: str(u.email),
+            amount: amt,
+            method: "admin",
+            note: memo,
+            status: "approved",
+            createdAt: new Date(),
+            approvedAt: new Date(),
+            approvedBy: admin.email || "",
+          }),
+        },
+        currentDocument: { exists: false },
+      },
+      auditWrite(admin, "credit.adjust",
+        { targetUid: uid, amount: amt, before, after, note: memo }),
+    ], tx);
+    return { logId, before, after };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ---------- แอดมิน: อนุมัติเติมเงิน ----------
+// amountOverride ใช้กับรายการที่บอทบันทึกยอดไม่ทัน (amount = 0)
+// ถ้าไม่บังคับให้ใส่ยอด แอดมินจะกดอนุมัติแล้วเครดิตเข้า 0 บาทแบบเงียบๆ
+const OPEN_TOPUP = ["pending", "processing"];
+
+async function adminApproveTopup(token, admin, { topupId, amount = null }) {
+  if (!isId(topupId)) throw new Error("BAD_REQUEST");
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/topups/${topupId}`], tx);
+    const tp = got[topupId];
+    if (!tp) throw new Error("NOT_FOUND");
+    if (!OPEN_TOPUP.includes(str(tp.status))) throw new Error("ALREADY_HANDLED");
+
+    const amt = money2(amount === null || amount === undefined || amount === "" ? num(tp.amount) : amount);
+    if (!Number.isFinite(amt) || amt <= 0) throw new Error("AMOUNT_MISSING");
+    if (amt > 100000) throw new Error("AMOUNT_TOO_LARGE");
+
+    const uid = str(tp.uid);
+    if (!uid) throw new Error("MEMBER_NOT_FOUND");
+    const uGot = await batchGet(token, [`documents/users/${uid}`], tx);
+    const u = uGot[uid];
+    if (!u) throw new Error("MEMBER_NOT_FOUND");
+
+    const before = money2(num(u.credit));
+    const after = money2(before + amt);
+
+    await commit(token, [
+      {
+        update: { name: docPath("users", uid), fields: fsFields({ credit: after }) },
+        updateMask: { fieldPaths: ["credit"] },
+      },
+      {
+        update: {
+          name: docPath("topups", topupId),
+          fields: fsFields({
+            amount: amt,
+            status: "approved",
+            approvedAt: new Date(),
+            approvedBy: admin.email || "",
+          }),
+        },
+        updateMask: { fieldPaths: ["amount", "status", "approvedAt", "approvedBy"] },
+      },
+      auditWrite(admin, "topup.approve",
+        { topupId, targetUid: uid, amount: amt, before, after }),
+    ], tx);
+    return { amount: amt, before, after };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ---------- แอดมิน: ไม่อนุมัติเติมเงิน ----------
+// เช็คสถานะในtransaction กัน "ไม่อนุมัติ" ทับรายการที่เติมเครดิตไปแล้ว
+async function adminRejectTopup(token, admin, { topupId, note = "" }) {
+  if (!isId(topupId)) throw new Error("BAD_REQUEST");
+  const memo = String(note ?? "").slice(0, 300);
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/topups/${topupId}`], tx);
+    const tp = got[topupId];
+    if (!tp) throw new Error("NOT_FOUND");
+    if (!OPEN_TOPUP.includes(str(tp.status))) throw new Error("ALREADY_HANDLED");
+
+    await commit(token, [
+      {
+        update: {
+          name: docPath("topups", topupId),
+          fields: fsFields({
+            status: "rejected",
+            note: memo,
+            approvedAt: new Date(),
+            approvedBy: admin.email || "",
+          }),
+        },
+        updateMask: { fieldPaths: ["status", "note", "approvedAt", "approvedBy"] },
+      },
+      auditWrite(admin, "topup.reject", { topupId, targetUid: str(tp.uid), note: memo }),
+    ], tx);
+    return { ok: true };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ---------- แอดมิน: อนุมัติออเดอร์ ----------
+// หักเครดิต + ตัดสต๊อก + จับไอดีในคลังส่งให้ลูกค้า + เปลี่ยนสถานะ ในชุดเดียว
+// ถ้าขั้นใดพลาด จะไม่เกิดอะไรขึ้นเลยสักอย่าง
+async function adminApproveOrder(token, admin, { orderId }) {
+  if (!isId(orderId)) throw new Error("BAD_REQUEST");
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/orders/${orderId}`], tx);
+    const o = got[orderId];
+    if (!o) throw new Error("NOT_FOUND");
+    if (str(o.status) !== "pending") throw new Error("ALREADY_HANDLED");
+
+    const uid = str(o.uid);
+    const total = money2(num(o.total));
+    const items = (fsRead(o.items) || []).map(i => ({ ...i }));
+    if (!uid || !items.length) throw new Error("BAD_REQUEST");
+
+    // ---- อ่านให้ครบก่อน ----
+    const uGot = await batchGet(token, [`documents/users/${uid}`], tx);
+    const u = uGot[uid];
+    if (!u) throw new Error("MEMBER_NOT_FOUND");
+    const before = money2(num(u.credit));
+    if (before < total) throw new Error("INSUFFICIENT_CUSTOMER_CREDIT");
+
+    const wanted = new Map();
+    for (const i of items) {
+      const pid = String(i.id || "");
+      if (!isId(pid)) throw new Error("BAD_REQUEST");
+      wanted.set(pid, (wanted.get(pid) || 0) + Math.floor(Number(i.qty || 0)));
+    }
+
+    const products = await batchGet(token,
+      [...wanted.keys()].map(pid => `documents/products/${pid}`), tx);
+
+    // จองไอดีในคลังของสินค้าดิจิทัล (อ่านในtransaction = ใครมาแย่งระหว่างนี้ไม่ได้)
+    const picked = {};
+    for (const [pid, qty] of wanted) {
+      const p = products[pid];
+      if (!p || p.digital?.booleanValue !== true) continue;
+      const found = await runQuery(token, `products/${pid}`, {
+        from: [{ collectionId: "stockItems" }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: "status" },
+            op: "EQUAL",
+            value: { stringValue: "available" },
+          },
+        },
+        limit: qty,
+      }, tx);
+      if (found.length < qty) throw new Error("NOT_ENOUGH_STOCK_ITEMS");
+      // ห้ามส่งของว่างเปล่าให้ลูกค้าเด็ดขาด ให้แอดมินไปกรอกข้อมูลก่อน
+      for (const r of found) {
+        if (!str(r.fields.login).trim() && !str(r.fields.password).trim()) {
+          throw new Error("EMPTY_STOCK_ITEM");
+        }
+      }
+      picked[pid] = found;
+    }
+
+    // ---- ตรวจเสร็จแล้วค่อยเขียน ----
+    const writes = [];
+
+    // ตัดสต๊อก (เฉพาะสินค้าที่กำหนดจำนวนไว้ ของที่ปล่อยว่าง = ไม่จำกัด)
+    for (const [pid, qty] of wanted) {
+      const p = products[pid];
+      if (!p) continue;
+      const hasStock = p.stock && p.stock.nullValue === undefined;
+      if (!hasStock) continue;
+      const left = num(p.stock) - qty;
+      if (left < 0) throw new Error("OUT_OF_STOCK");
+      writes.push({
+        update: { name: docPath("products", pid), fields: fsFields({ stock: left }) },
+        updateMask: { fieldPaths: ["stock"] },
+      });
+    }
+
+    // จับไอดีใส่ออเดอร์ + ตัดชิ้นนั้นออกจากคลัง
+    const queue = Object.fromEntries(Object.entries(picked).map(([pid, arr]) => [pid, [...arr]]));
+    const newItems = items.map(i => {
+      const pid = String(i.id);
+      if (!queue[pid]) return i;
+      const take = queue[pid].splice(0, Math.floor(Number(i.qty || 0)));
+      if (take.length < Math.floor(Number(i.qty || 0))) throw new Error("STOCK_ITEM_TAKEN");
+      return {
+        ...i,
+        delivered: take.map(r => ({
+          login: str(r.fields.login),
+          password: str(r.fields.password),
+          note: str(r.fields.note),
+        })),
+      };
+    });
+
+    for (const [pid, arr] of Object.entries(picked)) {
+      for (const r of arr) {
+        writes.push({
+          update: {
+            name: r.name,
+            fields: fsFields({ status: "sold", orderId, uid, soldAt: new Date() }),
+          },
+          updateMask: { fieldPaths: ["status", "orderId", "uid", "soldAt"] },
+        });
+      }
+    }
+
+    const after = money2(before - total);
+    writes.push({
+      update: { name: docPath("users", uid), fields: fsFields({ credit: after }) },
+      updateMask: { fieldPaths: ["credit"] },
+    });
+    writes.push({
+      update: {
+        name: docPath("orders", orderId),
+        fields: fsFields({
+          items: newItems,
+          status: "approved",
+          approvedAt: new Date(),
+          approvedBy: admin.email || "",
+        }),
+      },
+      updateMask: { fieldPaths: ["items", "status", "approvedAt", "approvedBy"] },
+    });
+    writes.push(auditWrite(admin, "order.approve",
+      { orderId, targetUid: uid, amount: total, before, after }));
+
+    await commit(token, writes, tx);
+    return { total, before, after };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ---------- แอดมิน: ไม่อนุมัติออเดอร์ ----------
+async function adminRejectOrder(token, admin, { orderId, note = "" }) {
+  if (!isId(orderId)) throw new Error("BAD_REQUEST");
+  const memo = String(note ?? "").slice(0, 300);
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/orders/${orderId}`], tx);
+    const o = got[orderId];
+    if (!o) throw new Error("NOT_FOUND");
+    if (str(o.status) !== "pending") throw new Error("ALREADY_HANDLED");
+
+    await commit(token, [
+      {
+        update: {
+          name: docPath("orders", orderId),
+          fields: fsFields({
+            status: "rejected",
+            note: memo,
+            approvedAt: new Date(),
+            approvedBy: admin.email || "",
+          }),
+        },
+        updateMask: { fieldPaths: ["status", "note", "approvedAt", "approvedBy"] },
+      },
+      auditWrite(admin, "order.reject", { orderId, targetUid: str(o.uid), note: memo }),
+    ], tx);
+    return { ok: true };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ---------- แอดมิน: ลบชื่อผู้ใช้/รหัสผ่านของลูกค้าออกจากออเดอร์ ----------
+// ใช้หลังเติมเกมให้เสร็จแล้ว — ไอดีเกม/UID ยังเก็บไว้เป็นหลักฐานว่าเติมให้ใคร
+async function adminClearOrderInfo(token, admin, { orderId }) {
+  if (!isId(orderId)) throw new Error("BAD_REQUEST");
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/orders/${orderId}`], tx);
+    const o = got[orderId];
+    if (!o) throw new Error("NOT_FOUND");
+
+    const items = (fsRead(o.items) || []).map(({ gameLogin, gamePassword, ...keep }) => keep);
+    await commit(token, [
+      {
+        update: {
+          name: docPath("orders", orderId),
+          fields: fsFields({ items, customerInfoClearedAt: new Date() }),
+        },
+        updateMask: { fieldPaths: ["items", "customerInfoClearedAt"] },
+      },
+      auditWrite(admin, "order.clearInfo", { orderId, targetUid: str(o.uid) }),
+    ], tx);
+    return { ok: true };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ---------- แอดมิน: ตั้ง/ถอดสิทธิ์แอดมิน ----------
+// ตั้ง: ใส่ claim ก่อน แล้วค่อยเขียนเอกสาร — ถ้าพลาดกลางทางจะยัง "ไม่ได้สิทธิ์"
+// ถอน: ลดเอกสารเป็น member ก่อน แล้วค่อยล้าง claim — ถ้าพลาดกลางทางก็ "หมดสิทธิ์" แล้ว
+// ทั้งสองทางเลือกให้พลาดแล้วปลอดภัยไว้ก่อนเสมอ (fail closed)
+async function adminSetRole(token, env, admin, { uid, makeAdmin }) {
+  if (!isId(uid)) throw new Error("BAD_REQUEST");
+  if (typeof makeAdmin !== "boolean") throw new Error("BAD_REQUEST");
+  // ถอดสิทธิ์ตัวเองไม่ได้ กันเผลอจนไม่เหลือแอดมินสักคน
+  if (uid === admin.uid) throw new Error("CANNOT_CHANGE_SELF");
+
+  const got = await batchGet(token, [`documents/users/${uid}`]);
+  const target = got[uid];
+  if (!target) throw new Error("MEMBER_NOT_FOUND");
+
+  if (makeAdmin) {
+    await setAdminClaim(env, uid, true);
+    await commit(token, [
+      {
+        update: { name: docPath("users", uid), fields: fsFields({ role: "admin" }) },
+        updateMask: { fieldPaths: ["role"] },
+      },
+      auditWrite(admin, "role.grant", { targetUid: uid, targetEmail: str(target.email) }),
+    ]);
+  } else {
+    await commit(token, [
+      {
+        update: { name: docPath("users", uid), fields: fsFields({ role: "member" }) },
+        updateMask: { fieldPaths: ["role"] },
+      },
+      auditWrite(admin, "role.revoke", { targetUid: uid, targetEmail: str(target.email) }),
+    ]);
+    await setAdminClaim(env, uid, false);
+  }
+  return { uid, admin: makeAdmin };
+}
+
+// ---------- ตั้งแอดมินคนแรก / กู้คืนสิทธิ์ ----------
+// ใช้รหัสลับ ADMIN_BOOTSTRAP ที่ตั้งไว้ใน Cloudflare (ไม่มีในโค้ด ไม่มีในเว็บ)
+// จำเป็นเพราะถ้าไม่มีแอดมินสักคน จะไม่มีใครตั้งแอดมินคนแรกได้เลย
+async function adminBootstrap(token, env, user, { secret }) {
+  const want = String(env.ADMIN_BOOTSTRAP || "");
+  if (want.length < 16) throw new Error("BOOTSTRAP_DISABLED");
+  if (!safeEqual(secret, want)) throw new Error("BOOTSTRAP_BAD_SECRET");
+
+  const got = await batchGet(token, [`documents/users/${user.uid}`]);
+  if (!got[user.uid]) throw new Error("NO_PROFILE");
+
+  await setAdminClaim(env, user.uid, true);
+  await commit(token, [
+    {
+      update: { name: docPath("users", user.uid), fields: fsFields({ role: "admin" }) },
+      updateMask: { fieldPaths: ["role"] },
+    },
+    auditWrite({ uid: user.uid, email: user.email }, "role.bootstrap",
+      { targetUid: user.uid, targetEmail: user.email || "" }),
+  ]);
+  return { uid: user.uid, admin: true };
+}
+
+// ---------- ตรวจสภาพเซิร์ฟเวอร์ (ใช้ตอนติดตั้ง/แก้ปัญหา) ----------
+// ต้องรู้รหัสลับเดียวกับ /admin/bootstrap ถึงจะเรียกได้
+// บอกว่า service account ตัวไหน และตอนนี้ตั้ง custom claim ได้หรือยัง
+async function adminDiagnose(env, user, { secret }) {
+  const want = String(env.ADMIN_BOOTSTRAP || "");
+  if (want.length < 16) throw new Error("BOOTSTRAP_DISABLED");
+  if (!safeEqual(secret, want)) throw new Error("BOOTSTRAP_BAD_SECRET");
+
+  let serviceAccount = "";
+  try { serviceAccount = JSON.parse(env.SA_KEY).client_email || ""; } catch { serviceAccount = "อ่านค่า SA_KEY ไม่ได้"; }
+
+  // ทดสอบสิทธิ์ตั้ง claim ด้วยการเขียนค่าเดิมทับตัวเอง (ไม่เปลี่ยนอะไร)
+  let claimsOk = false, detail = "";
+  try {
+    const authToken = await getAccessToken(env.SA_KEY, SCOPE_AUTH);
+    const res = await fetchWithTimeout(`${IDTOOLKIT}/projects/${PROJECT_ID}/accounts:update`, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + authToken, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        localId: user.uid,
+        customAttributes: JSON.stringify(user.claims || {}),
+      }),
+    });
+    const d = await res.json().catch(() => ({}));
+    claimsOk = res.ok && !d.error;
+    if (!claimsOk) detail = (d?.error?.message || ("HTTP " + res.status)).slice(0, 200);
+  } catch (e) { detail = String(e.message).slice(0, 200); }
+
+  return { projectId: PROJECT_ID, serviceAccount, claimsOk, detail };
+}
+
+// ---------- ตัวช่วยตรวจสถานะของตัวเอง ----------
+// หน้าเว็บเรียกเพื่อดูว่าตกลงตอนนี้เป็นแอดมินจริงไหม (claim + เอกสาร ตรงกันหรือยัง)
+async function adminWhoAmI(token, user) {
+  const got = await batchGet(token, [`documents/users/${user.uid}`]).catch(() => ({}));
+  const me = got[user.uid];
+  const claim = user?.claims?.admin === true;
+  const role = me ? str(me.role) : "";
+  return { uid: user.uid, claim, role, admin: claim && role === "admin" };
+}
+
+// เส้นทางแอดมินทั้งหมด
+async function adminRoute(path, body, token, env, user) {
+  // /admin/bootstrap ไม่ต้องเป็นแอดมินก่อน (ใช้ตอนยังไม่มีแอดมินเลย) แต่ต้องมีรหัสลับ
+  if (path === "/admin/bootstrap") return adminBootstrap(token, env, user, body);
+  if (path === "/admin/whoami") return adminWhoAmI(token, user);
+  if (path === "/admin/diagnose") return adminDiagnose(env, user, body);
+
+  const admin = await requireAdmin(token, user);
+  const me = { uid: user.uid, email: user.email || str(admin.email) };
+
+  switch (path) {
+    case "/admin/credit":            return adminAdjustCredit(token, me, body);
+    case "/admin/topup/approve":     return adminApproveTopup(token, me, body);
+    case "/admin/topup/reject":      return adminRejectTopup(token, me, body);
+    case "/admin/order/approve":     return adminApproveOrder(token, me, body);
+    case "/admin/order/reject":      return adminRejectOrder(token, me, body);
+    case "/admin/order/clear-info":  return adminClearOrderInfo(token, me, body);
+    case "/admin/role":              return adminSetRole(token, env, me, body);
+    default: throw new Error("NOT_FOUND");
+  }
+}
+
 // ---------- กดรับซองอั่งเปา ----------
 async function redeemAngpao(code, phone) {
   const res = await fetchWithTimeout(`https://gift.truemoney.com/campaign/vouchers/${code}/redeem`, {
@@ -315,7 +953,11 @@ async function redeemAngpao(code, phone) {
 }
 
 // เปิดไว้ให้สคริปต์ทดสอบเรียกใช้ (Cloudflare ใช้แค่ default export)
-export { parseAngpaoCode, getAccessToken, commit, docPath, fsFields, fsValue, redeemAngpao, createOrder, batchGet };
+export {
+  parseAngpaoCode, getAccessToken, commit, docPath, fsFields, fsValue, fsRead,
+  redeemAngpao, createOrder, batchGet, money2, safeEqual, requireAdmin,
+  adminAdjustCredit, adminApproveTopup, adminApproveOrder, adminSetRole,
+};
 
 // ---------- main ----------
 export default {
@@ -328,6 +970,7 @@ export default {
 
     let body;
     try { body = await request.json(); } catch { return json({ ok: false, error: "BAD_JSON" }, 400, origin); }
+    if (!body || typeof body !== "object") return json({ ok: false, error: "BAD_JSON" }, 400, origin);
 
     // ผู้เรียกต้องเป็นสมาชิกที่ล็อกอินจริง (ใช้ร่วมกันทุกเส้นทาง)
     let user;
@@ -341,12 +984,32 @@ export default {
       return json({ ok: false, error: "SERVER_NOT_READY" }, 503, origin);
     }
 
-    if (await rateLimited(token, user.uid)) {
+    // โควตาต่อคน — แอดมินกดอนุมัติติดกันหลายรายการได้ ลูกค้าจำกัดแน่นกว่า
+    const cap = user.claims?.admin === true ? RATE_MAX_ADMIN : RATE_MAX;
+    if (await rateLimited(token, user.uid, cap)) {
       return json({ ok: false, error: "RATE_LIMITED" }, 429, origin);
     }
 
+    const path = new URL(request.url).pathname.replace(/\/+$/, "") || "/";
+
+    // ===== เส้นทางแอดมิน =====
+    if (path.startsWith("/admin/")) {
+      try {
+        const r = await adminRoute(path, body, token, env, user);
+        return json({ ok: true, ...r }, 200, origin);
+      } catch (e) {
+        // Firestore ปฏิเสธเพราะมีคนแก้เอกสารเดียวกันพร้อมกัน = ให้กดใหม่ ไม่ใช่ข้อผิดพลาดของระบบ
+        const busy = e.fsCode === "ABORTED" || /ABORTED|contention|too much contention/i.test(e.message || "");
+        const code = ADMIN_ERRORS.has(e.message) ? e.message : (busy ? "BUSY" : "ADMIN_FAILED");
+        if (code === "ADMIN_FAILED") console.error("adminRoute " + path, e);
+        if (code === "CLAIMS_PERMISSION") console.error("ตั้ง custom claim ไม่ได้:", e.detail || e.message);
+        const status = code === "ADMIN_ONLY" ? 403 : code === "ADMIN_FAILED" ? 500 : 400;
+        return json({ ok: false, error: code }, status, origin);
+      }
+    }
+
     // ===== เส้นทางสั่งซื้อ =====
-    if (new URL(request.url).pathname.replace(/\/$/, "") === "/order") {
+    if (path === "/order") {
       try {
         const r = await createOrder(token, user, body.items);
         return json({ ok: true, ...r }, 200, origin);

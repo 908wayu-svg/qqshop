@@ -2,7 +2,8 @@
 // jsdom ไม่คำนวณ layout จริง จึงตรวจ 2 อย่างที่ตรวจได้แน่นอน:
 //   1. ทุกช่องในตารางต้องมี data-label (มือถือเอาไปโชว์เป็นชื่อคอลัมน์หน้าค่า)
 //   2. กฎ CSS ในบล็อกจอมือถือยังอยู่ครบ (เคยแก้ทีนึงแล้วหลุดหายไปเงียบๆ)
-import { buildSandbox, makeDom, loadI18n, tick } from "./harness.mjs";
+import { buildSandbox, makeDom, loadI18n, tick, makeAdmin } from "./harness.mjs";
+import { installAdminServer } from "./fake/admin-server.mjs";
 import * as store from "./fake/store.mjs";
 import * as fs2 from "./fake/firestore.mjs";
 import fs from "fs";
@@ -23,6 +24,8 @@ const { QQ } = await import("./sandbox/auth.mjs");
 globalThis.QQ = QQ;
 
 await QQ.registerWithEmail("908wayu@gmail.com", "adminpass", "เจ้าของร้าน", "");
+installAdminServer();
+await makeAdmin(QQ, store);
 await tick(6);
 
 store.put("users/c1", { uid: "c1", email: "c1@x.com", name: "ลูกค้า หนึ่ง", role: "member", credit: 500, createdAt: TS(300), provider: "google" });

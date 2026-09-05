@@ -1,6 +1,7 @@
 // ===== ทดสอบช่องกรอกไอดีเกมของลูกค้า (ของเติมเกม) =====
 // แอดมินติ๊กที่สินค้าว่าต้องขออะไร → ลูกค้าต้องกรอกให้ครบก่อนถึงจะกดสั่งซื้อได้
-import { buildSandbox, makeDom, loadI18n, runClassic, tick } from "./harness.mjs";
+import { buildSandbox, makeDom, loadI18n, runClassic, tick, makeAdmin } from "./harness.mjs";
+import { installAdminServer } from "./fake/admin-server.mjs";
 import * as store from "./fake/store.mjs";
 import * as fs2 from "./fake/firestore.mjs";
 
@@ -111,7 +112,8 @@ ok("ช่องรหัสผ่านว่างเปล่าอีกค�
 
 section("แอดมินลบรหัสผ่านลูกค้าออกจากออเดอร์ได้");
 const oid = [...store.state.docs.keys()].find(k => k.startsWith("orders/")).split("/")[1];
-store.state.docs.set("users/" + QQ.user.uid, { ...store.raw("users/" + QQ.user.uid), role: "admin" });
+installAdminServer();
+await makeAdmin(QQ, store);
 fs2.notifyAll(); await tick(4);
 await QQ.clearOrderCustomerInfo(oid);
 const after = store.raw("orders/" + oid).items;

@@ -1,6 +1,7 @@
 // ===== ทดสอบตอนโหลดข้อมูลไม่สำเร็จ (เน็ตหลุด / ฐานข้อมูลล่ม) =====
 // ทุกหน้าต้องบอกผู้ใช้ ไม่ใช่โชว์หน้าว่างเปล่าให้เดาเอง
-import { buildSandbox, makeDom, loadI18n, tick } from "./harness.mjs";
+import { buildSandbox, makeDom, loadI18n, tick, makeAdmin } from "./harness.mjs";
+import { installAdminServer } from "./fake/admin-server.mjs";
 import * as store from "./fake/store.mjs";
 import * as fs2 from "./fake/firestore.mjs";
 
@@ -18,6 +19,8 @@ const ok = (n, c, x = "") => { c ? (pass++, console.log("  ok  " + n)) : (fail++
 const $ = id => document.getElementById(id);
 
 await QQ.registerWithEmail(MODE === "admin" ? "908wayu@gmail.com" : "offline@test.com", "secret123", "ผู้ใช้", "");
+installAdminServer();
+if (MODE === "admin") await makeAdmin(QQ, store);
 await tick(6);
 
 // ทำให้การอ่านฐานข้อมูลทุกอย่างล้มเหลว (จำลองเน็ตหลุด)

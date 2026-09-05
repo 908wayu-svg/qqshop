@@ -8,17 +8,23 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection,
-  serverTimestamp, query, orderBy, where, getDocs, limit, onSnapshot, runTransaction, writeBatch, deleteField,
+  serverTimestamp, query, orderBy, where, getDocs, limit, onSnapshot, writeBatch, deleteField,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./firebase-config.js";
 import { SHOP, CATEGORIES } from "./shop-config.js";
 
-// เส้นทางสั่งซื้อฝั่งเซิร์ฟเวอร์ (Cloudflare Worker ตัวเดียวกับบอทรับซอง)
-const ORDER_API = (SHOP.channels.angpao?.botUrl || "").replace(/\/$/, "") + "/order";
+// เส้นทางฝั่งเซิร์ฟเวอร์ (Cloudflare Worker ตัวเดียวกับบอทรับซอง)
+const API_BASE = (SHOP.channels.angpao?.botUrl || "").replace(/\/$/, "");
+const ORDER_API = API_BASE + "/order";
 
-// อีเมลเจ้าของร้าน — เข้าหลังบ้านได้เสมอ
-// *** ถ้าแก้ตรงนี้ ต้องแก้ ownerEmails() ในไฟล์ firestore.rules ให้ตรงกันด้วย ***
-const ADMIN_EMAILS = ["908wayu@gmail.com"];
+// ===== สิทธิ์แอดมิน =====
+// ไม่มีรายชื่ออีเมลในโค้ดอีกแล้ว — ใครเป็นแอดมินดูจาก custom claim `admin: true`
+// ที่ติดมากับโทเคนของ Firebase Auth ซึ่งตั้งได้จากเซิร์ฟเวอร์เท่านั้น
+// (ตั้ง/ถอดผ่าน /admin/role · ครั้งแรกตั้งด้วย /admin/bootstrap + รหัสลับ)
+//
+// เดิมใครยึดอีเมลในลิสต์ได้ = เป็นแอดมินทันที และลิสต์ต้องแก้ให้ตรงกัน 2 ที่
+// (auth.js + firestore.rules) ลืมที่ใดที่หนึ่งคือช่องโหว่
+let currentClaims = {};
 
 let app, auth, db;
 if (isConfigured) {
@@ -70,6 +76,19 @@ async function upsertUserDoc(user, extra = {}) {
   return data;
 }
 
+// อ่านสิทธิ์ที่ติดมากับโทเคน
+// ถ้าเอกสารสมาชิกบอกว่าเป็นแอดมินแล้วแต่โทเคนยังไม่รู้ (เพิ่งได้รับสิทธิ์
+// โทเคนใบเดิมมีอายุถึง 1 ชั่วโมง) ให้ขอโทเคนใบใหม่ทันทีหนึ่งครั้ง
+async function readClaims(user, profile) {
+  try {
+    let r = await user.getIdTokenResult();
+    if (r.claims?.admin !== true && profile?.role === "admin") {
+      r = await user.getIdTokenResult(true);
+    }
+    return r.claims || {};
+  } catch { return {}; }
+}
+
 if (isConfigured) {
   onAuthStateChanged(auth, async (user) => {
     currentUser = user;
@@ -85,8 +104,10 @@ if (isConfigured) {
         const s = await getDoc(doc(db, "users", user.uid));
         currentProfile = s.data() || null;
       } catch { /* onSnapshot จะเติมให้เอง */ }
+      currentClaims = await readClaims(user, currentProfile);
     } else {
       currentProfile = null;
+      currentClaims = {};
     }
 
     authReady = true;
@@ -185,16 +206,53 @@ async function myQuery(col, max) {
   }
 }
 
+// ---------- เรียกเส้นทางแอดมินที่เซิร์ฟเวอร์ ----------
+// ทุกคำสั่งที่แตะเครดิตหรือสิทธิ์ต้องผ่านทางนี้ เพราะกฎของ Firestore ปิดไม่ให้
+// เบราว์เซอร์เขียน credit/role ของใครเลย (รวมถึงแอดมินเอง)
+// เซิร์ฟเวอร์ตรวจสิทธิ์ซ้ำอีกรอบจากบัญชีจริง แล้วบันทึกลง adminLogs ทุกครั้ง
+async function callAdmin(path, payload = {}) {
+  if (!API_BASE) throw new Error(t("a_SERVER_NOT_SET"));
+  const idToken = await auth?.currentUser?.getIdToken();
+  if (!idToken) throw new Error(t("a_UNAUTHORIZED"));
+
+  const res = await fetchWithTimeout(API_BASE + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken, ...payload }),
+  }).catch(() => null);
+
+  const data = res
+    ? await res.json().catch(() => ({ ok: false, error: "BOT_UNREACHABLE" }))
+    : { ok: false, error: "BOT_UNREACHABLE" };
+
+  if (!data.ok) {
+    const code = String(data.error || "ADMIN_FAILED");
+    throw Object.assign(new Error(t("a_" + code)), { adminCode: code });
+  }
+  return data;
+}
+
 export const QQ = {
   isConfigured,
   CATEGORIES,   // หมวดหมู่สินค้า — app.js (สคริปต์ธรรมดา) อ่านผ่าน window.QQ.CATEGORIES
   get user() { return currentUser; },
   get profile() { return currentProfile; },
   get credit() { return Number(currentProfile?.credit || 0); },
-  get isAdmin() {
-    return currentProfile?.role === "admin"
-      || ADMIN_EMAILS.includes((currentUser?.email || "").toLowerCase());
+  // เป็นแอดมินก็ต่อเมื่อโทเคนมี claim admin:true เท่านั้น
+  // เอกสาร users/{uid}.role = 'admin' อย่างเดียวไม่พอ และแก้เองก็ไม่ได้ (กฎปิดไว้)
+  get isAdmin() { return currentClaims?.admin === true; },
+  get claims() { return { ...currentClaims }; },
+
+  // ขอโทเคนใบใหม่แล้วอ่านสิทธิ์ใหม่ (ใช้ตอนเพิ่งถูกตั้ง/ถอดสิทธิ์)
+  async refreshClaims() {
+    if (!auth?.currentUser) return {};
+    try {
+      const r = await auth.currentUser.getIdTokenResult(true);
+      currentClaims = r.claims || {};
+    } catch { /* ขอใหม่ไม่ได้ก็ใช้ของเดิมไปก่อน */ }
+    return { ...currentClaims };
   },
+
   whenAuthReady, friendlyError, resizeImage,
   getIdToken: () => auth.currentUser?.getIdToken(),
 
@@ -356,125 +414,13 @@ export const QQ = {
   },
 
   // อนุมัติออเดอร์ = หักเครดิต + ตัดสต๊อก + ส่งมอบไอดี/รหัสผ่าน + เปลี่ยนสถานะ
-  // ทำพร้อมกันทั้งหมดแบบ transaction ถ้าพลาดขั้นใดจะไม่เกิดอะไรขึ้นเลย
-  async approveOrder(orderId) {
-    const oRef = doc(db, "orders", orderId);
-    const pre = await getDoc(oRef);
-    if (!pre.exists()) throw new Error(t("not_found"));
-    if (pre.data().status !== "pending") throw new Error(t("already_handled"));
+  // ทำที่เซิร์ฟเวอร์ทั้งหมดใน transaction เดียว (เบราว์เซอร์แตะเครดิตเองไม่ได้แล้ว)
+  approveOrder: orderId => callAdmin("/admin/order/approve", { orderId }),
 
-    const items = pre.data().items || [];
-
-    // เลือกชิ้นที่จะส่งมอบไว้ก่อน เพราะ transaction ฝั่งเบราว์เซอร์ "ค้นหา" เอกสารไม่ได้
-    // รวมจำนวนของสินค้ารหัสเดียวกันก่อน ไม่งั้นจองซ้ำแล้วได้ของไม่ครบ
-    const wanted = new Map();
-    items.forEach(i => wanted.set(String(i.id), (wanted.get(String(i.id)) || 0) + Number(i.qty || 0)));
-
-    const claims = {};
-    for (const [pid, qty] of wanted) {
-      const pSnap = await getDoc(doc(db, "products", pid));
-      if (!pSnap.exists() || !pSnap.data().digital) continue;
-
-      const avail = await getDocs(query(
-        collection(db, "products", pid, "stockItems"),
-        where("status", "==", "available"), limit(qty)));
-      if (avail.size < qty) {
-        const nm = items.find(i => String(i.id) === pid)?.name || pid;
-        throw new Error(`${t("not_enough_stock_items")}: ${nm}`);
-      }
-      claims[pid] = avail.docs.map(d => d.ref);
-    }
-
-    return runTransaction(db, async (tx) => {
-      // ---- อ่านให้ครบก่อน (Firestore บังคับ) ----
-      const oSnap = await tx.get(oRef);
-      if (!oSnap.exists()) throw new Error(t("not_found"));
-      const o = oSnap.data();
-      if (o.status !== "pending") throw new Error(t("already_handled"));
-
-      const uRef = doc(db, "users", o.uid);
-      const uSnap = await tx.get(uRef);
-      // ไม่มีเอกสารสมาชิก = ต้องบอกให้ตรงเหตุ ไม่ใช่ขึ้นว่า "เครดิตไม่พอ"
-      if (!uSnap.exists()) throw new Error(t("member_not_found"));
-      const credit = Number(uSnap.data().credit || 0);
-      if (credit < o.total) throw new Error(t("insufficient_customer_credit"));
-
-      const pSnaps = await Promise.all(items.map(i => tx.get(doc(db, "products", String(i.id)))));
-
-      const claimSnaps = {};
-      for (const [pid, refs] of Object.entries(claims)) {
-        claimSnaps[pid] = await Promise.all(refs.map(r => tx.get(r)));
-      }
-
-      // ---- ตรวจแล้วค่อยเขียน ----
-      // ตัดสต๊อกทีเดียวต่อสินค้า 1 ชิ้น (รหัสเดียวกันหลายแถวต้องรวมกันก่อน)
-      const stockWrites = [];
-      const stockLeft = new Map();
-      items.forEach((i, idx) => {
-        const pid = String(i.id);
-        const snap = pSnaps[idx];
-        if (!snap.exists()) return;
-        const stock = snap.data().stock;
-        if (stock === null || stock === undefined) return;
-        const left = (stockLeft.has(pid) ? stockLeft.get(pid) : Number(stock)) - Number(i.qty);
-        if (left < 0) throw new Error(`${t("out_of_stock")}: ${i.name}`);
-        stockLeft.set(pid, left);
-        stockWrites.push([snap.ref, left]);
-      });
-
-      const queue = Object.fromEntries(
-        Object.entries(claimSnaps).map(([pid, arr]) => [pid, [...arr]]));
-
-      const newItems = items.map((i) => {
-        const pid = String(i.id);
-        // สินค้าดิจิทัล: คัดลอกไอดี/รหัสผ่านเข้าไปในออเดอร์ แล้วตัดชิ้นนั้นออกจากคลัง
-        if (!queue[pid]) return i;
-        const picked = queue[pid].splice(0, Number(i.qty));
-        if (picked.length < Number(i.qty)) throw new Error(t("stock_item_taken"));
-        const delivered = picked.map(s => {
-          if (!s.exists() || s.data().status !== "available") {
-            throw new Error(t("stock_item_taken"));   // มีคนคว้าไปก่อน ให้กดใหม่
-          }
-          // ห้ามส่งของว่างเปล่าให้ลูกค้าเด็ดขาด ให้แอดมินไปกรอกข้อมูลก่อน
-          if (!String(s.data().login || "").trim() && !String(s.data().password || "").trim()) {
-            throw new Error(`${t("empty_stock_item")}: ${i.name}`);
-          }
-          return {
-            login: s.data().login || "",
-            password: s.data().password || "",
-            note: s.data().note || "",
-          };
-        });
-        return { ...i, delivered };
-      });
-
-      stockWrites.forEach(([ref, left]) => tx.update(ref, { stock: left }));
-      Object.entries(claims).forEach(([, refs]) => refs.forEach(r =>
-        tx.update(r, { status: "sold", orderId, uid: o.uid, soldAt: serverTimestamp() })));
-
-      tx.update(uRef, { credit: money2(credit - o.total) });
-      tx.update(oRef, {
-        items: newItems,
-        status: "approved",
-        approvedAt: serverTimestamp(),
-        approvedBy: currentUser.email || "",
-      });
-    });
-  },
   // ต้องเช็คสถานะก่อนเสมอ — ถ้าเผลอกด "ไม่อนุมัติ" ทับออเดอร์ที่อนุมัติไปแล้ว
   // เครดิตที่หักไปกับของที่ส่งมอบไปแล้วจะไม่ถูกคืน แต่ประวัติกลับขึ้นว่าไม่อนุมัติ
-  rejectOrder(orderId, note = "") {
-    return runTransaction(db, async (tx) => {
-      const ref = doc(db, "orders", orderId);
-      const snap = await tx.get(ref);
-      if (!snap.exists()) throw new Error(t("not_found"));
-      if (snap.data().status !== "pending") throw new Error(t("already_handled"));
-      tx.update(ref, {
-        status: "rejected", note,
-        approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
-      });
-    });
-  },
+  // (เซิร์ฟเวอร์เช็คให้ใน transaction)
+  rejectOrder: (orderId, note = "") => callAdmin("/admin/order/reject", { orderId, note }),
 
   // ---------- เติมเงิน ----------
   async createTopup(data) {
@@ -510,48 +456,14 @@ export const QQ = {
     return sortByCreatedDesc(rows(await myQuery("topups", max)));
   },
 
-  // อนุมัติเติมเงิน = เพิ่มเครดิตให้ลูกค้า + เปลี่ยนสถานะ
+  // อนุมัติเติมเงิน = เพิ่มเครดิตให้ลูกค้า + เปลี่ยนสถานะ (ทำที่เซิร์ฟเวอร์)
   // amountOverride ใช้กับรายการที่บอทบันทึกยอดไม่ทัน (amount = 0)
   // ถ้าไม่บังคับให้ใส่ยอด แอดมินจะกดอนุมัติแล้วเครดิตเข้า 0 บาทแบบเงียบๆ
-  async approveTopup(topupId, amountOverride = null) {
-    return runTransaction(db, async (tx) => {
-      const tRef = doc(db, "topups", topupId);
-      const tSnap = await tx.get(tRef);
-      if (!tSnap.exists()) throw new Error(t("not_found"));
-      const data = tSnap.data();
-      if (!OPEN_STATES.includes(data.status)) throw new Error(t("already_handled"));
-
-      const amount = money2(amountOverride ?? data.amount);
-      if (!Number.isFinite(amount) || amount <= 0) throw new Error(t("amount_missing"));
-
-      const uRef = doc(db, "users", data.uid);
-      const uSnap = await tx.get(uRef);
-      if (!uSnap.exists()) throw new Error(t("member_not_found"));
-      const credit = Number(uSnap.data().credit || 0);
-
-      tx.update(uRef, { credit: money2(credit + amount) });
-      tx.update(tRef, {
-        amount,
-        status: "approved",
-        approvedAt: serverTimestamp(),
-        approvedBy: currentUser.email || "",
-      });
-    });
-  },
+  approveTopup: (topupId, amountOverride = null) =>
+    callAdmin("/admin/topup/approve", { topupId, amount: amountOverride }),
 
   // เช็คสถานะก่อนเช่นกัน กัน "ไม่อนุมัติ" ทับรายการที่เติมเครดิตไปแล้ว
-  rejectTopup(id, note = "") {
-    return runTransaction(db, async (tx) => {
-      const ref = doc(db, "topups", id);
-      const snap = await tx.get(ref);
-      if (!snap.exists()) throw new Error(t("not_found"));
-      if (!OPEN_STATES.includes(snap.data().status)) throw new Error(t("already_handled"));
-      tx.update(ref, {
-        status: "rejected", note,
-        approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
-      });
-    });
-  },
+  rejectTopup: (topupId, note = "") => callAdmin("/admin/topup/reject", { topupId, note }),
 
   // ---------- สมาชิก (แอดมิน) ----------
   // ห้ามใส่ orderBy("createdAt") ที่นี่ — สมาชิกที่สมัครไว้ก่อนจะมีฟิลด์นี้
@@ -561,28 +473,11 @@ export const QQ = {
     return sortByCreatedDesc(rows(await getDocs(query(collection(db, "users"), limit(max)))));
   },
   // แอดมินปรับเครดิตให้ใครก็ได้ ใส่ค่าติดลบ = หักคืน (บันทึกไว้ในประวัติด้วย)
-  // ใช้ transaction ไม่ใช่ batch — ต้องอ่านเครดิตปัจจุบันมาเช็คว่าหักแล้วไม่ติดลบ
-  // ถ้าอ่านนอก transaction แล้วสองหน้าจอกดหักพร้อมกัน เครดิตจะติดลบได้
+  // ทำที่เซิร์ฟเวอร์ใน transaction: อ่านยอดปัจจุบัน -> เช็คว่าหักแล้วไม่ติดลบ -> เขียน
+  // เบราว์เซอร์เขียนฟิลด์ credit เองไม่ได้แล้ว ต่อให้เป็นแอดมิน
   async adjustCredit(uid, amount, note = "") {
-    const amt = money2(amount);
-    if (!Number.isFinite(amt) || amt === 0) throw new Error(t("amount_invalid"));
-    const logRef = doc(collection(db, "topups"));
-
-    return runTransaction(db, async (tx) => {
-      const uRef = doc(db, "users", uid);
-      const u = await tx.get(uRef);
-      if (!u.exists()) throw new Error(t("member_not_found"));
-      const before = Number(u.data().credit || 0);
-      if (before + amt < 0) throw new Error(t("would_go_negative"));
-
-      tx.update(uRef, { credit: money2(before + amt) });
-      tx.set(logRef, {
-        uid, name: u.data().name || "", email: u.data().email || "",
-        amount: amt, method: "admin", note,
-        status: "approved", createdAt: serverTimestamp(),
-        approvedAt: serverTimestamp(), approvedBy: currentUser.email || "",
-      });
-    }).then(() => logRef.id);
+    const r = await callAdmin("/admin/credit", { uid, amount, note });
+    return r.logId;
   },
 
   // ---------- ตั้งค่าร้าน ----------
@@ -609,15 +504,22 @@ export const QQ = {
   },
   // ลบชื่อผู้ใช้/รหัสผ่านของลูกค้าออกจากออเดอร์ (ใช้ตอนแอดมินเติมเกมเสร็จแล้ว)
   // ไอดีเกม/UID ยังเก็บไว้เป็นหลักฐานว่าเติมให้ใครไป
-  async clearOrderCustomerInfo(orderId) {
-    const ref = doc(db, "orders", orderId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) throw new Error("ไม่พบออเดอร์");
-    const items = (snap.data().items || []).map(({ gameLogin, gamePassword, ...keep }) => keep);
-    await updateDoc(ref, { items, customerInfoClearedAt: serverTimestamp() });
+  clearOrderCustomerInfo: orderId => callAdmin("/admin/order/clear-info", { orderId }),
+
+  // ตั้ง/ถอดสิทธิ์แอดมิน — เซิร์ฟเวอร์ตั้ง custom claim ในบัญชี Firebase Auth
+  // แล้วเขียน role ในเอกสารให้ตรงกัน ทั้งสองอย่างเบราว์เซอร์แตะเองไม่ได้
+  setRole: (uid, role) => callAdmin("/admin/role", { uid, makeAdmin: role === "admin" }),
+
+  // ดูว่าตอนนี้เซิร์ฟเวอร์มองว่าเราเป็นแอดมินจริงไหม (ใช้ตรวจตอนสิทธิ์ไม่ตรงกัน)
+  adminWhoAmI: () => callAdmin("/admin/whoami"),
+
+  // ตั้งแอดมินคนแรก / กู้คืนสิทธิ์ ด้วยรหัสลับที่ตั้งไว้ใน Cloudflare
+  async bootstrapAdmin(secret) {
+    const r = await callAdmin("/admin/bootstrap", { secret });
+    await QQ.refreshClaims();
+    return r;
   },
 
-  setRole: (uid, role) => updateDoc(doc(db, "users", uid), { role }),
   updateMyProfile: (data) => updateDoc(doc(db, "users", currentUser.uid), data),
 };
 

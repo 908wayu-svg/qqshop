@@ -1,5 +1,6 @@
 // ===== ทดสอบฝั่งแอดมิน: อนุมัติ/ไม่อนุมัติ ออเดอร์ เติมเงิน ปรับเครดิต ส่งมอบไอดี =====
-import { buildSandbox, makeDom, loadI18n, tick } from "./harness.mjs";
+import { buildSandbox, makeDom, loadI18n, tick, makeAdmin } from "./harness.mjs";
+import { installAdminServer, BOOTSTRAP_SECRET } from "./fake/admin-server.mjs";
 import * as store from "./fake/store.mjs";
 import * as fs2 from "./fake/firestore.mjs";
 
@@ -13,7 +14,15 @@ const throws = async (fn, n) => { try { await fn(); ok(n + " (ต้อง error
 
 const OWNER = "908wayu@gmail.com";
 await QQ.registerWithEmail(OWNER, "adminpass", "เจ้าของร้าน", "0918200409"); await tick(5);
-ok("อีเมลเจ้าของร้าน = แอดมินอัตโนมัติ", QQ.isAdmin === true);
+installAdminServer();
+
+section("สิทธิ์แอดมินมาจาก custom claim ไม่ใช่รายชื่ออีเมล");
+ok("อีเมลเจ้าของร้านเฉยๆ ยังไม่ใช่แอดมิน", QQ.isAdmin === false);
+await throws(() => QQ.bootstrapAdmin("secret-ที่ไม่ถูกต้อง-xxxxxxxx"), "รหัสลับผิด = ตั้งแอดมินไม่ได้");
+ok("รหัสผิดแล้วยังไม่ได้สิทธิ์", QQ.isAdmin === false);
+await QQ.bootstrapAdmin(BOOTSTRAP_SECRET);
+ok("ตั้งแอดมินคนแรกด้วยรหัสลับได้", QQ.isAdmin === true);
+ok("เอกสารสมาชิกถูกตั้งเป็น admin ด้วย", store.raw("users/" + QQ.user.uid).role === "admin");
 const ADMIN_UID = QQ.user.uid;
 
 // ลูกค้าสมมติ

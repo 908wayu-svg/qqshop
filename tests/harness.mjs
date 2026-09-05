@@ -71,3 +71,15 @@ export function runClassic(file) {
 }
 
 export const tick = (n = 3) => new Promise(r => { let i = 0; const step = () => (++i >= n ? r() : setTimeout(step, 0)); step(); });
+
+// ===== ทำให้คนที่ล็อกอินอยู่กลายเป็นแอดมิน (ใช้ในเทสต์) =====
+// ของจริงต้องผ่านเซิร์ฟเวอร์: /admin/bootstrap (ครั้งแรก) หรือ /admin/role
+// สิทธิ์ต้องครบทั้งสองอย่างเสมอ — custom claim ในโทเคน + role ในเอกสารสมาชิก
+export async function makeAdmin(QQ, store) {
+  const uid = QQ.user.uid;
+  const cur = store.raw("users/" + uid) || {};
+  store.state.docs.set("users/" + uid, { ...cur, role: "admin" });
+  store.setClaims(uid, { admin: true });
+  await QQ.refreshClaims();
+  return uid;
+}

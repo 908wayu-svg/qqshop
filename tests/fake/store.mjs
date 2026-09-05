@@ -1,5 +1,5 @@
 // ===== Firestore จำลอง (ในหน่วยความจำ) + กฎความปลอดภัยที่ถอดมาจาก firestore.rules =====
-export const OWNER_EMAILS = ["908wayu@gmail.com"];
+// *** แก้ firestore.rules เมื่อไหร่ ต้องแก้ไฟล์นี้ให้ตรงกันเสมอ ***
 
 export class Timestamp {
   constructor(ms) { this.ms = ms; }
@@ -11,14 +11,19 @@ export const SERVER_TS = Symbol("serverTimestamp");
 export const state = {
   docs: new Map(),          // path -> plain object
   user: null,               // { uid, email }
+  claims: new Map(),        // uid -> custom claims (เช่น { admin: true })
   clock: Date.now(),
   reads: 0, writes: 0, denied: [], failReads: false,
 };
 
 export const reset = () => {
-  state.docs = new Map(); state.user = null;
+  state.docs = new Map(); state.user = null; state.claims = new Map();
   state.reads = 0; state.writes = 0; state.denied = []; state.failReads = false;
 };
+
+// ตั้ง custom claim ให้บัญชีหนึ่ง (แทนการเรียก /admin/role ที่เซิร์ฟเวอร์จริง)
+export const setClaims = (uid, claims) => state.claims.set(uid, { ...claims });
+export const claimsOf = uid => state.claims.get(uid) || {};
 
 const clone = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v, (k, val) =>
   val instanceof Timestamp ? { __ts: val.ms } : val), (k, val) =>
@@ -28,16 +33,19 @@ export const put = (path, data) => state.docs.set(path, clone(data));
 export const raw = path => state.docs.get(path);
 
 const parts = p => p.split("/");
-const colOf = p => parts(p)[0];
 
 // ---------- กฎ (ถอดจาก firestore.rules ทีละบรรทัด) ----------
 const signedIn = () => !!state.user;
+
+// แอดมินต้องผ่าน 2 ชั้น: custom claim ในโทเคน + role ในเอกสาร
+// (เอกสารเขียนได้จากเซิร์ฟเวอร์เท่านั้น ถอนสิทธิ์แล้วมีผลทันทีไม่ต้องรอโทเคนหมดอายุ)
 const isAdmin = () => {
   if (!signedIn()) return false;
-  if (OWNER_EMAILS.includes((state.user.email || "").toLowerCase())) return true;
+  if (claimsOf(state.user.uid).admin !== true) return false;
   const u = state.docs.get("users/" + state.user.uid);
   return !!u && u.role === "admin";
 };
+
 const isOwner = uid => signedIn() && state.user.uid === uid;
 const affected = (before, after) => {
   const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
@@ -46,17 +54,29 @@ const affected = (before, after) => {
 const isImg = s => typeof s === "string"
   && /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(s) && s.length < 1000000;
 
+const USER_CREATE_KEYS = ["uid", "email", "name", "phone", "provider", "role", "credit", "createdAt"];
+
 export function can(op, path, after, before) {
   const seg = parts(path), col = seg[0];
 
   if (col === "users" && seg.length === 2) {
     const uid = seg[1];
     if (op === "read") return isAdmin() || isOwner(uid);
-    if (op === "create") return isOwner(uid) && after.role === "member" && after.credit === 0;
+    if (op === "create") {
+      return isOwner(uid)
+        && after.role === "member"
+        && after.credit === 0
+        && String(after.email ?? "") === String(state.user.email ?? "")
+        && Object.keys(after).every(k => USER_CREATE_KEYS.includes(k));
+    }
     if (op === "update") {
-      if (isAdmin()) return true;
-      if (!isOwner(uid)) return false;
-      return affected(before, after).every(k => ["name", "phone"].includes(k));
+      // ห้ามทุกคนแก้ credit / role ผ่านเบราว์เซอร์ รวมถึงแอดมินเอง
+      // สองอย่างนี้เปลี่ยนได้ทางเดียวคือผ่าน Worker (service account ไม่อยู่ใต้กฎ)
+      if (!isOwner(uid) && !isAdmin()) return false;
+      if (!affected(before, after).every(k => ["name", "phone"].includes(k))) return false;
+      const name = after.name ?? "", phone = after.phone ?? "";
+      return typeof name === "string" && name.length < 120
+        && typeof phone === "string" && phone.length < 40;
     }
     if (op === "delete") return isAdmin();
   }
@@ -71,14 +91,13 @@ export function can(op, path, after, before) {
   if (col === "settings") return isAdmin();
 
   if (col === "orders" && seg.length === 2) {
-    if (op === "create") return false;               // ต้องผ่าน Worker เท่านั้น
+    // สร้าง/แก้/ลบ ต้องผ่าน Worker เท่านั้น (แม้แต่แอดมิน)
     if (op === "read") return isAdmin() || (signedIn() && before?.uid === state.user.uid);
-    return isAdmin();
+    return false;
   }
 
   if (col === "topups" && seg.length === 2) {
     if (op === "create") {
-      if (isAdmin()) return true;
       if (!signedIn()) return false;
       const d = after;
       const slipOk = !("slip" in d) || isImg(d.slip);
@@ -93,7 +112,8 @@ export function can(op, path, after, before) {
         && hasProof && slipOk && angpaoOk;
     }
     if (op === "read") return isAdmin() || (signedIn() && before?.uid === state.user.uid);
-    return isAdmin();
+    // อนุมัติ/ไม่อนุมัติ ทำที่ Worker เท่านั้น เพราะขยับเครดิตจริง
+    return false;
   }
 
   if (col === "topupSlips" && seg.length === 2) {
@@ -101,6 +121,11 @@ export function can(op, path, after, before) {
     if (op === "read") return isAdmin() || (signedIn() && before?.uid === state.user.uid);
     if (op === "update") return false;
     if (op === "delete") return isAdmin();
+  }
+
+  // บันทึกการกระทำของแอดมิน — อ่านได้เฉพาะแอดมิน เขียนได้เฉพาะเซิร์ฟเวอร์
+  if (col === "adminLogs" && seg.length === 2) {
+    return op === "read" ? isAdmin() : false;
   }
 
   return false;   // ไม่มีกฎ = ปฏิเสธ

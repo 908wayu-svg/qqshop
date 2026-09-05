@@ -4,15 +4,24 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
 
-    // อีเมลเจ้าของร้าน — เป็นแอดมินเสมอ (เพิ่มคนได้โดยใส่อีเมลในลิสต์นี้)
-    // *** ถ้าแก้ตรงนี้ ต้องแก้ ADMIN_EMAILS ในไฟล์ auth.js ให้ตรงกันด้วย ***
-    function ownerEmails() { return ['908wayu@gmail.com']; }
-
+    // ===== ใครคือแอดมิน =====
+    // ต้องผ่านพร้อมกัน 2 ชั้น:
+    //   1) custom claim `admin: true` ที่เซ็นมากับโทเคนของ Firebase Auth
+    //      ตั้งได้จากเซิร์ฟเวอร์เท่านั้น (Worker /admin/role) เบราว์เซอร์ปลอมไม่ได้
+    //   2) users/{uid}.role == 'admin' ในฐานข้อมูล
+    //      ฟิลด์นี้เบราว์เซอร์เขียนไม่ได้เลย (ดูกฎ users ด้านล่าง)
+    //
+    // เดิมเช็คจากรายชื่ออีเมลที่ฝังไว้ในไฟล์นี้ + auth.js — ใครยึดอีเมลนั้นได้
+    // ก็เป็นแอดมินทันที และถ้าแก้ลิสต์ไม่ตรงกันสองที่ก็กลายเป็นช่องโหว่
+    //
+    // ที่ต้องมีชั้นที่ 2 ด้วย: โทเคนใบที่ออกไปก่อนถอนสิทธิ์จะมี claim ค้างได้ถึง 1 ชั่วโมง
+    // พอเอกสารถูกลดเป็น member กฎนี้ก็ปฏิเสธทันที ไม่ต้องรอโทเคนหมดอายุ
     function isAdmin() {
       return isSignedIn()
-        && (request.auth.token.email in ownerEmails()
-            || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
-                && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+        && request.auth.token.get('admin', false) == true
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid))
+             .data.get('role', '') == 'admin';
     }
 
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
@@ -22,16 +31,29 @@ service cloud.firestore {
       allow read: if isAdmin() || isOwner(uid);
 
       // สมัครใหม่: ต้องเป็น uid ตัวเอง, role = member, เครดิตเริ่มต้น 0
+      // อีเมลต้องตรงกับอีเมลที่ล็อกอินจริง และห้ามแนบฟิลด์แปลกปลอมเข้ามา
+      // (เดิมกรอกอีเมลเป็นของคนอื่นได้ ทำให้รายชื่อในหลังบ้านชี้ตัวคนผิด)
       allow create: if isOwner(uid)
                     && request.resource.data.role == 'member'
-                    && request.resource.data.credit == 0;
+                    && request.resource.data.credit == 0
+                    && request.resource.data.get('email', '') == request.auth.token.get('email', '')
+                    && request.resource.data.keys().hasOnly(
+                         ['uid', 'email', 'name', 'phone', 'provider', 'role', 'credit', 'createdAt']);
 
-      // แก้โปรไฟล์ตัวเองได้เฉพาะชื่อกับเบอร์ (ระบุว่าอะไรแก้ได้ ปลอดภัยกว่าระบุว่าอะไรห้าม)
-      // เดิมห้ามแค่ role/credit ลูกค้าจึงแก้อีเมลตัวเองในฐานข้อมูลให้สับสนหน้าแอดมินได้
-      allow update: if isAdmin()
-                    || (isOwner(uid)
-                        && request.resource.data.diff(resource.data)
-                             .affectedKeys().hasOnly(['name', 'phone']));
+      // ===== หัวใจของความปลอดภัยทั้งระบบ =====
+      // ไม่มีใครแก้ credit หรือ role ผ่านเบราว์เซอร์ได้อีกแล้ว — รวมถึงแอดมินเอง
+      // เครดิตเปลี่ยนได้ทางเดียวคือผ่าน Worker (service account ไม่อยู่ใต้กฎนี้)
+      // ซึ่งตรวจสิทธิ์ซ้ำเองและบันทึกลง adminLogs ทุกครั้ง
+      //
+      // เหตุผล: บัญชีแอดมินหลุดมือเมื่อไหร่ คนที่ได้ไปจะเติมเครดิตให้ตัวเอง
+      // หรือตั้งตัวเองเป็นแอดมินถาวรไม่ได้ ต้องผ่านเส้นทางที่มีร่องรอยเสมอ
+      allow update: if (isOwner(uid) || isAdmin())
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['name', 'phone'])
+                    && request.resource.data.get('name', '') is string
+                    && request.resource.data.get('name', '').size() < 120
+                    && request.resource.data.get('phone', '') is string
+                    && request.resource.data.get('phone', '').size() < 40;
 
       allow delete: if isAdmin();
     }
@@ -43,7 +65,7 @@ service cloud.firestore {
 
       // คลังของสินค้าดิจิทัล — เก็บไอดี/รหัสผ่านรายชิ้น
       // ห้ามลูกค้าอ่านเด็ดขาด (ต่อให้เป็นชิ้นที่ตัวเองซื้อ)
-      // ลูกค้าเห็นรหัสจากในออเดอร์ของตัวเองที่คัดลอกไปตอนแอดมินอนุมัติแทน
+      // ลูกค้าเห็นรหัสจากในออเดอร์ของตัวเองที่เซิร์ฟเวอร์คัดลอกไปให้ตอนอนุมัติแทน
       match /stockItems/{itemId} {
         allow read, write: if isAdmin();
       }
@@ -64,15 +86,15 @@ service cloud.firestore {
 
     // ===== ออเดอร์ =====
     match /orders/{id} {
-      // เบราว์เซอร์สร้างออเดอร์เองไม่ได้เลย ต้องผ่านเซิร์ฟเวอร์ (Cloudflare Worker)
+      // เบราว์เซอร์สร้าง/แก้/ลบออเดอร์เองไม่ได้เลย ต้องผ่าน Worker เท่านั้น
       // ที่คิดราคาจากฐานข้อมูลเอง ลูกค้าจึงแก้ราคา/จำนวนก่อนส่งไม่ได้
       // (เซิร์ฟเวอร์ใช้ service account ซึ่งไม่ถูกกฎนี้บังคับ)
-      allow create: if false;
+      //
+      // ปิดฝั่งแอดมินด้วย เพราะ "อนุมัติออเดอร์" = หักเครดิตลูกค้า + ส่งมอบไอดี
+      // ถ้าเบราว์เซอร์ยังเขียนได้ บัญชีแอดมินที่หลุดจะแก้ยอด/ปั๊มของออกไปได้เงียบๆ
+      allow create, update, delete: if false;
 
       allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
-
-      // อนุมัติ/ไม่อนุมัติ ทำได้เฉพาะแอดมิน
-      allow update, delete: if isAdmin();
     }
 
     // ===== คำขอเติมเงิน =====
@@ -104,22 +126,25 @@ service cloud.firestore {
              || 'slip' in request.resource.data.keys());
       }
 
-      // แอดมินสร้างรายการให้ใครก็ได้ (ใช้ตอนเพิ่มเครดิตให้สมาชิก)
-      // ลูกค้าสร้างได้เฉพาะของตัวเอง และต้องเริ่มที่สถานะ pending เสมอ
-      allow create: if isAdmin()
-                    || (isSignedIn()
-                        && request.resource.data.uid == request.auth.uid
-                        && request.resource.data.status == 'pending'
-                        && request.resource.data.amount is number
-                        && request.resource.data.amount > 0
-                        && request.resource.data.amount <= 100000
-                        && request.resource.data.method in
-                             ['truewallet', 'bank', 'promptpay', 'angpao']
-                        && hasProof()
-                        && slipOk() && angpaoOk());
+      // ลูกค้าสร้างคำขอของตัวเองได้ และต้องเริ่มที่สถานะ pending เสมอ
+      // แอดมินสร้างเองจากเบราว์เซอร์ไม่ได้แล้ว — รายการที่แอดมินเติมให้สมาชิก
+      // ถูกสร้างโดย Worker ตอนปรับเครดิต (กันสร้างรายการ "อนุมัติแล้ว" ปลอมๆ
+      // ให้ดูเหมือนมีเงินเข้าร้านทั้งที่ไม่มี)
+      allow create: if isSignedIn()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.amount is number
+                    && request.resource.data.amount > 0
+                    && request.resource.data.amount <= 100000
+                    && request.resource.data.method in
+                         ['truewallet', 'bank', 'promptpay', 'angpao']
+                    && hasProof()
+                    && slipOk() && angpaoOk();
 
       allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
-      allow update, delete: if isAdmin();
+
+      // อนุมัติ/ไม่อนุมัติ ทำที่ Worker เท่านั้น เพราะทั้งสองอย่างขยับเครดิตจริง
+      allow update, delete: if false;
     }
 
     // ===== ภาพสลิป (แยกออกจาก topups) =====
@@ -138,6 +163,14 @@ service cloud.firestore {
       // สลิปที่แนบไปแล้วห้ามแก้ (กันเปลี่ยนหลักฐานหลังแอดมินดูแล้ว)
       allow update: if false;
       allow delete: if isAdmin();
+    }
+
+    // ===== บันทึกการกระทำของแอดมิน =====
+    // เซิร์ฟเวอร์เขียนอย่างเดียว (service account ไม่อยู่ใต้กฎนี้)
+    // เบราว์เซอร์แก้/ลบไม่ได้เลย เพื่อให้ร่องรอยการปรับเครดิตและการตั้งสิทธิ์ลบไม่ได้
+    match /adminLogs/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
   }
 }

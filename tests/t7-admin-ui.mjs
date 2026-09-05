@@ -1,5 +1,6 @@
 // ===== ทดสอบหน้าหลังบ้าน (รันโค้ดจริงบน DOM จำลอง) =====
-import { buildSandbox, makeDom, loadI18n, tick } from "./harness.mjs";
+import { buildSandbox, makeDom, loadI18n, tick, makeAdmin } from "./harness.mjs";
+import { installAdminServer } from "./fake/admin-server.mjs";
 import * as store from "./fake/store.mjs";
 import * as fs2 from "./fake/firestore.mjs";
 
@@ -16,6 +17,8 @@ const TS = n => new fs2.Timestamp(Date.now() - n * 1000);
 const IMG = "data:image/jpeg;base64," + "A".repeat(100) + "==";
 
 await QQ.registerWithEmail("908wayu@gmail.com", "adminpass", "เจ้าของร้าน", "");
+installAdminServer();
+await makeAdmin(QQ, store);
 await tick(6);
 const ADMIN_UID = QQ.user.uid;
 

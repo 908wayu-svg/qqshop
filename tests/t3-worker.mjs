@@ -22,6 +22,12 @@ const V = v => v === null ? { nullValue: null }
 const F = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, V(v)]));
 
 export let TM = { status: { code: "SUCCESS" }, data: { my_ticket: { amount_baht: 50 } } };
+
+// ระบบสมาชิกจำลอง: custom claim ของแต่ละ uid + สวิตช์จำลองปัญหา
+const CLAIMS = new Map();
+const DISABLED = new Set();
+let CLAIMS_DENIED = false;      // จำลอง service account ไม่มีสิทธิ์ตั้ง claim
+let txSeq = 0;
 let FAIL_COMMIT = 0;
 
 globalThis.fetch = async (url, opt = {}) => {
@@ -31,8 +37,37 @@ globalThis.fetch = async (url, opt = {}) => {
 
   if (url.includes("oauth2.googleapis.com/token")) return J({ access_token: "tok", expires_in: 3600 });
   if (url.includes("identitytoolkit")) {
+    // ตั้ง custom claim (เหมือน Admin SDK setCustomUserClaims)
+    if (url.includes("accounts:update")) {
+      if (CLAIMS_DENIED) {
+        return J({ error: { message: "PERMISSION_DENIED: missing firebaseauth.users.update" } }, 403);
+      }
+      CLAIMS.set(body.localId, JSON.parse(body.customAttributes || "{}"));
+      return J({ localId: body.localId });
+    }
     if (body?.idToken === "bad") return J({});
-    return J({ users: [{ localId: String(body.idToken).replace("token:", ""), email: "c@x.com", displayName: "ลูกค้า" }] });
+    const uid = String(body.idToken).replace("token:", "");
+    return J({ users: [{
+      localId: uid, email: "c@x.com", displayName: "ลูกค้า",
+      disabled: DISABLED.has(uid),
+      customAttributes: JSON.stringify(CLAIMS.get(uid) || {}),
+    }] });
+  }
+  if (url.includes(":beginTransaction")) return J({ transaction: "tx" + (++txSeq) });
+  if (url.includes(":rollback")) return J({});
+  if (url.includes(":runQuery")) {
+    // ค้นคลังสินค้าของสินค้าชิ้นหนึ่ง (ใช้ตอนอนุมัติออเดอร์)
+    const parent = short(url.split(":runQuery")[0]);          // products/<id>
+    const q = body.structuredQuery || {};
+    const col = q.from?.[0]?.collectionId || "";
+    const want = q.where?.fieldFilter?.value?.stringValue;
+    const field = q.where?.fieldFilter?.field?.fieldPath;
+    let rows = [...DOCS.entries()]
+      .filter(([k]) => k.startsWith(parent + "/" + col + "/"))
+      .filter(([, v]) => !field || (v[field]?.stringValue ?? null) === want)
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    if (q.limit) rows = rows.slice(0, q.limit);
+    return J(rows.map(([k, v]) => ({ document: { name: P + k, fields: v } })));
   }
   if (url.includes(":batchGet")) {
     return J(body.documents.map(d => {
@@ -81,13 +116,21 @@ Object.defineProperty(globalThis, "crypto", {
   configurable: true,
   value: {
     subtle: { importKey: async () => ({}), sign: async () => new Uint8Array([1, 2, 3]) },
-    randomUUID: () => "aaaaaaaa-bbbb-cccc-dddd-" + String(updateSeq++).padStart(12, "0"),
+    // ตัวนับต้องอยู่ต้นสตริง เพราะโค้ดจริงตัดเอาเฉพาะ 20 ตัวแรกมาใช้เป็นรหัสออเดอร์
+    randomUUID: () => String(updateSeq++).padStart(8, "0") + "-bbbb-cccc-dddd-eeeeeeeeeeee",
   },
 });
 
 const W = (await import("./sandbox/worker.mjs")).default;
 const ORIGIN = "https://908wayu-svg.github.io";
-const env = { SA_KEY: JSON.stringify({ client_email: "x@y", private_key: "" }), RECEIVE_PHONE: "0918200409" };
+const env = {
+  SA_KEY: JSON.stringify({ client_email: "x@y", private_key: "" }),
+  RECEIVE_PHONE: "0918200409",
+  ADMIN_BOOTSTRAP: "ความลับตั้งแอดมินคนแรก-1234567890",
+};
+const setClaim = (uid, c) => CLAIMS.set(uid, c);
+const claimOf = uid => CLAIMS.get(uid) || {};
+const denyClaims = v => { CLAIMS_DENIED = v; };
 const call = async (path, payload, origin = ORIGIN) => {
   const res = await W.fetch(new Request("https://bot.workers.dev" + path, {
     method: "POST", headers: { Origin: origin, "Content-Type": "application/json" },
@@ -219,6 +262,215 @@ ok("ยิงรัวๆ แล้วโดนจำกัด", limited > 0, "�
 resetDb(); const u2 = freshUid(); withUser(u2);
 r = await call("/order", { idToken: "token:" + u2, items: [{ id: "p2", qty: 1 }] });
 ok("คนอื่นไม่โดนหางเลข", r.body.ok === true);
+
+
+// =====================================================================
+// ===== เส้นทางแอดมิน (/admin/*) — โค้ดจริงของ Worker =====
+const numOf = f => Number(f?.integerValue ?? f?.doubleValue ?? 0);
+const strOf = f => String(f?.stringValue ?? "");
+const logsOf = () => [...DOCS.entries()].filter(([k]) => k.startsWith("adminLogs/")).map(([, v]) => v);
+const mkAdmin = (uid, email) => {
+  DOCS.set("users/" + uid, F({ name: "แอดมิน", email: email || "admin@x.com", credit: 0, role: "admin" }));
+  setClaim(uid, { admin: true });
+  return uid;
+};
+
+section("แอดมิน — ต้องมีสิทธิ์ครบ 2 ชั้น");
+resetDb();
+const A = mkAdmin(freshUid());
+const C1 = freshUid();
+DOCS.set("users/" + C1, F({ name: "ลูกค้า", email: "c@x.com", credit: 100, role: "member" }));
+
+let ar = await call("/admin/credit", { idToken: "token:" + C1, uid: C1, amount: 1000 });
+ok("ลูกค้าธรรมดายิงเส้นทางแอดมินไม่ผ่าน", ar.body.error === "ADMIN_ONLY", JSON.stringify(ar.body));
+ok("ตอบรหัส 403", ar.status === 403);
+ok("เครดิตลูกค้าไม่ขยับ", numOf(DOCS.get("users/" + C1).credit) === 100);
+
+const claimOnly = freshUid();
+DOCS.set("users/" + claimOnly, F({ name: "ปลอม", email: "f@x.com", credit: 0, role: "member" }));
+setClaim(claimOnly, { admin: true });
+ar = await call("/admin/credit", { idToken: "token:" + claimOnly, uid: C1, amount: 500 });
+ok("มี claim แต่เอกสารไม่ใช่ admin = ไม่ผ่าน", ar.body.error === "ADMIN_ONLY");
+
+const roleOnly = freshUid();
+DOCS.set("users/" + roleOnly, F({ name: "ปลอม2", email: "f2@x.com", credit: 0, role: "admin" }));
+setClaim(roleOnly, {});
+ar = await call("/admin/credit", { idToken: "token:" + roleOnly, uid: C1, amount: 500 });
+ok("เอกสารเป็น admin แต่ไม่มี claim = ไม่ผ่าน", ar.body.error === "ADMIN_ONLY");
+
+ar = await call("/admin/credit", { idToken: "token:" + A, uid: C1, amount: 50 }, "https://evil.com");
+ok("ยิงจากโดเมนแปลกปลอมไม่ผ่าน", ar.body.error === "BAD_ORIGIN");
+
+section("แอดมิน — ปรับเครดิต");
+ar = await call("/admin/credit", { idToken: "token:" + A, uid: C1, amount: 250.5, note: "โอนมาเพิ่ม" });
+ok("ปรับเครดิตสำเร็จ", ar.body.ok === true, JSON.stringify(ar.body));
+ok("เครดิตเพิ่มตามจริง", numOf(DOCS.get("users/" + C1).credit) === 350.5,
+  String(numOf(DOCS.get("users/" + C1).credit)));
+ok("บันทึกลงประวัติเติมเงิน (method=admin)",
+  [...DOCS.values()].some(v => strOf(v.method) === "admin" && numOf(v.amount) === 250.5));
+ok("มีบันทึกใน adminLogs", logsOf().some(l => strOf(l.action) === "credit.adjust"));
+ok("บันทึกเก็บยอดก่อน-หลัง", logsOf().some(l => numOf(l.before) === 100 && numOf(l.after) === 350.5));
+
+ok("ยอด 0 ไม่ได้", (await call("/admin/credit", { idToken: "token:" + A, uid: C1, amount: 0 })).body.error === "AMOUNT_INVALID");
+ok("ยอดเกินเพดานไม่ได้", (await call("/admin/credit", { idToken: "token:" + A, uid: C1, amount: 100001 })).body.error === "AMOUNT_TOO_LARGE");
+ok("หักจนติดลบไม่ได้", (await call("/admin/credit", { idToken: "token:" + A, uid: C1, amount: -1000 })).body.error === "WOULD_GO_NEGATIVE");
+ok("uid ผิดรูปแบบไม่ได้", (await call("/admin/credit", { idToken: "token:" + A, uid: "../ห้าม", amount: 5 })).body.error === "BAD_REQUEST");
+ok("สมาชิกไม่มีอยู่จริงไม่ได้", (await call("/admin/credit", { idToken: "token:" + A, uid: "ghost", amount: 5 })).body.error === "MEMBER_NOT_FOUND");
+ok("เครดิตยังเท่าเดิมหลังคำสั่งที่ล้มเหลว", numOf(DOCS.get("users/" + C1).credit) === 350.5);
+
+section("แอดมิน — อนุมัติเติมเงิน");
+DOCS.set("topups/tp1", F({ uid: C1, amount: 100, method: "bank", hasSlip: true, status: "pending" }));
+ar = await call("/admin/topup/approve", { idToken: "token:" + A, topupId: "tp1" });
+ok("อนุมัติเติมเงินสำเร็จ", ar.body.ok === true, JSON.stringify(ar.body));
+ok("เครดิตเข้าเรียบร้อย", numOf(DOCS.get("users/" + C1).credit) === 450.5);
+ok("สถานะเปลี่ยนเป็น approved", strOf(DOCS.get("topups/tp1").status) === "approved");
+ok("อนุมัติซ้ำไม่ได้", (await call("/admin/topup/approve", { idToken: "token:" + A, topupId: "tp1" })).body.error === "ALREADY_HANDLED");
+ok("ไม่อนุมัติทับของที่อนุมัติแล้วไม่ได้", (await call("/admin/topup/reject", { idToken: "token:" + A, topupId: "tp1" })).body.error === "ALREADY_HANDLED");
+ok("เครดิตไม่เข้าซ้ำ", numOf(DOCS.get("users/" + C1).credit) === 450.5);
+
+DOCS.set("topups/tp0", F({ uid: C1, amount: 0, method: "angpao", angpaoLink: "x", status: "pending" }));
+ok("รายการยอด 0 ต้องใส่ยอดก่อน", (await call("/admin/topup/approve", { idToken: "token:" + A, topupId: "tp0" })).body.error === "AMOUNT_MISSING");
+ar = await call("/admin/topup/approve", { idToken: "token:" + A, topupId: "tp0", amount: 25.5 });
+ok("ใส่ยอดแทนแล้วอนุมัติได้", ar.body.ok === true && numOf(DOCS.get("users/" + C1).credit) === 476);
+
+DOCS.set("topups/tp2", F({ uid: C1, amount: 50, method: "bank", hasSlip: true, status: "pending" }));
+ar = await call("/admin/topup/reject", { idToken: "token:" + A, topupId: "tp2", note: "สลิปปลอม" });
+ok("ไม่อนุมัติได้", ar.body.ok === true && strOf(DOCS.get("topups/tp2").status) === "rejected");
+ok("เครดิตไม่เข้าตอนไม่อนุมัติ", numOf(DOCS.get("users/" + C1).credit) === 476);
+
+section("แอดมิน — อนุมัติออเดอร์ (หักเครดิต + ส่งมอบไอดี)");
+DOCS.set("products/p1/stockItems/s1", F({ login: "user1", password: "pw1", note: "", status: "available" }));
+DOCS.set("products/p1/stockItems/s2", F({ login: "user2", password: "pw2", note: "", status: "available" }));
+DOCS.set("products/p1/stockItems/s3", F({ login: "user3", password: "pw3", note: "", status: "available" }));
+const mkOrder = (id, uid, qty, total) => DOCS.set("orders/" + id, {
+  ...F({ uid, total, status: "pending" }),
+  items: { arrayValue: { values: [{ mapValue: { fields: F({ id: "p1", name: "ไอดีเกม A", price: 300, qty }) } }] } },
+});
+mkOrder("o1", C1, 1, 300);
+ar = await call("/admin/order/approve", { idToken: "token:" + A, orderId: "o1" });
+ok("อนุมัติออเดอร์สำเร็จ", ar.body.ok === true, JSON.stringify(ar.body));
+ok("หักเครดิตลูกค้าถูกต้อง", numOf(DOCS.get("users/" + C1).credit) === 176,
+  String(numOf(DOCS.get("users/" + C1).credit)));
+ok("สถานะเป็น approved", strOf(DOCS.get("orders/o1").status) === "approved");
+ok("ตัดสต๊อกสินค้า", numOf(DOCS.get("products/p1").stock) === 4);
+const deliv = DOCS.get("orders/o1").items.arrayValue.values[0].mapValue.fields.delivered;
+ok("ส่งมอบไอดีเข้าออเดอร์", !!deliv && deliv.arrayValue.values.length === 1);
+ok("ไอดีที่ส่งมีรหัสผ่านจริง",
+  strOf(deliv.arrayValue.values[0].mapValue.fields.password).length > 0);
+ok("ชิ้นในคลังถูกทำเครื่องหมายว่าขายแล้ว",
+  strOf(DOCS.get("products/p1/stockItems/s1").status) === "sold");
+ok("ชิ้นที่ขายแล้วผูกกับออเดอร์", strOf(DOCS.get("products/p1/stockItems/s1").orderId) === "o1");
+ok("อนุมัติออเดอร์ซ้ำไม่ได้", (await call("/admin/order/approve", { idToken: "token:" + A, orderId: "o1" })).body.error === "ALREADY_HANDLED");
+ok("ไม่อนุมัติทับออเดอร์ที่อนุมัติแล้วไม่ได้", (await call("/admin/order/reject", { idToken: "token:" + A, orderId: "o1" })).body.error === "ALREADY_HANDLED");
+
+mkOrder("o2", C1, 1, 300);
+DOCS.set("users/" + C1, { ...DOCS.get("users/" + C1), credit: V(10) });
+ar = await call("/admin/order/approve", { idToken: "token:" + A, orderId: "o2" });
+ok("เครดิตลูกค้าไม่พอ = อนุมัติไม่ได้", ar.body.error === "INSUFFICIENT_CUSTOMER_CREDIT");
+ok("ไม่มีอะไรถูกเขียนตอนล้มเหลว", strOf(DOCS.get("orders/o2").status) === "pending"
+  && numOf(DOCS.get("products/p1").stock) === 4);
+
+DOCS.set("users/" + C1, { ...DOCS.get("users/" + C1), credit: V(5000) });
+mkOrder("o3", C1, 5, 1500);
+ar = await call("/admin/order/approve", { idToken: "token:" + A, orderId: "o3" });
+ok("ไอดีในคลังไม่พอ = อนุมัติไม่ได้", ar.body.error === "NOT_ENOUGH_STOCK_ITEMS");
+ok("เครดิตไม่ถูกหักตอนของไม่พอ", numOf(DOCS.get("users/" + C1).credit) === 5000);
+
+DOCS.set("products/p1/stockItems/s9", F({ login: "", password: "", note: "", status: "available" }));
+DOCS.set("products/p1", F({ name: "ไอดีเกม A", price: 300, stock: 9, active: true, digital: true }));
+mkOrder("o4", C1, 3, 900);
+ar = await call("/admin/order/approve", { idToken: "token:" + A, orderId: "o4" });
+ok("มีชิ้นว่างเปล่าในคลัง = หยุดไว้ ไม่ส่งของว่าง", ar.body.error === "EMPTY_STOCK_ITEM");
+ok("เครดิตไม่ถูกหักตอนเจอชิ้นว่าง", numOf(DOCS.get("users/" + C1).credit) === 5000);
+
+mkOrder("o5", C1, 1, 300);
+ar = await call("/admin/order/reject", { idToken: "token:" + A, orderId: "o5", note: "ลูกค้าขอยกเลิก" });
+ok("ไม่อนุมัติออเดอร์ได้", ar.body.ok === true && strOf(DOCS.get("orders/o5").status) === "rejected");
+ok("เครดิตไม่ถูกหักตอนไม่อนุมัติ", numOf(DOCS.get("users/" + C1).credit) === 5000);
+
+section("แอดมิน — ลบข้อมูลลูกค้าออกจากออเดอร์");
+DOCS.set("orders/o6", {
+  ...F({ uid: C1, total: 80, status: "approved" }),
+  items: { arrayValue: { values: [{ mapValue: { fields: F({ id: "pLogin", name: "เติมเกม", price: 80, qty: 1, gameUid: "999", gameLogin: "myuser", gamePassword: "mypass" }) } }] } },
+});
+ar = await call("/admin/order/clear-info", { idToken: "token:" + A, orderId: "o6" });
+const it6 = DOCS.get("orders/o6").items.arrayValue.values[0].mapValue.fields;
+ok("ลบรหัสผ่านลูกค้าออกได้", ar.body.ok === true && !it6.gamePassword);
+ok("ลบชื่อผู้ใช้ลูกค้าออกด้วย", !it6.gameLogin);
+ok("ไอดีเกม/UID ยังอยู่เป็นหลักฐาน", strOf(it6.gameUid) === "999");
+ok("บันทึกเวลาที่ลบไว้", !!DOCS.get("orders/o6").customerInfoClearedAt);
+
+section("แอดมิน — ตั้ง/ถอดสิทธิ์ (custom claim)");
+ok("ถอดสิทธิ์ตัวเองไม่ได้", (await call("/admin/role", { idToken: "token:" + A, uid: A, makeAdmin: false })).body.error === "CANNOT_CHANGE_SELF");
+ok("ค่า makeAdmin ต้องเป็น true/false เท่านั้น", (await call("/admin/role", { idToken: "token:" + A, uid: C1, makeAdmin: "yes" })).body.error === "BAD_REQUEST");
+ok("ตั้งสิทธิ์ให้คนที่ไม่มีบัญชีไม่ได้", (await call("/admin/role", { idToken: "token:" + A, uid: "ghost", makeAdmin: true })).body.error === "MEMBER_NOT_FOUND");
+
+ar = await call("/admin/role", { idToken: "token:" + A, uid: C1, makeAdmin: true });
+ok("ตั้งคนอื่นเป็นแอดมินได้", ar.body.ok === true, JSON.stringify(ar.body));
+ok("claim ถูกตั้งในบัญชีจริง", claimOf(C1).admin === true);
+ok("เอกสารถูกตั้งเป็น admin ด้วย", strOf(DOCS.get("users/" + C1).role) === "admin");
+
+ar = await call("/admin/role", { idToken: "token:" + A, uid: C1, makeAdmin: false });
+ok("ถอนสิทธิ์ได้", ar.body.ok === true);
+ok("claim ถูกล้าง", claimOf(C1).admin !== true);
+ok("เอกสารกลับเป็น member", strOf(DOCS.get("users/" + C1).role) === "member");
+ok("มีบันทึกทั้งตอนตั้งและตอนถอน",
+  logsOf().some(l => strOf(l.action) === "role.grant") &&
+  logsOf().some(l => strOf(l.action) === "role.revoke"));
+
+section("แอดมิน — เมื่อ service account ยังไม่มีสิทธิ์ตั้ง claim");
+denyClaims(true);
+ar = await call("/admin/role", { idToken: "token:" + A, uid: C1, makeAdmin: true });
+ok("บอกสาเหตุชัดเจนว่าไม่มีสิทธิ์", ar.body.error === "CLAIMS_PERMISSION", JSON.stringify(ar.body));
+ok("ล้มเหลวแล้วต้องไม่ตั้ง role ให้ก่อน (fail closed)",
+  strOf(DOCS.get("users/" + C1).role) === "member");
+
+// ถอนสิทธิ์: ต้องลด role ก่อนเสมอ ถึงแม้ล้าง claim ไม่สำเร็จก็หมดสิทธิ์แล้ว
+setClaim(C1, { admin: true });
+DOCS.set("users/" + C1, { ...DOCS.get("users/" + C1), role: V("admin") });
+ar = await call("/admin/role", { idToken: "token:" + A, uid: C1, makeAdmin: false });
+ok("ถอนสิทธิ์ตอนตั้ง claim ไม่ได้ ก็ยังลด role สำเร็จ",
+  strOf(DOCS.get("users/" + C1).role) === "member");
+denyClaims(false);
+setClaim(C1, {});
+
+section("ตั้งแอดมินคนแรกด้วยรหัสลับ (/admin/bootstrap)");
+const B = freshUid();
+DOCS.set("users/" + B, F({ name: "เจ้าของ", email: "owner@x.com", credit: 0, role: "member" }));
+ok("รหัสผิด = ไม่ได้สิทธิ์", (await call("/admin/bootstrap", { idToken: "token:" + B, secret: "มั่วๆ" })).body.error === "BOOTSTRAP_BAD_SECRET");
+ok("ไม่ส่งรหัสมาเลยก็ไม่ได้", (await call("/admin/bootstrap", { idToken: "token:" + B })).body.error === "BOOTSTRAP_BAD_SECRET");
+ok("ยังไม่ได้เป็นแอดมิน", claimOf(B).admin !== true);
+
+const envNoSecret = { ...env, ADMIN_BOOTSTRAP: "" };
+const resNo = await W.fetch(new Request("https://b.dev/admin/bootstrap", {
+  method: "POST", headers: { Origin: ORIGIN, "Content-Type": "application/json" },
+  body: JSON.stringify({ idToken: "token:" + B, secret: "อะไรก็ได้" }),
+}), envNoSecret);
+ok("ถ้ายังไม่ตั้งรหัสลับ = ปิดเส้นทางนี้ทิ้ง", (await resNo.json()).error === "BOOTSTRAP_DISABLED");
+
+ar = await call("/admin/bootstrap", { idToken: "token:" + B, secret: env.ADMIN_BOOTSTRAP });
+ok("รหัสถูก = ตั้งแอดมินคนแรกได้", ar.body.ok === true, JSON.stringify(ar.body));
+ok("ได้ claim", claimOf(B).admin === true);
+ok("เอกสารเป็น admin", strOf(DOCS.get("users/" + B).role) === "admin");
+ok("มีบันทึกไว้ว่าใครใช้รหัสลับ", logsOf().some(l => strOf(l.action) === "role.bootstrap"));
+
+section("ตรวจสถานะสิทธิ์ของตัวเอง (/admin/whoami)");
+ar = await call("/admin/whoami", { idToken: "token:" + B });
+ok("แอดมินเห็นว่าตัวเองครบทั้งสองชั้น", ar.body.admin === true && ar.body.claim === true && ar.body.role === "admin");
+const W1 = freshUid();
+DOCS.set("users/" + W1, F({ name: "ลูกค้า", email: "w@x.com", credit: 0, role: "member" }));
+ar = await call("/admin/whoami", { idToken: "token:" + W1 });
+ok("สมาชิกธรรมดาเห็นว่าตัวเองไม่ใช่แอดมิน", ar.body.admin === false);
+
+section("บัญชีที่ถูกปิดใช้งาน");
+const D1 = mkAdmin(freshUid());
+DISABLED.add(D1);
+ar = await call("/admin/credit", { idToken: "token:" + D1, uid: C1, amount: 100 });
+ok("บัญชีถูกปิด = ใช้โทเคนเดิมทำอะไรไม่ได้", ar.body.error === "UNAUTHORIZED" && ar.status === 401);
+DISABLED.delete(D1);
+
+section("เส้นทางแอดมินที่ไม่มีอยู่จริง");
+ok("เส้นทางมั่วถูกปฏิเสธ", (await call("/admin/ห้าม", { idToken: "token:" + A })).body.error === "NOT_FOUND");
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;

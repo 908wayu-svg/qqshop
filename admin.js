@@ -830,6 +830,8 @@ document.getElementById("dash").addEventListener("click", async e => {
         if (!u) { alert(t("not_found")); await reloadAll(); return; }
         await QQ.setRole(id, u.role === "admin" ? "member" : "admin");
         await refreshAfter(() => patchUser(id));
+        // สิทธิ์เปลี่ยนที่บัญชีจริงแล้ว เจ้าตัวจะเห็นผลทันทีที่รีเฟรชหน้า
+        alert(t(u.role === "admin" ? "role_revoked" : "role_granted"));
       }
     } catch (err) { alert(QQ.friendlyError(err)); }
     finally { btn.disabled = false; }
@@ -899,7 +901,28 @@ function showGate(msgKey, withLogin) {
   }
   await QQ.whenAuthReady();
   if (!QQ.user) return showGate("login_title", true);
-  if (!QQ.isAdmin) return showGate("access_denied", false);
+
+  // สิทธิ์แอดมินอยู่ใน custom claim ของโทเคน ซึ่งอาจเป็นใบเก่าที่ยังไม่รู้ว่าเพิ่งได้สิทธิ์
+  // ขอโทเคนใบใหม่หนึ่งครั้งก่อนตัดสินว่าไม่มีสิทธิ์
+  if (!QQ.isAdmin) await QQ.refreshClaims();
+
+  if (!QQ.isAdmin) {
+    showGate("access_denied", false);
+    // ทางกู้คืน: ถ้าไม่เหลือแอดมินสักคน (หรือ claim หาย) ใช้รหัสลับที่ตั้งไว้ในเซิร์ฟเวอร์
+    // ตั้งสิทธิ์ให้ตัวเองได้ — รหัสอยู่ที่ Cloudflare เท่านั้น ไม่มีในหน้าเว็บ
+    document.getElementById("gate").insertAdjacentHTML("beforeend",
+      `<div class="gate-box">
+         <button class="btn-small" id="recover-admin">${t("recover_admin")}</button>
+       </div>`);
+    document.getElementById("recover-admin").addEventListener("click", async (e) => {
+      const secret = prompt(t("recover_admin_ask"));
+      if (!secret) return;
+      e.target.disabled = true;
+      try { await QQ.bootstrapAdmin(secret); location.reload(); }
+      catch (err) { alert(QQ.friendlyError(err)); e.target.disabled = false; }
+    });
+    return;
+  }
 
   document.getElementById("gate").classList.add("hidden");
   document.getElementById("dash").classList.remove("hidden");
