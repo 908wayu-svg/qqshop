@@ -1,0 +1,12 @@
+# QQSHOP — https://908wayu-svg.github.io/qqshop/
+# หมายเหตุ: เว็บอยู่ใต้ /qqshop/ ของโดเมน github.io ตัวค้นหาจะอ่าน robots.txt
+# ที่รากโดเมนเท่านั้น ไฟล์นี้จึงมีผลเต็มที่เมื่อย้ายไปใช้โดเมนของร้านเอง
+# หน้าที่ต้องล็อกอิน (กระเป๋าเงิน/ประวัติ/หลังบ้าน) กันไว้ด้วย meta robots ในตัวหน้าอีกชั้น
+
+User-agent: *
+Allow: /
+Disallow: /qqshop/admin.html
+Disallow: /qqshop/wallet.html
+Disallow: /qqshop/purchases.html
+
+Sitemap: https://908wayu-svg.github.io/qqshop/sitemap.xml
