@@ -202,7 +202,7 @@ const money2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const CLIENT_ERRORS = new Set([
   "EMPTY_CART", "TOO_MANY_ITEMS", "BAD_ITEM", "BAD_QTY", "PRODUCT_NOT_FOUND",
   "PRODUCT_INACTIVE", "OUT_OF_STOCK", "BAD_PRICE", "BAD_TOTAL",
-  "NO_PROFILE", "NOT_ENOUGH_CREDIT",
+  "NO_PROFILE", "NOT_ENOUGH_CREDIT", "NEED_CUSTOMER_INFO",
 ]);
 
 // ---------- สร้างออเดอร์ (คิดราคาจากฝั่งเซิร์ฟเวอร์) ----------
@@ -214,12 +214,15 @@ async function createOrder(token, user, rawItems) {
 
   // รวมรายการซ้ำและตรวจจำนวน
   const want = new Map();
+  const info = new Map();     // ข้อมูลไอดีเกมที่ลูกค้ากรอกมา (ของเติมเกม)
   for (const it of rawItems) {
     const id = String(it?.id || "");
     const qty = Math.floor(Number(it?.qty));
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error("BAD_ITEM");
     if (!Number.isFinite(qty) || qty < 1 || qty > 999) throw new Error("BAD_QTY");
     want.set(id, (want.get(id) || 0) + qty);
+    // สินค้าเดียวกันส่งมาหลายแถว ใช้ค่าที่กรอกมาแถวแรกที่มีข้อมูล
+    if (!info.has(id)) info.set(id, it);
   }
 
   const products = await batchGet(token, [...want.keys()].map(id => `documents/products/${id}`));
@@ -238,7 +241,20 @@ async function createOrder(token, user, rawItems) {
     if (price <= 0) throw new Error("BAD_PRICE");
 
     total = money2(total + price * qty);
-    items.push({ id, name: p.name?.stringValue || "", price, qty });
+
+    // ของเติมเกม: เก็บเฉพาะช่องที่สินค้านั้น "ติ๊กว่าขอ" เท่านั้น
+    // ลูกค้าแนบอะไรมาเกินก็ไม่ถูกบันทึก และถ้าขอแล้วไม่กรอกก็สั่งไม่ผ่าน
+    const asked = {};
+    const raw = info.get(id) || {};
+    const clean = v => String(v ?? "").trim().slice(0, 120);
+    if (p.askUid?.booleanValue === true) asked.gameUid = clean(raw.gameUid);
+    if (p.askLogin?.booleanValue === true) {
+      asked.gameLogin = clean(raw.gameLogin);
+      asked.gamePassword = clean(raw.gamePassword);
+    }
+    if (Object.values(asked).some(v => !v)) throw new Error("NEED_CUSTOMER_INFO");
+
+    items.push({ id, name: p.name?.stringValue || "", price, qty, ...asked });
   }
   if (total <= 0) throw new Error("BAD_TOTAL");
 

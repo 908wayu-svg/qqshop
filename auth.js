@@ -326,7 +326,14 @@ export const QQ = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         idToken: await auth.currentUser.getIdToken(),
-        items: items.map(i => ({ id: i.id, qty: i.qty })),
+        // ข้อมูลไอดีเกมของลูกค้าส่งไปด้วย (เฉพาะสินค้าที่แอดมินติ๊กว่าต้องขอ)
+        // เซิร์ฟเวอร์ตรวจซ้ำเองว่าสินค้านั้นขอจริงไหม ก่อนบันทึกลงออเดอร์
+        items: items.map(i => ({
+          id: i.id, qty: i.qty,
+          ...(i.gameUid ? { gameUid: i.gameUid } : {}),
+          ...(i.gameLogin ? { gameLogin: i.gameLogin } : {}),
+          ...(i.gamePassword ? { gamePassword: i.gamePassword } : {}),
+        })),
       }),
     }).catch(() => null);
     const data = res
@@ -600,6 +607,16 @@ export const QQ = {
     return setDoc(doc(db, "settings", "shop"),
       { salesResetAt: null, updatedAt: serverTimestamp() }, { merge: true });
   },
+  // ลบชื่อผู้ใช้/รหัสผ่านของลูกค้าออกจากออเดอร์ (ใช้ตอนแอดมินเติมเกมเสร็จแล้ว)
+  // ไอดีเกม/UID ยังเก็บไว้เป็นหลักฐานว่าเติมให้ใครไป
+  async clearOrderCustomerInfo(orderId) {
+    const ref = doc(db, "orders", orderId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error("ไม่พบออเดอร์");
+    const items = (snap.data().items || []).map(({ gameLogin, gamePassword, ...keep }) => keep);
+    await updateDoc(ref, { items, customerInfoClearedAt: serverTimestamp() });
+  },
+
   setRole: (uid, role) => updateDoc(doc(db, "users", uid), { role }),
   updateMyProfile: (data) => updateDoc(doc(db, "users", currentUser.uid), data),
 };

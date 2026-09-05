@@ -83,5 +83,29 @@ ok("ข้อความตัวเลือกเปลี่ยนเป็�
 window.toggleLang();
 await tick(2);
 
+section("ช่องติ๊กขอข้อมูลไอดีลูกค้า (ของเติมเกม)");
+click($("btn-add-product"));
+await tick(3);
+ok("มีช่องติ๊กขอ UID", !!$("p-ask-uid"));
+ok("มีช่องติ๊กขอชื่อผู้ใช้ + รหัสผ่าน", !!$("p-ask-login"));
+ok("สินค้าใหม่เริ่มต้นไม่ติ๊กอะไรเลย",
+  $("p-ask-uid").checked === false && $("p-ask-login").checked === false);
+
+$("p-name").value = "เพชร 100 เม็ด";
+$("p-price").value = "50";
+$("p-category").value = "topup";
+$("p-ask-uid").checked = true;
+click($("p-save"));
+await tick(10);
+const topup = [...store.state.docs.entries()]
+  .find(([k, d]) => k.startsWith("products/") && d.name === "เพชร 100 เม็ด");
+ok("บันทึก askUid ลงสินค้า", topup?.[1].askUid === true, JSON.stringify(topup?.[1]));
+ok("askLogin ที่ไม่ได้ติ๊ก บันทึกเป็น false", topup?.[1].askLogin === false);
+
+click(document.querySelector(`[data-act="edit-product"][data-id="${topup[0].split("/")[1]}"]`));
+await tick(4);
+ok("เปิดแก้ไขแล้วติ๊ก askUid กลับมาให้", $("p-ask-uid").checked === true);
+ok("askLogin ยังไม่ติ๊กตามเดิม", $("p-ask-login").checked === false);
+
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;

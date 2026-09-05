@@ -127,6 +127,49 @@ function renderCartBadge() {
   document.getElementById("cart-count").textContent = count;
 }
 
+// ===== ข้อมูลไอดีเกมของลูกค้า (ของเติมเกม) =====
+// แอดมินติ๊กไว้ที่สินค้าว่าต้องขออะไร ลูกค้าต้องกรอกให้ครบก่อนถึงจะกดสั่งซื้อได้
+// เก็บไว้ในตัวแปร ไม่ใช่ localStorage — รหัสผ่านลูกค้าไม่ควรค้างอยู่ในเครื่อง
+const CUSTOMER_INFO = {};
+const needsInfo = p => !!(p?.askUid || p?.askLogin);
+
+const infoFieldsOf = p => [
+  ...(p?.askUid ? [{ k: "gameUid", label: "your_game_uid" }] : []),
+  ...(p?.askLogin ? [{ k: "gameLogin", label: "your_game_login" },
+                     { k: "gamePassword", label: "your_game_password" }] : []),
+];
+
+function customerInfoFields(p) {
+  if (!needsInfo(p)) return "";
+  const saved = CUSTOMER_INFO[p.id] || {};
+  const rows = infoFieldsOf(p).map(f => `
+    <label>${t(f.label)} <span class="req">*</span></label>
+    <input type="text" autocomplete="off" spellcheck="false"
+           data-info-id="${escapeHtml(p.id)}" data-info-key="${f.k}"
+           value="${escapeHtml(saved[f.k] || "")}">`).join("");
+  return `<div class="cust-fields">${rows}
+    ${p.askLogin ? `<div class="hint warn-note">${t("password_warning")}</div>` : ""}</div>`;
+}
+
+// รายการไหนยังกรอกไม่ครบบ้าง
+function missingInfo(cart) {
+  return Object.keys(cart).filter(id => {
+    const p = findProduct(id);
+    if (!needsInfo(p)) return false;
+    const saved = CUSTOMER_INFO[id] || {};
+    return infoFieldsOf(p).some(f => !String(saved[f.k] || "").trim());
+  });
+}
+
+// ส่งเฉพาะช่องที่สินค้านั้นขอจริง (เซิร์ฟเวอร์ตรวจซ้ำอีกชั้น)
+function infoForOrder(id) {
+  const p = findProduct(id);
+  const saved = CUSTOMER_INFO[id] || {};
+  const out = {};
+  infoFieldsOf(p).forEach(f => { out[f.k] = String(saved[f.k] || "").trim(); });
+  return out;
+}
+
 function renderCartPanel() {
   const cart = pruneCart();
   const list = document.getElementById("cart-list");
@@ -148,7 +191,8 @@ function renderCartPanel() {
             <span>${cart[id]}</span>
             <button data-qty="1" data-id="${escapeHtml(id)}">+</button>
           </div>
-        </div>`;
+        </div>
+        ${customerInfoFields(p)}`;
     }).join("");
     document.getElementById("cart-total-amount").textContent = money(cartTotal(cart));
   }
@@ -177,6 +221,8 @@ function syncCheckoutState() {
   if (total === 0) { btn.disabled = true; show(""); return; }
   if (!signedIn) { btn.disabled = false; show(t("login_required"), "warn"); return; }
   if (credit < total) { btn.disabled = true; show(t("not_enough_credit"), "warn"); return; }
+  // ของเติมเกมต้องรู้ไอดีลูกค้าก่อน ไม่งั้นเติมให้ไม่ได้
+  if (missingInfo(getCart()).length) { btn.disabled = true; show(t("fill_customer_info"), "warn"); return; }
   btn.disabled = false; show("");
 }
 
@@ -206,10 +252,14 @@ async function doCheckout() {
     }
     if (QQ.credit < total) { syncCheckoutState(); return; }
 
-    const items = Object.entries(cart).map(([id, qty]) => ({ id, qty }));
+    if (missingInfo(cart).length) { renderCartPanel(); return; }
+
+    const items = Object.entries(cart).map(([id, qty]) => ({ id, qty, ...infoForOrder(id) }));
     const res = await QQ.createOrder(items);
 
     localStorage.removeItem(CART_KEY);
+    // ล้างรหัสผ่านลูกค้าออกจากหน่วยความจำทันทีที่สั่งซื้อเสร็จ
+    Object.keys(CUSTOMER_INFO).forEach(k => delete CUSTOMER_INFO[k]);
     renderCartBadge();
     closePanel("cart-overlay");
     alert(`${t("order_placed")}\n\n${t("order_no")}: ${res.orderId.slice(0, 8).toUpperCase()}`);
@@ -264,6 +314,15 @@ document.getElementById("grid")?.addEventListener("click", e => {
 document.getElementById("cart-list")?.addEventListener("click", e => {
   const btn = e.target.closest("[data-qty]");
   if (btn) changeQty(btn.dataset.id, Number(btn.dataset.qty));
+});
+
+// จำสิ่งที่ลูกค้าพิมพ์ไว้ ไม่งั้นกดเพิ่ม/ลดจำนวนแล้ววาดใหม่ ข้อมูลที่กรอกจะหาย
+document.getElementById("cart-list")?.addEventListener("input", e => {
+  const el = e.target.closest("[data-info-id]");
+  if (!el) return;
+  const id = el.dataset.infoId;
+  (CUSTOMER_INFO[id] ||= {})[el.dataset.infoKey] = el.value;
+  syncCheckoutState();
 });
 
 document.getElementById("cat-tabs")?.addEventListener("click", e => {

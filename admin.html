@@ -169,6 +169,13 @@
       <span data-i18n="is_digital">สินค้าดิจิทัล (มีไอดี/รหัสผ่านรายชิ้น)</span></label>
     <div class="hint" data-i18n="digital_hint">เมื่อเปิด สต๊อกจะนับจากจำนวนชิ้นในคลังอัตโนมัติ ลูกค้าจะเห็นไอดี/รหัสผ่านในประวัติการซื้อทันทีที่คุณอนุมัติออเดอร์</div>
 
+    <label data-i18n="ask_customer_info">ข้อมูลที่ต้องขอจากลูกค้าตอนสั่งซื้อ</label>
+    <label class="check"><input type="checkbox" id="p-ask-uid">
+      <span data-i18n="ask_uid">ไอดีเกม / UID</span></label>
+    <label class="check"><input type="checkbox" id="p-ask-login">
+      <span data-i18n="ask_login">ชื่อผู้ใช้ + รหัสผ่านของลูกค้า (เกมที่ต้องเข้าไอดีไปเติมให้)</span></label>
+    <div class="hint" data-i18n="ask_hint">ใช้กับของเติมเกม — ติ๊กแล้วลูกค้าต้องกรอกให้ครบก่อนถึงจะกดสั่งซื้อได้ ข้อมูลจะโชว์ในออเดอร์หลังบ้านให้คุณเติมได้ถูกไอดี</div>
+
     <div id="p-msg" class="msg"></div>
     <button class="btn-primary" id="p-save" data-i18n="save">บันทึก</button>
     <button class="btn-link center danger hidden" id="p-delete" data-i18n="delete">ลบ</button>

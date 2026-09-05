@@ -46,12 +46,14 @@
 
 ## โครงสร้างข้อมูล (Firestore)
 - `users/{uid}` — email, name, phone, provider, **role**, **credit**
-- `products/{id}` — name, price, stock, active, **digital**, hasImage, **category**
+- `products/{id}` — name, price, stock, active, **digital**, hasImage, **category**, askUid, askLogin
   (category = รหัสหมวดจาก `CATEGORIES` ใน shop-config.js — ค่าว่าง = ยังไม่ระบุหมวด
    สินค้าเก่าที่ไม่มีฟิลด์นี้ต้องยังโผล่ในแท็บ "ทั้งหมด" เสมอ)
 - `productImages/{id}` — image (data URL) ของสินค้ารหัสนั้น **แยกออกมาเพื่อไม่ให้หน้าร้านหนัก**
 - `products/{id}/stockItems/{itemId}` — login, password, note, status (available/sold)
 - `orders/{id}` — uid, items[], total, status (pending/approved/rejected)
+  (items[] ของเติมเกมมี gameUid / gameLogin / gamePassword ที่ลูกค้ากรอกตอนสั่ง
+   แอดมินกดลบ gameLogin/gamePassword ทิ้งได้หลังเติมเสร็จ → customerInfoClearedAt)
 - `topups/{id}` — uid, amount, method, hasSlip, angpaoLink, status
   (สถานะ `processing` = บอทกำลังกดรับซองอยู่ ยังไม่จบ)
 - `topupSlips/{topupId}` — slip (data URL) **แยกออกมาเพื่อไม่ให้ตารางหลังบ้านหนัก**

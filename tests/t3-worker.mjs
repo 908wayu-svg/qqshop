@@ -105,6 +105,9 @@ function resetDb() {
   DOCS.set("products/p2", F({ name: "ของไม่จำกัด", price: 20, active: true }));
   DOCS.set("products/p3", F({ name: "ปิดขาย", price: 50, stock: 9, active: false }));
   DOCS.set("products/p4", F({ name: "ราคายังไม่ตั้ง", price: 0, stock: 9, active: true }));
+  // ของเติมเกม — แอดมินติ๊กว่าต้องขอข้อมูลไอดีจากลูกค้า
+  DOCS.set("products/pUid", F({ name: "เพชร 100 เม็ด", price: 50, active: true, askUid: true }));
+  DOCS.set("products/pLogin", F({ name: "เติมเข้าไอดีลูกค้า", price: 80, active: true, askLogin: true }));
 }
 const withUser = (uid, credit = 1000) => DOCS.set("users/" + uid, F({ name: "ลูกค้า", email: "c@x.com", credit }));
 
@@ -149,6 +152,42 @@ await bad([{ id: "p1", qty: "abc" }], "BAD_QTY", "จำนวนเป็นต
 await bad([{ id: "p1", qty: 1e9 }], "BAD_QTY", "จำนวนมหาศาล");
 await bad(Array.from({ length: 60 }, () => ({ id: "p1", qty: 1 })), "TOO_MANY_ITEMS", "รายการเยอะเกิน");
 await bad([{ id: "p1", qty: 4 }, { id: "p1", qty: 4 }], "OUT_OF_STOCK", "รวมจำนวนซ้ำก่อนเช็คสต๊อก");
+
+section("ของเติมเกม — ข้อมูลไอดีลูกค้า");
+const itemFields = key => {
+  const k = [...DOCS.keys()].find(x => x.startsWith("orders/"));
+  return DOCS.get(k).items.arrayValue.values[0].mapValue.fields[key];
+};
+
+resetDb(); u = freshUid(); withUser(u);
+r = await call("/order", { idToken: "token:" + u, items: [{ id: "pUid", qty: 1, gameUid: "  12345678  " }] });
+ok("สั่งของที่ขอ UID ได้เมื่อกรอกมา", r.body.ok === true, JSON.stringify(r.body));
+ok("เก็บ UID ลงออเดอร์ (ตัดช่องว่างหัวท้าย)", itemFields("gameUid")?.stringValue === "12345678",
+  itemFields("gameUid")?.stringValue);
+
+resetDb(); u = freshUid(); withUser(u);
+r = await call("/order", { idToken: "token:" + u,
+  items: [{ id: "pLogin", qty: 1, gameLogin: "player01", gamePassword: "pw1234" }] });
+ok("สั่งของที่ขอชื่อผู้ใช้+รหัสผ่านได้", r.body.ok === true, JSON.stringify(r.body));
+ok("เก็บชื่อผู้ใช้ลงออเดอร์", itemFields("gameLogin")?.stringValue === "player01");
+ok("เก็บรหัสผ่านลงออเดอร์", itemFields("gamePassword")?.stringValue === "pw1234");
+
+// สินค้าที่ไม่ได้ติ๊กขออะไร ลูกค้าแนบมาก็ต้องไม่ถูกบันทึก
+resetDb(); u = freshUid(); withUser(u);
+r = await call("/order", { idToken: "token:" + u,
+  items: [{ id: "p2", qty: 1, gameUid: "แอบยัด", gameLogin: "x", gamePassword: "y" }] });
+ok("สินค้าที่ไม่ได้ขอ ข้อมูลแนบมาถูกทิ้ง", r.body.ok === true && !itemFields("gameUid") && !itemFields("gamePassword"));
+
+// ยาวเกินต้องถูกตัด กันยัดข้อมูลก้อนใหญ่เข้าฐานข้อมูล
+resetDb(); u = freshUid(); withUser(u);
+r = await call("/order", { idToken: "token:" + u, items: [{ id: "pUid", qty: 1, gameUid: "9".repeat(500) }] });
+ok("ตัดข้อมูลที่ยาวเกิน 120 ตัว", itemFields("gameUid")?.stringValue.length === 120,
+  "ได้ " + itemFields("gameUid")?.stringValue.length);
+
+await bad([{ id: "pUid", qty: 1 }], "NEED_CUSTOMER_INFO", "ขอ UID แต่ไม่กรอก = ปฏิเสธ");
+await bad([{ id: "pUid", qty: 1, gameUid: "   " }], "NEED_CUSTOMER_INFO", "กรอก UID เป็นช่องว่าง = ปฏิเสธ");
+await bad([{ id: "pLogin", qty: 1, gameLogin: "player01" }], "NEED_CUSTOMER_INFO", "กรอกชื่อผู้ใช้แต่ไม่กรอกรหัสผ่าน = ปฏิเสธ");
+await bad([{ id: "pLogin", qty: 1, gamePassword: "pw" }], "NEED_CUSTOMER_INFO", "กรอกรหัสผ่านแต่ไม่กรอกชื่อผู้ใช้ = ปฏิเสธ");
 
 resetDb(); u = freshUid(); withUser(u, 100);
 r = await call("/order", { idToken: "token:" + u, items: [{ id: "p1", qty: 1 }] });

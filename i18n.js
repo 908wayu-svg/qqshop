@@ -64,6 +64,7 @@ const I18N = {
     o_PRODUCT_INACTIVE: "มีสินค้าในตะกร้าที่ปิดขายไปแล้ว",
     o_OUT_OF_STOCK: "สินค้าบางรายการมีไม่พอ กรุณาลดจำนวนลง",
     o_NOT_ENOUGH_CREDIT: "เครดิตไม่พอ กรุณาเติมเงินก่อน",
+    o_NEED_CUSTOMER_INFO: "กรุณากรอกข้อมูลไอดีเกมให้ครบก่อนสั่งซื้อ",
     o_EMPTY_CART: "ตะกร้าว่างเปล่า",
     o_BAD_QTY: "จำนวนสินค้าไม่ถูกต้อง",
     o_BAD_ITEM: "ข้อมูลสินค้าไม่ถูกต้อง",
@@ -187,6 +188,21 @@ const I18N = {
     product_category: "หมวดหมู่", category_none: "ยังไม่ระบุหมวด",
     cat_all: "ทั้งหมด", cat_game_id: "ไอดีเกม", cat_topup: "เติมเกม",
 
+    // ข้อมูลไอดีลูกค้า (ของเติมเกม)
+    ask_customer_info: "ข้อมูลที่ต้องขอจากลูกค้าตอนสั่งซื้อ",
+    ask_uid: "ไอดีเกม / UID",
+    ask_login: "ชื่อผู้ใช้ + รหัสผ่านของลูกค้า (เกมที่ต้องเข้าไอดีไปเติมให้)",
+    ask_hint: "ใช้กับของเติมเกม — ติ๊กแล้วลูกค้าต้องกรอกให้ครบก่อนถึงจะกดสั่งซื้อได้ ข้อมูลจะโชว์ในออเดอร์หลังบ้านให้คุณเติมได้ถูกไอดี",
+    your_game_uid: "ไอดีเกม / UID ของคุณ",
+    your_game_login: "ชื่อผู้ใช้ของไอดีที่จะให้เติม",
+    your_game_password: "รหัสผ่าน",
+    fill_customer_info: "กรุณากรอกข้อมูลไอดีเกมให้ครบก่อนสั่งซื้อ",
+    password_warning: "⚠ ทางร้านจะเข้าไอดีของคุณเพื่อเติมให้ แนะนำให้เปลี่ยนรหัสผ่านทันทีหลังเติมเสร็จ",
+    customer_info: "ข้อมูลไอดีลูกค้า",
+    clear_customer_info: "ลบรหัสผ่านลูกค้า",
+    confirm_clear_customer_info: "ลบชื่อผู้ใช้และรหัสผ่านของลูกค้าออกจากออเดอร์นี้?\n\nใช้ตอนเติมเสร็จแล้ว จะได้ไม่เก็บรหัสผ่านลูกค้าไว้ในระบบ (ไอดีเกม/UID ยังเก็บไว้เป็นหลักฐาน)",
+    customer_info_cleared: "ลบรหัสผ่านลูกค้าแล้ว",
+
     // จัดการสมาชิก
     add_credit: "เพิ่มเครดิต", add_credit_to: "เพิ่มเครดิตให้", credit_amount: "จำนวนเครดิต",
     make_admin: "ตั้งเป็นแอดมิน", remove_admin: "ถอดสิทธิ์แอดมิน", cannot_demote_self: "ถอดสิทธิ์แอดมินของตัวเองไม่ได้",
@@ -252,6 +268,7 @@ const I18N = {
     o_PRODUCT_INACTIVE: "Your cart has a product that is no longer listed",
     o_OUT_OF_STOCK: "Not enough stock for some items — please reduce the quantity",
     o_NOT_ENOUGH_CREDIT: "Not enough credit. Please top up first.",
+    o_NEED_CUSTOMER_INFO: "Please fill in your game account details before ordering",
     o_EMPTY_CART: "Your cart is empty",
     o_BAD_QTY: "Invalid quantity",
     o_BAD_ITEM: "Invalid product data",
@@ -368,6 +385,21 @@ const I18N = {
     // Product categories
     product_category: "Category", category_none: "No category",
     cat_all: "All", cat_game_id: "Game accounts", cat_topup: "Game top-up",
+
+    // Customer account details (for top-up products)
+    ask_customer_info: "Details to collect from the customer at checkout",
+    ask_uid: "Game ID / UID",
+    ask_login: "Customer's username + password (for games you must log into)",
+    ask_hint: "For top-up products — when ticked, the customer must fill these in before they can place the order. The details show up on the order in the admin panel.",
+    your_game_uid: "Your game ID / UID",
+    your_game_login: "Username of the account to top up",
+    your_game_password: "Password",
+    fill_customer_info: "Please fill in your game account details before ordering",
+    password_warning: "⚠ We will sign into your account to top it up. Change your password right after it is done.",
+    customer_info: "Customer account details",
+    clear_customer_info: "Delete customer password",
+    confirm_clear_customer_info: "Delete the customer's username and password from this order?\n\nUse this once the top-up is done, so passwords are not kept in the system (the game ID / UID stays as a record).",
+    customer_info_cleared: "Customer password deleted",
 
     add_credit: "Add credit", add_credit_to: "Add credit to", credit_amount: "Credit amount",
     make_admin: "Make admin", remove_admin: "Remove admin", cannot_demote_self: "You can not remove your own admin rights",

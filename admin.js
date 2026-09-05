@@ -237,18 +237,42 @@ function renderOrders() {
         <td data-label="${t("date")}">${fmtDateTime(o._date)}</td>
         <td data-label="${t("customer")}">${esc(o.customerName || "—")}<br><small>${esc(o.customerEmail || "")}</small>
             <br><small class="credit-note">${t("credit")}: ${money(creditOf(o.uid))}</small></td>
-        <td data-label="${t("items")}"><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small></td>
+        <td data-label="${t("items")}"><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small>
+            ${customerInfoBlock(o)}</td>
         <td class="num" data-label="${t("amount")}">${money(o.total)}${priceWarnLabel(pc)}</td>
         <td data-label="${t("status")}">${statusBadge(o.status)}${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
         <td class="actions">${o.status === "pending" ? `
           <button class="btn-small ok" data-act="approve-order" data-id="${o.id}">${t("approve")}</button>
           <button class="btn-small danger" data-act="reject-order" data-id="${o.id}">${t("reject")}</button>` : ""}
+          ${hasCustomerPassword(o) ? `
+          <button class="btn-small" data-act="clear-cust-info" data-id="${o.id}">${t("clear_customer_info")}</button>` : ""}
         </td>
       </tr>`;
     }).join("")}</tbody>`;
 }
 
 const creditOf = uid => Number(USERS.find(u => u.id === uid)?.credit || 0);
+
+// ===== ข้อมูลไอดีเกมที่ลูกค้ากรอกมา (ของเติมเกม) =====
+// โชว์ให้แอดมินเห็นในออเดอร์ จะได้เติมเข้าไอดีถูกคน
+const hasCustomerInfo = o => (o.items || []).some(i => i.gameUid || i.gameLogin || i.gamePassword);
+const hasCustomerPassword = o => (o.items || []).some(i => i.gameLogin || i.gamePassword);
+
+function customerInfoBlock(o) {
+  if (!hasCustomerInfo(o)) return "";
+  const line = (label, value) => value
+    ? `<div class="ci-row"><span>${label}</span><b>${esc(value)}</b>
+         <button class="copy" data-copy="${esc(value)}">⧉</button></div>` : "";
+  const blocks = (o.items || []).filter(i => i.gameUid || i.gameLogin || i.gamePassword).map(i => `
+    <div class="ci-item">
+      <div class="ci-name">${esc(i.name)}</div>
+      ${line(t("ask_uid"), i.gameUid)}
+      ${line(t("item_login"), i.gameLogin)}
+      ${line(t("item_password"), i.gamePassword)}
+    </div>`).join("");
+  return `<div class="cust-info"><div class="ci-head">${t("customer_info")}</div>${blocks}
+    ${o.customerInfoClearedAt ? `<div class="ci-cleared">${t("customer_info_cleared")}</div>` : ""}</div>`;
+}
 
 // ยอดเงินในออเดอร์ส่งมาจากเบราว์เซอร์ลูกค้า จึงต้องคิดใหม่จากราคาสินค้าจริงเพื่อกันการแก้ราคา
 // ถ้าอ้างถึงสินค้าที่ไม่มีในระบบ ต้องเตือนด้วย ไม่ใช่เงียบ (ไม่งั้นเลี่ยงการตรวจได้ด้วยรหัสมั่ว)
@@ -378,6 +402,8 @@ async function openProductModal(product) {
   v("p-category", product?.category);
   document.getElementById("p-active").checked = product ? product.active !== false : true;
   document.getElementById("p-digital").checked = !!product?.digital;
+  document.getElementById("p-ask-uid").checked = !!product?.askUid;
+  document.getElementById("p-ask-login").checked = !!product?.askLogin;
   document.getElementById("p-delete").classList.toggle("hidden", !product);
   setMsg("p-msg", "");
   renderProductPreview();
@@ -486,6 +512,9 @@ async function saveProduct() {
     ...(IMAGE_CHANGED || !EDITING_PRODUCT ? { image: PRODUCT_IMAGE } : {}),
     active: document.getElementById("p-active").checked,
     digital,
+    // ของเติมเกม: บอกหน้าร้านว่าต้องขออะไรจากลูกค้าก่อนสั่งซื้อ
+    askUid: document.getElementById("p-ask-uid").checked,
+    askLogin: document.getElementById("p-ask-login").checked,
     sort: EDITING_PRODUCT?.sort ?? PRODUCTS.length,
   };
   // สินค้าดิจิทัลไม่ให้พิมพ์สต๊อกเอง ระบบนับจากคลังให้
@@ -754,6 +783,10 @@ document.getElementById("dash").addEventListener("click", async e => {
         });
       } else if (act === "reject-order" && confirm(t("confirm_reject"))) {
         await QQ.rejectOrder(id);
+        await refreshAfter(() => patchRow(ORDERS, "orders", id));
+      } else if (act === "clear-cust-info" && confirm(t("confirm_clear_customer_info"))) {
+        // เติมเกมเสร็จแล้ว ไม่ควรเก็บรหัสผ่านลูกค้าไว้ในระบบต่อ
+        await QQ.clearOrderCustomerInfo(id);
         await refreshAfter(() => patchRow(ORDERS, "orders", id));
       } else if (act === "approve-topup") {
         const row = TOPUPS.find(x => x.id === id);
