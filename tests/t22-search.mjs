@@ -187,6 +187,10 @@ ok("ตัวเลือกการเรียงแปลตามภาษ�
   $("sort").querySelector('option[value="price_asc"]').textContent.includes("low"),
   $("sort").querySelector('option[value="price_asc"]').textContent);
 ok("ข้อความจำนวนที่พบแปลตามภาษา", $("result-count").textContent.includes("Found"), $("result-count").textContent);
+ok("พบหลายชิ้นใช้ items", $("result-count").textContent.trim() === "Found 2 items", $("result-count").textContent);
+await type("q", "1000 diamonds");
+ok("พบชิ้นเดียวใช้ item ไม่ใช่ items", $("result-count").textContent.trim() === "Found 1 item", $("result-count").textContent);
+await type("q", "diamonds");
 window.toggleLang();
 await tick(2);
 

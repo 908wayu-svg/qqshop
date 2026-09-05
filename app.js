@@ -151,8 +151,9 @@ function renderProducts() {
   const count = document.getElementById("result-count");
   if (count) {
     // ไม่ต้องบอกจำนวนตอนที่ยังไม่ได้กรองอะไรเลย — รกเปล่าๆ
+    // อังกฤษต้องใช้ item/items ให้ถูกพจน์ ("Found 1 items" อ่านแล้วสะดุด)
     count.textContent = hasFilters() && list.length
-      ? `${t("found_prefix")} ${list.length} ${t("found_suffix")}` : "";
+      ? `${t("found_prefix")} ${list.length} ${t(list.length === 1 ? "found_suffix_one" : "found_suffix")}` : "";
   }
 
   if (!list.length) {
