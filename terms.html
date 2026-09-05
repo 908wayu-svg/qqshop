@@ -283,11 +283,20 @@
 // ลิงก์ติดต่อ + ตัวเลขในเงื่อนไข ดึงมาจาก shop-config.js ที่เดียว จะได้ไม่ต้องไล่แก้หลายจุด
 import { SHOP } from "./shop-config.js";
 
+// รับเฉพาะลิงก์ http/https เหมือนที่ contact.js ทำ — ถ้าตั้งค่าผิดรูปแบบ
+// (พิมพ์ตกหล่น/ใส่ javascript:) ให้ซ่อนกล่องติดต่อไปเลย ดีกว่าปล่อยลิงก์เสียไว้ในหน้า
+const safeUrl = u => {
+  try {
+    const x = new URL(String(u), location.href);
+    return (x.protocol === "https:" || x.protocol === "http:") ? x.href : null;
+  } catch { return null; }
+};
 const fb = (SHOP.contact?.channels || []).find(c => c.id === "facebook" && c.enabled !== false);
+const fbUrl = fb && safeUrl(fb.url);
 for (const id of ["policy-contact-th", "policy-contact-en"]) {
   const a = document.getElementById(id);
   if (!a) continue;
-  if (fb) a.href = fb.url; else a.closest(".card")?.remove();
+  if (fbUrl) a.href = fbUrl; else a.closest(".card")?.remove();
 }
 
 // ระยะเวลาเคลมเปลี่ยนได้ที่ SHOP.policy ใน shop-config.js (ตัวเลขในหน้านี้จะเปลี่ยนตามทุกจุด)

@@ -2,6 +2,7 @@
 import { buildSandbox, makeDom, loadI18n, runClassic, tick } from "./harness.mjs";
 import * as store from "./fake/store.mjs";
 import * as fs2 from "./fake/firestore.mjs";
+import * as authSdk from "./fake/auth-sdk.mjs";
 
 buildSandbox();
 const dom = makeDom("index.html");
@@ -232,6 +233,23 @@ section("สั่งซื้อสำเร็จแล้วล้างต�
   ok("ไม่มีข้อความว่าล้มเหลวโผล่มาด้วย",
     !globalThis.__alerts.some(a => a.includes("ไม่สำเร็จ") || a.includes("ผิดพลาด")),
     JSON.stringify(globalThis.__alerts));
+}
+
+section("เซสชันหมดอายุระหว่างเปิดหน้าค้างไว้");
+{
+  // ลูกค้าเปิดหน้าทิ้งไว้นาน แล้วกดสั่งซื้อ — ต้องบอกให้เข้าสู่ระบบใหม่
+  // ไม่ใช่โยนข้อความภาษาโปรแกรมที่อ่านไม่รู้เรื่องใส่หน้าลูกค้า
+  const realUser = authSdk.authObj.currentUser;
+  authSdk.authObj.currentUser = null;
+  globalThis.__alerts = [];
+  let crashed = null;
+  try { await QQ.createOrder([{ id: "pD", qty: 1 }]); }
+  catch (e) { crashed = { msg: e.message, code: e.orderCode }; }
+  authSdk.authObj.currentUser = realUser;
+
+  ok("บอกรหัสสาเหตุว่าเซสชันหมดอายุ", crashed?.code === "UNAUTHORIZED", JSON.stringify(crashed));
+  ok("ข้อความเป็นภาษาคน ไม่ใช่ข้อความภาษาโปรแกรม",
+    typeof crashed?.msg === "string" && crashed.msg.includes("เข้าสู่ระบบ"), crashed?.msg);
 }
 
 console.log("\nสรุป(รวมท้าย): ผ่าน " + pass + " / ไม่ผ่าน " + fail);

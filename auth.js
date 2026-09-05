@@ -367,10 +367,17 @@ export const QQ = {
     // ไม่งั้นหน้าร้านโชว์ว่ามีของ แต่ลูกค้าซื้อไปได้ไอดีว่างเปล่า
     const broken = items.filter(i => i.status === "available" && stockStatus(i) === "draft");
     if (broken.length) {
+      // ต้องแบ่งเป็นชุดเหมือนที่อื่น — Firestore รับได้ 500 การเขียนต่อ 1 batch
+      // ถ้าของพังพร้อมกันเกิน 500 ชิ้น แล้วยิงรวดเดียวจะพังทั้งคำสั่ง
       const col = collection(db, "products", productId, "stockItems");
-      const batch = writeBatch(db);
-      broken.forEach(i => { batch.update(doc(col, i.id), { status: "draft" }); i.status = "draft"; });
-      await batch.commit();
+      for (let i = 0; i < broken.length; i += 400) {
+        const batch = writeBatch(db);
+        broken.slice(i, i + 400).forEach(it => {
+          batch.update(doc(col, it.id), { status: "draft" });
+          it.status = "draft";
+        });
+        await batch.commit();
+      }
     }
 
     const available = items.filter(i => i.status === "available").length;
@@ -382,12 +389,17 @@ export const QQ = {
   // สั่งซื้อผ่านเซิร์ฟเวอร์ ส่งไปแค่รหัสสินค้ากับจำนวน
   // ราคา/ยอดรวม/สต๊อก/เครดิต ตรวจและคิดที่ฝั่งเซิร์ฟเวอร์ทั้งหมด ลูกค้าแก้ไม่ได้
   async createOrder(items) {
+    // เซสชันอาจหมดอายุระหว่างที่ลูกค้าเปิดหน้าค้างไว้ ต้องบอกให้เข้าสู่ระบบใหม่
+    // ไม่ใช่ปล่อยให้พังเป็นข้อความภาษาโปรแกรมที่ลูกค้าอ่านไม่รู้เรื่อง
+    const idToken = await auth?.currentUser?.getIdToken();
+    if (!idToken) throw Object.assign(new Error(t("o_UNAUTHORIZED")), { orderCode: "UNAUTHORIZED" });
+
     // มีเพดานเวลา ไม่งั้นเน็ตหลุดกลางทางแล้วปุ่มสั่งซื้อค้างไปเรื่อยๆ
     const res = await fetchWithTimeout(ORDER_API, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        idToken: await auth.currentUser.getIdToken(),
+        idToken,
         // ข้อมูลไอดีเกมของลูกค้าส่งไปด้วย (เฉพาะสินค้าที่แอดมินติ๊กว่าต้องขอ)
         // เซิร์ฟเวอร์ตรวจซ้ำเองว่าสินค้านั้นขอจริงไหม ก่อนบันทึกลงออเดอร์
         items: items.map(i => ({
