@@ -195,6 +195,18 @@ main{max-width:1080px;margin:0 auto;padding:26px 20px 52px}
 .panel h2{margin-top:0;font-size:20px}
 .img-panel{max-width:min(92vw,640px);padding:8px;background:transparent;border:none;box-shadow:none}
 .img-panel img{width:100%;border-radius:14px;display:block}
+
+/* กล่องอ่านข้อมูลสลิปอัตโนมัติ (ใต้รูปสลิปเต็มจอ) */
+.slip-ocr{margin-top:10px;background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:12px 14px;font-size:13px}
+.slip-ocr:empty{display:none}
+.slip-ocr-loading,.slip-ocr-error,.slip-ocr-empty{color:var(--text-2)}
+.slip-ocr-warn{color:var(--text-2);font-size:12px;margin-bottom:8px;line-height:1.4}
+.slip-ocr-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;
+  border-top:1px solid var(--border)}
+.slip-ocr-row:first-of-type{border-top:none}
+.slip-ocr-row span{color:var(--text-2)}
+.slip-ocr-row b{text-align:right;min-width:0;overflow-wrap:break-word}
 .btn-close{background:var(--field);border:1px solid var(--border);width:32px;height:32px;
   border-radius:50%;font-size:19px;cursor:pointer;float:right;color:var(--text-2);
   line-height:1;transition:background .15s,color .15s}

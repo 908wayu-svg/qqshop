@@ -241,9 +241,12 @@
   </div>
 </div>
 
-<!-- ดูรูปเต็ม -->
+<!-- ดูรูปเต็ม + อ่านข้อมูลสลิปอัตโนมัติ -->
 <div class="overlay" id="img-overlay" onclick="closePanel('img-overlay')">
-  <div class="panel img-panel"><img id="img-full" alt=""></div>
+  <div class="panel img-panel">
+    <img id="img-full" alt="">
+    <div id="slip-ocr" class="slip-ocr"></div>
+  </div>
 </div>
 
 <script src="i18n.js"></script>

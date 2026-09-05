@@ -13,6 +13,96 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtNum = n => Number(n || 0).toLocaleString();
 
+// ===== อ่านตัวเลขจากรูปสลิปอัตโนมัติ (ตัวช่วยเทียบเร็วๆ ไม่ใช่ตัวยืนยันความจริง) =====
+// ทำงานในเบราว์เซอร์ล้วนๆ ด้วย Tesseract.js — รูปสลิปไม่ถูกส่งออกไปที่ไหนทั้งสิ้น
+// อ่านผิดได้เสมอ (ภาพเบลอ/ธนาคารจัดหน้าต่างกัน) แอดมินต้องเทียบกับแอปธนาคารจริงก่อนอนุมัติ
+let ocrLibPromise = null;
+function loadOcrLib() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (ocrLibPromise) return ocrLibPromise;
+  ocrLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+    s.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error("โหลดตัวอ่านสลิปไม่สำเร็จ"));
+    s.onerror = () => reject(new Error("โหลดตัวอ่านสลิปไม่สำเร็จ"));
+    document.head.appendChild(s);
+  }).catch(e => { ocrLibPromise = null; throw e; });   // โหลดพลาด = ลองใหม่ได้ครั้งหน้า
+  return ocrLibPromise;
+}
+
+// แยกยอดเงิน/วันที่/เวลา/ชื่อผู้โอน จากตัวหนังสือที่ OCR อ่านออกมา
+// แยกเป็นฟังก์ชันล้วน (ไม่แตะ DOM/เครือข่าย) จะได้ทดสอบด้วยข้อความตัวอย่างได้โดยไม่ต้องพึ่งกล้อง/OCR จริง
+function parseSlipText(text) {
+  const raw = String(text || "").replace(/\r/g, "");
+  const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // ยอดเงิน: เลขทศนิยม 2 ตำแหน่งทุกตัวที่เจอ (ส่วนใหญ่มีแค่ตัวเดียวคือยอดโอน)
+  // ถ้าเจอหลายตัว เอาตัวที่ใหญ่ที่สุด (เลขเวลา/เลขบัญชีมักไม่มีทศนิยม 2 ตำแหน่งพอดี)
+  const amounts = [...raw.matchAll(/([\d,]{1,12}\.\d{2})\s*(?:บาท|฿|thb)?/gi)]
+    .map(m => Number(m[1].replace(/,/g, "")))
+    .filter(n => Number.isFinite(n) && n > 0);
+  const amount = amounts.length ? Math.max(...amounts) : null;
+
+  // วันที่: ทั้งแบบเลขล้วน (05/09/2569) และแบบเดือนย่อไทย (5 ก.ย. 69)
+  const thMonths = "ม\\.?ค\\.?|ก\\.?พ\\.?|มี\\.?ค\\.?|เม\\.?ย\\.?|พ\\.?ค\\.?|มิ\\.?ย\\.?|"
+    + "ก\\.?ค\\.?|ส\\.?ค\\.?|ก\\.?ย\\.?|ต\\.?ค\\.?|พ\\.?ย\\.?|ธ\\.?ค\\.?";
+  const dateMatch =
+    raw.match(new RegExp(`\\b\\d{1,2}\\s?(?:${thMonths})\\s?\\d{2,4}\\b`))
+    || raw.match(/\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/);
+  const date = dateMatch ? dateMatch[0].trim() : null;
+
+  // เวลา: 14:32 / 14:32:10 / 14.32 น. — ตัดคำว่า "น." ท้ายออก เอาแค่ตัวเลขเวลาไปแสดง
+  const timeMatch = raw.match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)(?:[:.]([0-5]\d))?\b/);
+  const time = timeMatch
+    ? timeMatch[1] + ":" + timeMatch[2] + (timeMatch[3] ? ":" + timeMatch[3] : "")
+    : null;
+
+  // ชื่อผู้โอน: หาแถวที่ขึ้นต้นด้วย "จาก" / "ผู้โอน" / "From" แล้วตัดคำนำหน้าออก
+  const senderLine = lines.find(l => /^(จาก|ผู้โอน|from)[\s:：]/i.test(l));
+  const senderName = senderLine
+    ? (senderLine.replace(/^(จาก|ผู้โอน|from)[\s:：]*/i, "").trim() || null)
+    : null;
+
+  return { amount, date, time, senderName, raw };
+}
+
+// เปิดให้ชุดทดสอบเรียกใช้ตรงๆ ได้ (ทดสอบด้วยข้อความตัวอย่างโดยไม่ต้องพึ่ง OCR จริง)
+export { parseSlipText };
+
+function renderSlipOcr(info) {
+  const box = document.getElementById("slip-ocr");
+  if (!box) return;
+  if (info.loading) { box.innerHTML = `<div class="slip-ocr-loading">${t("ocr_reading")}</div>`; return; }
+  if (info.error) { box.innerHTML = `<div class="slip-ocr-error">${t("ocr_failed")}</div>`; return; }
+
+  const row = (label, val) => val
+    ? `<div class="slip-ocr-row"><span>${esc(label)}</span><b>${esc(val)}</b></div>` : "";
+  const hasAny = info.amount != null || info.date || info.time || info.senderName;
+  box.innerHTML = `
+    <div class="slip-ocr-warn">${t("ocr_warning")}</div>
+    ${row(t("ocr_amount"), info.amount != null ? money(info.amount) : null)}
+    ${row(t("ocr_date"), info.date)}
+    ${row(t("ocr_time"), info.time)}
+    ${row(t("ocr_sender"), info.senderName)}
+    ${hasAny ? "" : `<div class="slip-ocr-empty">${t("ocr_nothing")}</div>`}
+  `;
+}
+
+// เปิดรูปสลิปเต็มจอ + เริ่มอ่านข้อมูลอัตโนมัติแบบไม่บล็อกหน้าจอ
+async function showSlip(dataUrl) {
+  document.getElementById("img-full").src = dataUrl;
+  document.getElementById("img-overlay").classList.add("open");
+  renderSlipOcr({ loading: true });
+  try {
+    const Tesseract = await loadOcrLib();
+    const { data } = await Tesseract.recognize(dataUrl, "tha+eng");
+    renderSlipOcr(parseSlipText(data.text));
+  } catch (e) {
+    console.warn("อ่านสลิปอัตโนมัติไม่สำเร็จ", e);
+    renderSlipOcr({ error: true });
+  }
+}
+
 // ===== กรองค่าที่มาจากผู้ใช้ก่อนเอาไปใส่ใน src/href =====
 // ลูกค้าเขียนฟิลด์ slip / angpaoLink เองได้ ถ้าไม่กรองจะยัดสคริปต์เข้าหน้าแอดมินได้
 const safeImg = s =>
@@ -839,11 +929,7 @@ document.getElementById("dash").addEventListener("click", async e => {
   }
   // คลิกรูปสลิปเพื่อดูขนาดเต็ม (รายการเก่าที่ฝังรูปไว้ในเอกสาร)
   const img = e.target.closest(".slip-thumb");
-  if (img) {
-    document.getElementById("img-full").src = img.src;
-    document.getElementById("img-overlay").classList.add("open");
-    return;
-  }
+  if (img) { await showSlip(img.src); return; }
 
   // รายการใหม่: โหลดสลิปตอนกดดู
   const slipBtn = e.target.closest("[data-slip]");
@@ -854,8 +940,7 @@ document.getElementById("dash").addEventListener("click", async e => {
     try {
       const data = safeImg(await QQ.fetchTopupSlip(slipBtn.dataset.slip));
       if (!data) { alert(t("slip_load_failed")); return; }
-      document.getElementById("img-full").src = data;
-      document.getElementById("img-overlay").classList.add("open");
+      await showSlip(data);
     } catch (err) {
       alert(QQ.friendlyError(err));
     } finally {
