@@ -124,7 +124,8 @@ header{position:sticky;top:0;background:var(--card);
 .hero p{margin:0;font-size:15px;line-height:1.6;opacity:.95}
 .hero-badges{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
 .hero-badges span{background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.35);
-  backdrop-filter:blur(4px);border-radius:20px;padding:6px 13px;font-size:13px;font-weight:600}
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  border-radius:20px;padding:6px 13px;font-size:13px;font-weight:600}
 
 /* ===== แท็บหมวดหมู่สินค้า (เหนือตะแกรงสินค้า) ===== */
 .cat-tabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
@@ -651,11 +652,12 @@ body.has-contact-fab main,body.has-contact-fab .wallet-main{padding-bottom:96px}
   .table-wrap td::before{content:attr(data-label);float:left;margin-right:14px;text-align:left;
     color:var(--muted);font-size:12px;font-weight:600}
   .table-wrap td.actions{display:flex;justify-content:flex-end;padding-top:10px}
-  .table-wrap td.actions:empty,.table-wrap td.actions:not(:has(button)){display:none}
+  .table-wrap td.actions:empty{display:none}
+  .table-wrap td.actions:not(:has(button)){display:none}
   /* แถว "ยังไม่มีข้อมูล" ไม่ต้องทำเป็นการ์ด */
   .table-wrap td.empty{display:block;text-align:center}
   .table-wrap td.empty::before{content:none}
-  .table-wrap tr:has(td.empty){background:none;border:none;padding:0}
+  .table-wrap tr.empty-row{background:none;border:none;padding:0}
 
   /* มือถือ: เหลือแค่ไอคอน กันปุ่มบังสินค้าแถวล่าง */
   .contact-fab{right:14px;bottom:14px;width:52px;height:52px;padding:0;

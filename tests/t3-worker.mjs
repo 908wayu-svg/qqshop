@@ -29,6 +29,10 @@ const DISABLED = new Set();
 let CLAIMS_DENIED = false;      // จำลอง service account ไม่มีสิทธิ์ตั้ง claim
 let txSeq = 0;
 let FAIL_COMMIT = 0;
+// ให้คำสั่งเขียนที่แตะเอกสารนี้พังหนึ่งครั้ง (เจาะจงกว่าการนับจำนวนครั้ง
+// เพราะระหว่างทางมีคำสั่งเขียนของตัวนับ rate limit แทรกอยู่ด้วย)
+let FAIL_COMMIT_PATH = null;
+const failCommitFor = p => { FAIL_COMMIT_PATH = p; };
 
 globalThis.fetch = async (url, opt = {}) => {
   url = String(url);
@@ -37,13 +41,22 @@ globalThis.fetch = async (url, opt = {}) => {
 
   if (url.includes("oauth2.googleapis.com/token")) return J({ access_token: "tok", expires_in: 3600 });
   if (url.includes("identitytoolkit")) {
+    // เส้นทางที่ต้องใช้สิทธิ์ของ service account (/v1/projects/<id>/accounts:...)
+    // ต่างจากเส้นทางตรวจโทเคนของผู้เรียก ซึ่งใช้ API key สาธารณะ
+    const isAdminOp = url.includes("/projects/");
+    if (isAdminOp && CLAIMS_DENIED) {
+      return J({ error: { message: "PERMISSION_DENIED: missing firebaseauth.users.update" } }, 403);
+    }
     // ตั้ง custom claim (เหมือน Admin SDK setCustomUserClaims)
     if (url.includes("accounts:update")) {
-      if (CLAIMS_DENIED) {
-        return J({ error: { message: "PERMISSION_DENIED: missing firebaseauth.users.update" } }, 403);
-      }
       CLAIMS.set(body.localId, JSON.parse(body.customAttributes || "{}"));
       return J({ localId: body.localId });
+    }
+    // อ่านบัญชีด้วยสิทธิ์ service account (ใช้ตอนตรวจสภาพเซิร์ฟเวอร์)
+    if (isAdminOp && url.includes("accounts:lookup")) {
+      const target = body.localId?.[0] || "";
+      return J({ users: [{ localId: target, email: "c@x.com",
+        customAttributes: JSON.stringify(CLAIMS.get(target) || {}) }] });
     }
     if (body?.idToken === "bad") return J({});
     const uid = String(body.idToken).replace("token:", "");
@@ -77,6 +90,10 @@ globalThis.fetch = async (url, opt = {}) => {
   }
   if (url.includes(":commit")) {
     if (FAIL_COMMIT > 0) { FAIL_COMMIT--; return J({ error: { message: "boom", status: "UNAVAILABLE" } }); }
+    if (FAIL_COMMIT_PATH && JSON.stringify(body).includes(FAIL_COMMIT_PATH)) {
+      FAIL_COMMIT_PATH = null;
+      return J({ error: { message: "boom", status: "UNAVAILABLE" } });
+    }
     const results = [];
     for (const w of body.writes) {
       if (w.delete) { DOCS.delete(short(w.delete)); results.push({}); continue; }
@@ -454,6 +471,16 @@ ok("ได้ claim", claimOf(B).admin === true);
 ok("เอกสารเป็น admin", strOf(DOCS.get("users/" + B).role) === "admin");
 ok("มีบันทึกไว้ว่าใครใช้รหัสลับ", logsOf().some(l => strOf(l.action) === "role.bootstrap"));
 
+section("bootstrap กับบัญชีที่ยังไม่มีเอกสารสมาชิก");
+{
+  const NB = freshUid();                 // ล็อกอินแล้วแต่ยังไม่มีเอกสารใน users
+  const rr = await call("/admin/bootstrap", { idToken: "token:" + NB, secret: env.ADMIN_BOOTSTRAP });
+  // เคยเป็นบั๊ก: NO_PROFILE ไม่อยู่ในรายการรหัสที่ส่งกลับได้ เลยกลายเป็น ADMIN_FAILED (500)
+  ok("บอกสาเหตุตรงๆ ว่ายังไม่มีเอกสารสมาชิก", rr.body.error === "NO_PROFILE", JSON.stringify(rr.body));
+  ok("ตอบเป็นข้อผิดพลาดฝั่งผู้เรียก ไม่ใช่ 500", rr.status === 400, String(rr.status));
+  ok("ไม่ได้สิทธิ์ติดตัวไป", claimOf(NB).admin !== true);
+}
+
 section("ตรวจสถานะสิทธิ์ของตัวเอง (/admin/whoami)");
 ar = await call("/admin/whoami", { idToken: "token:" + B });
 ok("แอดมินเห็นว่าตัวเองครบทั้งสองชั้น", ar.body.admin === true && ar.body.claim === true && ar.body.role === "admin");
@@ -468,6 +495,35 @@ DISABLED.add(D1);
 ar = await call("/admin/credit", { idToken: "token:" + D1, uid: C1, amount: 100 });
 ok("บัญชีถูกปิด = ใช้โทเคนเดิมทำอะไรไม่ได้", ar.body.error === "UNAUTHORIZED" && ar.status === 401);
 DISABLED.delete(D1);
+
+section("ตรวจสภาพเซิร์ฟเวอร์ (/admin/diagnose)");
+const DG = mkAdmin(freshUid());
+ok("รหัสลับผิด = ไม่ให้ดู", (await call("/admin/diagnose",
+  { idToken: "token:" + DG, secret: "รหัสมั่วxxxxxxxxxxxxxxxxxx" })).body.error === "BOOTSTRAP_BAD_SECRET");
+ar = await call("/admin/diagnose", { idToken: "token:" + DG, secret: env.ADMIN_BOOTSTRAP });
+ok("บอกว่าใช้ service account ตัวไหน", ar.body.serviceAccount === "x@y", JSON.stringify(ar.body));
+ok("บอกว่าตั้ง claim ได้หรือยัง", ar.body.claimsOk === true, JSON.stringify(ar.body));
+// เคยเป็นบั๊ก: ตรวจสภาพด้วยการ "เขียน claim เดิมทับ" ทำให้สิทธิ์ของคนกดตรวจหายได้
+ok("ตรวจสภาพต้องไม่ไปแตะ claim ของคนที่กดตรวจ", claimOf(DG).admin === true);
+
+denyClaims(true);
+ar = await call("/admin/diagnose", { idToken: "token:" + DG, secret: env.ADMIN_BOOTSTRAP });
+ok("ถ้า service account ไม่มีสิทธิ์ ต้องบอกว่ายังตั้ง claim ไม่ได้", ar.body.claimsOk === false, JSON.stringify(ar.body));
+ok("พร้อมบอกสาเหตุให้ไปแก้ต่อได้", String(ar.body.detail || "").includes("PERMISSION_DENIED"), ar.body.detail);
+denyClaims(false);
+
+section("ตั้งสิทธิ์แล้วเขียนเอกสารไม่สำเร็จ — ต้องไม่ทิ้ง claim ค้างไว้");
+{
+  const T2 = freshUid();
+  DOCS.set("users/" + T2, F({ name: "เป้าหมาย", email: "t2@x.com", credit: 0, role: "member" }));
+  failCommitFor("users/" + T2);          // ให้คำสั่งเขียนเอกสารของคนนี้พังหนึ่งครั้ง
+  ar = await call("/admin/role", { idToken: "token:" + A, uid: T2, makeAdmin: true });
+  ok("ตั้งสิทธิ์ไม่สำเร็จ = ตอบว่าล้มเหลว", ar.body.ok !== true, JSON.stringify(ar.body));
+  ok("เอกสารยังเป็น member เหมือนเดิม", strOf(DOCS.get("users/" + T2).role) === "member");
+  ok("claim ที่ใส่ไปก่อนหน้าถูกเก็บกวาดออก ไม่ค้างเป็นขยะ", claimOf(T2).admin !== true,
+    JSON.stringify(claimOf(T2)));
+  FAIL_COMMIT_PATH = null;
+}
 
 section("เส้นทางแอดมินที่ไม่มีอยู่จริง");
 ok("เส้นทางมั่วถูกปฏิเสธ", (await call("/admin/ห้าม", { idToken: "token:" + A })).body.error === "NOT_FOUND");

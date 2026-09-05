@@ -111,6 +111,14 @@ function renderSlipOcr(info) {
 // เปิดรูปสลิปเต็มจอ + เริ่มอ่านข้อมูลอัตโนมัติแบบไม่บล็อกหน้าจอ
 // เก็บเลขลำดับไว้กันผลลัพธ์ช้าของสลิปเก่ามาทับสลิปใหม่ที่เปิดตามมา
 // (เผลอเปิดสลิป A แล้วรีบปิดไปเปิดสลิป B ก่อน OCR ของ A จะเสร็จ — ผลของ A ต้องถูกทิ้ง ไม่ใช่โผล่ทับ B)
+// ตัวอ่านสลิปต้องโหลดไลบรารี + ชุดภาษาหลายสิบ MB จากอินเทอร์เน็ต
+// เน็ตช้า/หลุดกลางทาง = ค้างที่ "กำลังอ่าน..." ตลอดกาล ต้องมีเพดานเวลาเสมอ
+const OCR_TIMEOUT_MS = 90000;
+const withTimeout = (p, ms) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error("อ่านสลิปนานเกินไป")), ms)),
+]);
+
 let slipOcrSeq = 0;
 async function showSlip(dataUrl) {
   const mySeq = ++slipOcrSeq;
@@ -118,8 +126,8 @@ async function showSlip(dataUrl) {
   document.getElementById("img-overlay").classList.add("open");
   renderSlipOcr({ loading: true });
   try {
-    const Tesseract = await loadOcrLib();
-    const { data } = await Tesseract.recognize(dataUrl, "tha+eng");
+    const Tesseract = await withTimeout(loadOcrLib(), OCR_TIMEOUT_MS);
+    const { data } = await withTimeout(Tesseract.recognize(dataUrl, "tha+eng"), OCR_TIMEOUT_MS);
     if (mySeq !== slipOcrSeq) return;   // มีสลิปใบใหม่ถูกเปิดไปแล้วระหว่างรอ ผลนี้เก่าเกินไป
     renderSlipOcr(parseSlipText(data.text));
   } catch (e) {
@@ -339,7 +347,7 @@ function renderOverview() {
 function renderOrders() {
   const list = ORDERS.filter(o => matchFilter(o.status, ORDER_FILTER));
   const el = document.getElementById("table-orders");
-  if (!list.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
+  if (!list.length) { el.innerHTML = `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`; return; }
 
   el.innerHTML = `
     <thead><tr>
@@ -439,7 +447,7 @@ function slipCell(x) {
 function renderTopups() {
   const list = TOPUPS.filter(x => matchFilter(x.status, TOPUP_FILTER));
   const el = document.getElementById("table-topups");
-  if (!list.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
+  if (!list.length) { el.innerHTML = `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`; return; }
 
   el.innerHTML = `
     <thead><tr>
@@ -669,7 +677,7 @@ function renderMembers() {
     || (u.name || "").toLowerCase().includes(q)
     || (u.email || "").toLowerCase().includes(q));
   const el = document.getElementById("table-members");
-  if (!list.length) { el.innerHTML = `<tr><td class="empty">${t("no_data")}</td></tr>`; return; }
+  if (!list.length) { el.innerHTML = `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`; return; }
 
   el.innerHTML = `
     <thead><tr>

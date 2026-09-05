@@ -318,7 +318,7 @@ const ADMIN_ERRORS = new Set([
   "EMPTY_STOCK_ITEM", "OUT_OF_STOCK", "AMOUNT_MISSING", "AMOUNT_INVALID",
   "AMOUNT_TOO_LARGE", "WOULD_GO_NEGATIVE", "CANNOT_CHANGE_SELF", "BAD_REQUEST",
   "CLAIMS_PERMISSION", "CLAIMS_FAILED", "BOOTSTRAP_DISABLED", "BOOTSTRAP_BAD_SECRET",
-  "BUSY",
+  "NO_PROFILE", "BUSY",
 ]);
 
 // ---------- สร้างออเดอร์ (คิดราคาจากฝั่งเซิร์ฟเวอร์) ----------
@@ -819,13 +819,21 @@ async function adminSetRole(token, env, admin, { uid, makeAdmin }) {
 
   if (makeAdmin) {
     await setAdminClaim(env, uid, true);
-    await commit(token, [
-      {
-        update: { name: docPath("users", uid), fields: fsFields({ role: "admin" }) },
-        updateMask: { fieldPaths: ["role"] },
-      },
-      auditWrite(admin, "role.grant", { targetUid: uid, targetEmail: str(target.email) }),
-    ]);
+    try {
+      await commit(token, [
+        {
+          update: { name: docPath("users", uid), fields: fsFields({ role: "admin" }) },
+          updateMask: { fieldPaths: ["role"] },
+        },
+        auditWrite(admin, "role.grant", { targetUid: uid, targetEmail: str(target.email) }),
+      ]);
+    } catch (e) {
+      // เขียนเอกสารไม่สำเร็จหลังใส่ claim ไปแล้ว — เก็บกวาด claim ที่ค้างทิ้ง
+      // ไม่งั้นบัญชีนั้นจะมี claim ลอยอยู่โดยที่เอกสารยังเป็น member (สิทธิ์ยังไม่ได้จริง
+      // แต่เป็นเศษขยะที่ทำให้ตรวจสอบทีหลังสับสน)
+      await setAdminClaim(env, uid, false).catch(() => {});
+      throw e;
+    }
   } else {
     await commit(token, [
       {
@@ -851,14 +859,20 @@ async function adminBootstrap(token, env, user, { secret }) {
   if (!got[user.uid]) throw new Error("NO_PROFILE");
 
   await setAdminClaim(env, user.uid, true);
-  await commit(token, [
-    {
-      update: { name: docPath("users", user.uid), fields: fsFields({ role: "admin" }) },
-      updateMask: { fieldPaths: ["role"] },
-    },
-    auditWrite({ uid: user.uid, email: user.email }, "role.bootstrap",
-      { targetUid: user.uid, targetEmail: user.email || "" }),
-  ]);
+  try {
+    await commit(token, [
+      {
+        update: { name: docPath("users", user.uid), fields: fsFields({ role: "admin" }) },
+        updateMask: { fieldPaths: ["role"] },
+      },
+      auditWrite({ uid: user.uid, email: user.email }, "role.bootstrap",
+        { targetUid: user.uid, targetEmail: user.email || "" }),
+    ]);
+  } catch (e) {
+    // เขียนเอกสารไม่สำเร็จ = ยังไม่ได้สิทธิ์จริง (กฎต้องครบสองชั้น) เก็บ claim ที่ค้างทิ้งด้วย
+    await setAdminClaim(env, user.uid, false).catch(() => {});
+    throw e;
+  }
   return { uid: user.uid, admin: true };
 }
 
@@ -873,17 +887,18 @@ async function adminDiagnose(env, user, { secret }) {
   let serviceAccount = "";
   try { serviceAccount = JSON.parse(env.SA_KEY).client_email || ""; } catch { serviceAccount = "อ่านค่า SA_KEY ไม่ได้"; }
 
-  // ทดสอบสิทธิ์ตั้ง claim ด้วยการเขียนค่าเดิมทับตัวเอง (ไม่เปลี่ยนอะไร)
+  // ทดสอบสิทธิ์ด้วยการ "อ่าน" บัญชีผ่าน service account — ไม่เขียนอะไรเลย
+  // (เดิมทดสอบด้วยการเขียน claim เดิมทับตัวเอง ซึ่งถ้าอ่านค่าเดิมมาไม่ครบ
+  //  จะกลายเป็นล้าง claim ของคนที่กดตรวจทิ้งไปเฉยๆ — อันตรายเกินกว่าจะเป็นแค่ตัวตรวจสภาพ)
+  // สิทธิ์อ่านกับสิทธิ์เขียนอยู่ในบทบาทเดียวกัน (Firebase Authentication Admin)
+  // อ่านผ่าน = ตั้ง claim ได้ · ตัวตัดสินจริงคือตอนเรียก /admin/bootstrap หรือ /admin/role
   let claimsOk = false, detail = "";
   try {
     const authToken = await getAccessToken(env.SA_KEY, SCOPE_AUTH);
-    const res = await fetchWithTimeout(`${IDTOOLKIT}/projects/${PROJECT_ID}/accounts:update`, {
+    const res = await fetchWithTimeout(`${IDTOOLKIT}/projects/${PROJECT_ID}/accounts:lookup`, {
       method: "POST",
       headers: { Authorization: "Bearer " + authToken, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        localId: user.uid,
-        customAttributes: JSON.stringify(user.claims || {}),
-      }),
+      body: JSON.stringify({ localId: [user.uid] }),
     });
     const d = await res.json().catch(() => ({}));
     claimsOk = res.ok && !d.error;

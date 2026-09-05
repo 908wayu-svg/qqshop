@@ -227,7 +227,11 @@ async function callAdmin(path, payload = {}) {
 
   if (!data.ok) {
     const code = String(data.error || "ADMIN_FAILED");
-    throw Object.assign(new Error(t("a_" + code)), { adminCode: code });
+    // t() คืนชื่อคีย์กลับมาถ้าไม่มีคำแปล — รหัสใหม่ที่ยังไม่ได้แปลจะโผล่เป็น "a_XXX" ให้ผู้ใช้เห็น
+    // กันไว้ด้วยการถอยไปใช้ข้อความกลางแทน
+    const msg = t("a_" + code);
+    throw Object.assign(new Error(msg === "a_" + code ? t("a_ADMIN_FAILED") : msg),
+      { adminCode: code });
   }
   return data;
 }
