@@ -36,12 +36,32 @@ function parseSlipText(text) {
   const raw = String(text || "").replace(/\r/g, "");
   const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
 
-  // ยอดเงิน: เลขทศนิยม 2 ตำแหน่งทุกตัวที่เจอ (ส่วนใหญ่มีแค่ตัวเดียวคือยอดโอน)
-  // ถ้าเจอหลายตัว เอาตัวที่ใหญ่ที่สุด (เลขเวลา/เลขบัญชีมักไม่มีทศนิยม 2 ตำแหน่งพอดี)
-  const amounts = [...raw.matchAll(/([\d,]{1,12}\.\d{2})\s*(?:บาท|฿|thb)?/gi)]
-    .map(m => Number(m[1].replace(/,/g, "")))
-    .filter(n => Number.isFinite(n) && n > 0);
-  const amount = amounts.length ? Math.max(...amounts) : null;
+  // ยอดเงิน: เลขทศนิยม 2 ตำแหน่งทุกตัวที่เจอ — สลิปบางใบมีหลายตัว (ยอดคงเหลือ/ค่าธรรมเนียม/ยอดโอน)
+  // ต้องดูคำที่อยู่ใกล้ๆ ตัวเลขก่อนเลือก ไม่ใช่หยิบตัวที่ใหญ่สุดเฉยๆ
+  // ไม่งั้นสลิปที่ "ยอดคงเหลือ" มากกว่า "ยอดที่โอนจริง" จะโชว์ยอดผิด
+  // คำที่บอกว่า "ไม่ใช่ยอดโอน" ต้องดูเฉพาะบรรทัดเดียวกับตัวเลข (ป้ายพวกนี้อยู่ติดตัวเลขเสมอ)
+  // ส่วนคำที่บอกว่า "ใช่ยอดโอน" ดูบรรทัดก่อนหน้าได้ด้วย (สลิปบางใบขึ้นบรรทัด "จำนวนเงิน" ไว้เหนือตัวเลข)
+  const NEG_AMOUNT_KEYWORDS = /(คงเหลือ|ค่าธรรมเนียม|balance|fee)/i;
+  const POS_AMOUNT_KEYWORDS = /(จำนวนเงิน|โอนเงิน|โอน|amount|transfer)/i;
+  const amountCandidates = [];
+  lines.forEach((line, i) => {
+    for (const m of line.matchAll(/([\d,]{1,12}\.\d{2})/g)) {
+      const val = Number(m[1].replace(/,/g, ""));
+      if (!Number.isFinite(val) || val <= 0) continue;
+      amountCandidates.push({
+        val,
+        negative: NEG_AMOUNT_KEYWORDS.test(line),
+        positive: POS_AMOUNT_KEYWORDS.test((lines[i - 1] || "") + " " + line),
+      });
+    }
+  });
+  const positiveAmounts = amountCandidates.filter(c => c.positive && !c.negative);
+  const neutralAmounts = amountCandidates.filter(c => !c.positive && !c.negative);
+  // ลำดับความสำคัญ: มีคำว่า "จำนวนเงิน/โอน" กำกับ > ไม่มีคำกำกับเลย > เหลือแต่ตัวที่ติด "คงเหลือ/ค่าธรรมเนียม"
+  const amountPool = positiveAmounts.length ? positiveAmounts
+    : neutralAmounts.length ? neutralAmounts
+    : amountCandidates;
+  const amount = amountPool.length ? Math.max(...amountPool.map(c => c.val)) : null;
 
   // วันที่: ทั้งแบบเลขล้วน (05/09/2569) และแบบเดือนย่อไทย (5 ก.ย. 69)
   const thMonths = "ม\\.?ค\\.?|ก\\.?พ\\.?|มี\\.?ค\\.?|เม\\.?ย\\.?|พ\\.?ค\\.?|มิ\\.?ย\\.?|"
@@ -66,8 +86,8 @@ function parseSlipText(text) {
   return { amount, date, time, senderName, raw };
 }
 
-// เปิดให้ชุดทดสอบเรียกใช้ตรงๆ ได้ (ทดสอบด้วยข้อความตัวอย่างโดยไม่ต้องพึ่ง OCR จริง)
-export { parseSlipText };
+// เปิดให้ชุดทดสอบเรียกใช้ตรงๆ ได้ (ทดสอบด้วยข้อความตัวอย่าง/จำลอง Tesseract โดยไม่ต้องพึ่ง OCR จริง)
+export { parseSlipText, showSlip };
 
 function renderSlipOcr(info) {
   const box = document.getElementById("slip-ocr");
@@ -89,15 +109,21 @@ function renderSlipOcr(info) {
 }
 
 // เปิดรูปสลิปเต็มจอ + เริ่มอ่านข้อมูลอัตโนมัติแบบไม่บล็อกหน้าจอ
+// เก็บเลขลำดับไว้กันผลลัพธ์ช้าของสลิปเก่ามาทับสลิปใหม่ที่เปิดตามมา
+// (เผลอเปิดสลิป A แล้วรีบปิดไปเปิดสลิป B ก่อน OCR ของ A จะเสร็จ — ผลของ A ต้องถูกทิ้ง ไม่ใช่โผล่ทับ B)
+let slipOcrSeq = 0;
 async function showSlip(dataUrl) {
+  const mySeq = ++slipOcrSeq;
   document.getElementById("img-full").src = dataUrl;
   document.getElementById("img-overlay").classList.add("open");
   renderSlipOcr({ loading: true });
   try {
     const Tesseract = await loadOcrLib();
     const { data } = await Tesseract.recognize(dataUrl, "tha+eng");
+    if (mySeq !== slipOcrSeq) return;   // มีสลิปใบใหม่ถูกเปิดไปแล้วระหว่างรอ ผลนี้เก่าเกินไป
     renderSlipOcr(parseSlipText(data.text));
   } catch (e) {
+    if (mySeq !== slipOcrSeq) return;
     console.warn("อ่านสลิปอัตโนมัติไม่สำเร็จ", e);
     renderSlipOcr({ error: true });
   }

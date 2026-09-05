@@ -1,10 +1,10 @@
 // ===== ทดสอบตัวแยกข้อมูลจากสลิป (parseSlipText) =====
 // ไม่ยิง OCR จริง (ต้องใช้ Tesseract.js + รูปจริง) แค่ป้อนข้อความตัวอย่างที่ OCR "น่าจะ" อ่านออกมา
 // แล้วเช็คว่าแยกยอดเงิน/วันที่/เวลา/ชื่อผู้โอนได้ถูกต้อง
-import { buildSandbox, makeDom, loadI18n } from "./harness.mjs";
+import { buildSandbox, makeDom, loadI18n, tick } from "./harness.mjs";
 
 buildSandbox(); makeDom("admin.html"); loadI18n();
-const { parseSlipText } = await import("./sandbox/admin.mjs");
+const { parseSlipText, showSlip } = await import("./sandbox/admin.mjs");
 
 let pass = 0, fail = 0;
 const ok = (n, c, x = "") => { c ? (pass++, console.log("  ok  " + n)) : (fail++, console.log("  XX  " + n + (x ? "  -> " + x : ""))); };
@@ -40,7 +40,16 @@ section("มีตัวเลขหลายตัวปนกัน — ต้
     "เลขที่บัญชี 123-4-56789-0\nยอดคงเหลือ 50.25 บาท\nจำนวนเงินที่โอน 500.00 บาท\n" +
     "ค่าธรรมเนียม 0.00 บาท\n1 ต.ค. 68"
   );
-  ok("เลือกยอดเงินที่มากที่สุด (กันหยิบยอดคงเหลือ/ค่าธรรมเนียมผิด)", r.amount === 500, String(r.amount));
+  ok("เลือกยอดที่มีคำว่า 'จำนวนเงิน/โอน' กำกับ ไม่ใช่ตัวเลขที่ใหญ่สุด", r.amount === 500, String(r.amount));
+}
+
+section("ยอดคงเหลือมากกว่ายอดที่โอนจริง — ห้ามหยิบยอดคงเหลือ");
+{
+  // เคสสำคัญ: ถ้าเลือกจากตัวเลขที่ "ใหญ่สุด" เฉยๆ จะได้ยอดคงเหลือ 5,000 ผิดไปจากยอดโอนจริง 300
+  const r = parseSlipText(
+    "โอนเงินสำเร็จ\nยอดคงเหลือ 5,000.00 บาท\nจำนวนเงินที่โอน 300.00 บาท\n5 ก.ย. 69 10:00"
+  );
+  ok("ไม่หยิบยอดคงเหลือที่มากกว่า", r.amount === 300, String(r.amount));
 }
 
 section("ข้อความอ่านไม่ออก / OCR ล้มเหลวบางส่วน");
@@ -63,6 +72,35 @@ section("ไม่มีชื่อผู้โอนในข้อควา�
   ok("ไม่มีคำว่าจาก/From ก็ไม่เดาชื่อ", r.senderName === null);
   ok("แต่ยังอ่านยอด/วันที่/เวลาได้ตามปกติ",
     r.amount === 200 && r.date === "2 ธ.ค. 67" && r.time === "08:00");
+}
+
+section("เปิดสลิปใหม่ก่อนสลิปเก่าจะอ่านเสร็จ — ผลของสลิปเก่าต้องไม่มาทับ");
+{
+  // จำลอง Tesseract: ควบคุมเองว่าแต่ละงานจะ resolve เมื่อไหร่ (ไม่พึ่ง OCR จริง/เวลาจริง)
+  const pending = [];
+  window.Tesseract = { recognize: () => new Promise(resolve => pending.push(resolve)) };
+
+  const boxText = () => document.getElementById("slip-ocr").textContent;
+
+  // เปิดสลิป A (ช้า) แล้วรีบเปิดสลิป B (ใหม่กว่า) ก่อน A จะตอบกลับ
+  const pA = showSlip("data:image/png;base64,AAA=");
+  await tick(3);
+  const pB = showSlip("data:image/png;base64,BBB=");
+  await tick(3);
+  ok("มีงานอ่านสลิปสองงานค้างพร้อมกัน (A ยังไม่ทันเสร็จ)", pending.length === 2, String(pending.length));
+
+  // B (ใบล่าสุดที่กำลังดูอยู่) เสร็จก่อน
+  pending[1]({ data: { text: "จำนวนเงิน\n999.00 บาท" } });
+  await pB; await tick(3);
+  ok("ผลของสลิป B ที่กำลังเปิดอยู่แสดงถูกต้อง", boxText().includes("999"), boxText());
+
+  // A (ใบเก่าที่ปิดไปแล้ว) เพิ่งเสร็จทีหลัง — ต้องไม่เอามาทับ B
+  pending[0]({ data: { text: "จำนวนเงิน\n111.00 บาท" } });
+  await pA; await tick(3);
+  ok("ผลช้าของสลิปเก่า (A) ไม่มาทับสลิปใหม่ (B) ที่กำลังโชว์อยู่", !boxText().includes("111"), boxText());
+  ok("ยังคงเห็นผลของ B เหมือนเดิม ไม่ถูกล้าง", boxText().includes("999"), boxText());
+
+  delete window.Tesseract;
 }
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
