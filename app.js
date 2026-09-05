@@ -98,7 +98,7 @@ function renderProducts() {
         ${p.stock != null && !soldOut ? `<div class="stock">${t("stock_left")} ${p.stock}</div>` : ""}
         ${soldOut
           ? `<button disabled>${t("out_of_stock")}</button>`
-          : `<button onclick="addToCart('${p.id}')">${t("add_to_cart")}</button>`}
+          : `<button data-add="${escapeHtml(p.id)}">${t("add_to_cart")}</button>`}
       </div>`;
   }).join("");
   window.watchProductImages?.(grid);
@@ -126,9 +126,9 @@ function renderCartPanel() {
         <div class="cart-row">
           <div>${escapeHtml(name)}<br><small>${money(p.price)} × ${cart[id]}</small></div>
           <div class="qty">
-            <button onclick="changeQty('${id}', -1)">−</button>
+            <button data-qty="-1" data-id="${escapeHtml(id)}">−</button>
             <span>${cart[id]}</span>
-            <button onclick="changeQty('${id}', 1)">+</button>
+            <button data-qty="1" data-id="${escapeHtml(id)}">+</button>
           </div>
         </div>`;
     }).join("");
@@ -237,6 +237,16 @@ async function loadProducts() {
   pruneCart();        // ทิ้งของที่ถูกลบ/เกินสต๊อกก่อนนับตัวเลขบนไอคอนตะกร้า
   renderCartBadge();
 }
+
+document.getElementById("grid")?.addEventListener("click", e => {
+  const btn = e.target.closest("[data-add]");
+  if (btn) addToCart(btn.dataset.add);
+});
+
+document.getElementById("cart-list")?.addEventListener("click", e => {
+  const btn = e.target.closest("[data-qty]");
+  if (btn) changeQty(btn.dataset.id, Number(btn.dataset.qty));
+});
 
 document.addEventListener("authchange", syncNav);
 document.addEventListener("langchange", () => { renderProducts(); renderCartPanel(); });

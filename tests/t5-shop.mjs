@@ -170,3 +170,32 @@ ok("ไม่มีสคริปต์ถูกฝัง", !$("grid").querySel
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
+
+section("ปุ่มเพิ่ม/ลดจำนวน ทำงานผ่านการคลิกจริง (ไม่ใช่ onclick ในแอตทริบิวต์)");
+localStorage.clear();
+store.put("products/pA", { ...store.raw("products/pA"), stock: 5, active: true, price: 300 });
+await app.loadProducts();
+const clickEl = el => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+ok("ไม่มี onclick ฝังในปุ่มสินค้าแล้ว", !$("grid").innerHTML.includes("onclick="));
+clickEl($("grid").querySelector('[data-add="pA"]'));
+ok("กดปุ่มเพิ่มลงตะกร้าได้จริง", app.getCart().pA === 1, JSON.stringify(app.getCart()));
+app.openCart();
+ok("ไม่มี onclick ฝังในปุ่มตะกร้าแล้ว", !$("cart-list").innerHTML.includes("onclick="));
+clickEl($("cart-list").querySelector('[data-qty="1"]'));
+ok("กดเพิ่มจำนวนได้", app.getCart().pA === 2, JSON.stringify(app.getCart()));
+clickEl($("cart-list").querySelector('[data-qty="-1"]'));
+ok("กดลดจำนวนได้", app.getCart().pA === 1, JSON.stringify(app.getCart()));
+clickEl($("cart-list").querySelector('[data-qty="-1"]'));
+ok("ลดจนหมดแล้วหายจากตะกร้า", app.getCart().pA === undefined);
+
+section("รหัสสินค้าแปลกปลอมต้องไม่หลุดเป็นโค้ด");
+store.put("products/p'-alert(1)-'x", { name: "รหัสมีอัญประกาศ", price: 10, active: true });
+await app.loadProducts();
+ok("หน้าร้านยังวาดได้ปกติ", $("grid").querySelectorAll(".product").length >= 2);
+const weird = [...$("grid").querySelectorAll("[data-add]")].find(b => b.dataset.add.includes("alert"));
+ok("รหัสถูกเก็บใน data-add ตามจริง ไม่หลุดเป็นโค้ด", !!weird && weird.getAttribute("data-add") === "p'-alert(1)-'x",
+  weird ? weird.getAttribute("data-add") : "ไม่พบปุ่ม");
+ok("ไม่มีสคริปต์ถูกรัน", window.__pwned === undefined);
+
+console.log("\nสรุป(รวมท้าย): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
+if (fail) process.exitCode = 1;
