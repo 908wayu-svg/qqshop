@@ -525,6 +525,17 @@ section("ตั้งสิทธิ์แล้วเขียนเอกส�
   FAIL_COMMIT_PATH = null;
 }
 
+section("ลิงก์ซองที่รหัสยาวผิดปกติ");
+{
+  const LU = freshUid(); withUser(LU);
+  const long = "https://gift.truemoney.com/campaign/?v=" + "A".repeat(200);
+  const rr = await call("/", { idToken: "token:" + LU, link: long });
+  // ถ้าปล่อยผ่าน รหัสยาวจะไปเป็นชื่อเอกสารที่ Firestore ไม่รับ แล้วตอบว่า "ใช้ไปแล้ว" ซึ่งผิด
+  ok("บอกว่าลิงก์ไม่ถูกต้อง ไม่ใช่ 'ซองถูกใช้แล้ว'", rr.body.error === "INVALID_LINK", JSON.stringify(rr.body));
+  const okLen = await call("/", { idToken: "token:" + freshUid(), link: "https://gift.truemoney.com/campaign/?v=" + "B".repeat(32) });
+  ok("รหัสความยาวปกติยังใช้ได้ตามเดิม", okLen.body.error !== "INVALID_LINK", JSON.stringify(okLen.body));
+}
+
 section("เส้นทางแอดมินที่ไม่มีอยู่จริง");
 ok("เส้นทางมั่วถูกปฏิเสธ", (await call("/admin/ห้าม", { idToken: "token:" + A })).body.error === "NOT_FOUND");
 
