@@ -507,10 +507,20 @@ const I18N = {
 
 const LANG_KEY = "qq_lang";
 
-function getLang() { return localStorage.getItem(LANG_KEY) || "th"; }
+// บางเบราว์เซอร์ปิดการเก็บข้อมูลเว็บไว้ (โหมดส่วนตัว / ตั้งค่าบล็อกคุกกี้ของเว็บไซต์)
+// แล้วการแตะ localStorage จะโยนข้อผิดพลาดออกมาเลย ไม่ใช่แค่คืนค่าว่าง
+// ไฟล์นี้ถูกเรียกจากทุกหน้าทุกข้อความ ถ้าไม่ดักไว้ = เปิดเว็บไม่ขึ้นทั้งเว็บบนเครื่องเหล่านั้น
+let langMemory = null;    // จำภาษาไว้ในหน้านี้ เผื่อบันทึกลงเครื่องไม่ได้
+
+function getLang() {
+  try { return localStorage.getItem(LANG_KEY) || langMemory || "th"; }
+  catch { return langMemory || "th"; }
+}
 
 function setLang(lang) {
-  localStorage.setItem(LANG_KEY, lang);
+  langMemory = lang;
+  try { localStorage.setItem(LANG_KEY, lang); }
+  catch { /* จำข้ามหน้าไม่ได้ก็ยังสลับภาษาในหน้านี้ได้ตามปกติ */ }
   applyLang();
   document.dispatchEvent(new CustomEvent("langchange", { detail: lang }));
 }

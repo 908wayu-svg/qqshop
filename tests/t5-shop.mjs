@@ -197,5 +197,42 @@ ok("รหัสถูกเก็บใน data-add ตามจริง ไ�
   weird ? weird.getAttribute("data-add") : "ไม่พบปุ่ม");
 ok("ไม่มีสคริปต์ถูกรัน", window.__pwned === undefined);
 
+section("สั่งซื้อสำเร็จแล้วล้างตะกร้าไม่ได้ ต้องไม่บอกว่าล้มเหลว");
+{
+  // เบราว์เซอร์ที่ปิดการเก็บข้อมูลเว็บจะโยนข้อผิดพลาดตอนล้างตะกร้า
+  // ถ้าปล่อยให้หลุดไปเข้า catch ลูกค้าจะเห็นว่า "สั่งซื้อไม่สำเร็จ" ทั้งที่ตัดเครดิตไปแล้ว
+  // แล้วกดสั่งซ้ำ = เสียเงินสองรอบ
+  ORDER_FORCE_ERROR = null;                 // เผื่อเทสก่อนหน้าตั้งค้างไว้
+  store.state.docs.set("users/" + QQ.user.uid, { ...store.raw("users/" + QQ.user.uid), credit: 5000 });
+  fs2.notifyAll();
+  await app.loadProducts();
+  await tick(3);
+  localStorage.clear();
+  app.addToCart("pD");                      // สินค้าสต๊อกไม่จำกัด ราคา 20
+  app.openCart();
+  await tick(3);
+  ok("มีของอยู่ในตะกร้าก่อนกดสั่งซื้อ", Object.keys(app.getCart()).length === 1,
+    JSON.stringify(app.getCart()));
+
+  const realRemove = window.localStorage.removeItem.bind(window.localStorage);
+  window.localStorage.removeItem = () => { throw new Error("SecurityError: storage is disabled"); };
+  globalThis.__alerts = [];
+  const ordersBefore = [...store.state.docs.keys()].filter(k => k.startsWith("orders/")).length;
+
+  let crashed = null;
+  try { await app.doCheckout(); } catch (e) { crashed = e.message; }
+  await tick(6);
+  window.localStorage.removeItem = realRemove;
+
+  const ordersAfter = [...store.state.docs.keys()].filter(k => k.startsWith("orders/")).length;
+  ok("ไม่ล่ม", crashed === null, String(crashed));
+  ok("ออเดอร์ถูกสร้างจริง", ordersAfter === ordersBefore + 1, ordersBefore + " -> " + ordersAfter);
+  ok("บอกลูกค้าว่าสั่งซื้อเรียบร้อย",
+    globalThis.__alerts.some(a => a.includes("สั่งซื้อเรียบร้อย")), JSON.stringify(globalThis.__alerts));
+  ok("ไม่มีข้อความว่าล้มเหลวโผล่มาด้วย",
+    !globalThis.__alerts.some(a => a.includes("ไม่สำเร็จ") || a.includes("ผิดพลาด")),
+    JSON.stringify(globalThis.__alerts));
+}
+
 console.log("\nสรุป(รวมท้าย): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;

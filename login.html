@@ -107,9 +107,15 @@ function setMsg(text, kind = "error") {
   el.className = "msg" + (text ? " show " + kind : "");
 }
 
+// หน้าที่ยอมให้เด้งต่อหลังล็อกอินสำเร็จ (เฉพาะหน้าในเว็บเราเท่านั้น)
+// ห้ามเอาค่าจาก ?next= ไปใช้ตรงๆ เด็ดขาด ไม่งั้นคนร้ายส่งลิงก์
+// login.html?next=https://เว็บปลอม ให้ลูกค้า พอล็อกอินเสร็จจะถูกพาไปเว็บปลอม
+// ที่ทำหน้าตาเหมือนของเรา แล้วหลอกเอารหัสผ่านซ้ำได้
+const NEXT_ALLOWED = ["index.html", "wallet.html", "purchases.html", "admin.html"];
+
 function afterLogin() {
   const next = new URLSearchParams(location.search).get("next");
-  location.href = next || "index.html";
+  location.href = NEXT_ALLOWED.includes(next) ? next : "index.html";
 }
 
 // กันกดปุ่มรัวจนสมัคร/ล็อกอินซ้อนกัน

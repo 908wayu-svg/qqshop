@@ -91,8 +91,9 @@ function parseSlipText(text) {
   return { amount, date, time, senderName, raw };
 }
 
-// เปิดให้ชุดทดสอบเรียกใช้ตรงๆ ได้ (ทดสอบด้วยข้อความตัวอย่าง/จำลอง Tesseract โดยไม่ต้องพึ่ง OCR จริง)
-export { parseSlipText, showSlip };
+// เปิดให้ชุดทดสอบเรียกใช้ตรงๆ ได้
+// (ทดสอบด้วยข้อความตัวอย่าง/จำลอง Tesseract และป้อนข้อมูลผิดปกติเข้ากราฟ โดยไม่ต้องพึ่ง OCR/ข้อมูลจริง)
+export { parseSlipText, showSlip, barChart };
 
 function renderSlipOcr(info) {
   const box = document.getElementById("slip-ocr");
@@ -266,6 +267,9 @@ function lineChart(box, data, { color, format }) {
   svg.addEventListener("mousemove", e => {
     const r = svg.getBoundingClientRect();
     let i = Math.round((((e.clientX - r.left) * (W / r.width) - P.l) / iw) * (data.length - 1));
+    // กราฟที่ยังไม่มีความกว้างจริง (เพิ่งวาด/ถูกซ่อน) ทำให้ได้ค่าที่คำนวณไม่ได้
+    // ถ้าไม่ดักไว้ จะไปหยิบข้อมูลตำแหน่งที่ไม่มีอยู่แล้วสะดุดตอนเลื่อนเมาส์
+    if (!Number.isFinite(i)) i = 0;
     i = Math.min(data.length - 1, Math.max(0, i));
     const d = data[i];
     cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i));
@@ -291,9 +295,12 @@ function barChart(box, items, { color, format }) {
       const w = Math.max((d.value / max) * iw, 3);
       const y = P.t + i * rowH + 6, h = rowH - 14;
       // ตัดชื่อยาวไม่ให้ล้นออกนอกกราฟ
-      const label = d.label.length > 20 ? d.label.slice(0, 19) + "…" : d.label;
+      // ต้องแปลงเป็นข้อความก่อนเสมอ — ออเดอร์เก่าบางใบไม่มีชื่อสินค้า
+      // ถ้าเรียก .length ใส่ค่าว่างตรงๆ กราฟจะพังและลากหน้าภาพรวมล่มไปทั้งหน้า
+      const full = String(d.label ?? "");
+      const label = full.length > 20 ? full.slice(0, 19) + "…" : full;
       return `
-        <text class="axis name" x="${P.l - 12}" y="${y + h / 2 + 4}" text-anchor="end">${esc(label)}<title>${esc(d.label)}</title></text>
+        <text class="axis name" x="${P.l - 12}" y="${y + h / 2 + 4}" text-anchor="end">${esc(label)}<title>${esc(full)}</title></text>
         <rect class="bar" x="${P.l}" y="${y}" width="${w}" height="${h}" rx="4" fill="${color}"/>
         <text class="value" x="${P.l + w + 10}" y="${y + h / 2 + 4}">${format(d.value)}</text>`;
     }).join("")}</svg>`;

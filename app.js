@@ -321,7 +321,11 @@ async function doCheckout() {
     const items = Object.entries(cart).map(([id, qty]) => ({ id, qty, ...infoForOrder(id) }));
     const res = await QQ.createOrder(items);
 
-    localStorage.removeItem(CART_KEY);
+    // ออเดอร์ถูกสร้างเรียบร้อยแล้วตั้งแต่บรรทัดบน — ตั้งแต่จุดนี้ไปห้ามโยนข้อผิดพลาดเด็ดขาด
+    // ถ้าขั้นตอนเก็บกวาดพลาดแล้วหลุดไปเข้า catch ลูกค้าจะเห็นว่า "สั่งซื้อไม่สำเร็จ"
+    // ทั้งที่ตัดเครดิตและสร้างออเดอร์ไปแล้ว แล้วกดสั่งซ้ำอีกรอบ
+    try { localStorage.removeItem(CART_KEY); }
+    catch (err) { console.warn("ล้างตะกร้าไม่ได้", err); }
     // ล้างรหัสผ่านลูกค้าออกจากหน่วยความจำทันทีที่สั่งซื้อเสร็จ
     Object.keys(CUSTOMER_INFO).forEach(k => delete CUSTOMER_INFO[k]);
     renderCartBadge();

@@ -16,8 +16,9 @@ const $ = id => document.getElementById(id);
 const html = fs.readFileSync(SRC + "/login.html", "utf8");
 const inline = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/)[1];
 // jsdom เปลี่ยนหน้าไม่ได้ จึงดักเฉพาะบรรทัดที่พาไปหน้าถัดไป (ที่เหลือเป็นโค้ดจริงทั้งหมด)
-const patched = inline.replace(`location.href = next || "index.html";`,
-                               `globalThis.__nav = next || "index.html";`);
+const patched = inline.replace(
+  `location.href = NEXT_ALLOWED.includes(next) ? next : "index.html";`,
+  `globalThis.__nav = NEXT_ALLOWED.includes(next) ? next : "index.html";`);
 if (patched === inline) throw new Error("หาบรรทัดเปลี่ยนหน้าในหน้า login ไม่เจอ");
 const api = new Function(patched + "\n;return { showTab, setMsg, afterLogin, doLogin, doRegister, doGoogle, doReset, guard };")();
 Object.assign(globalThis, api);
@@ -119,6 +120,30 @@ const spam = [...store.state.docs.keys()].filter(k => k.startsWith("users/"));
 const dupes = spam.filter(k => store.raw(k).email === "spam@test.com");
 ok("สร้างบัญชีเดียว ไม่ซ้อน", dupes.length === 1, "ได้ " + dupes.length);
 ok("ปุ่มกลับมากดได้หลังเสร็จ", $("tab-login").disabled === false);
+
+section("ลิงก์เด้งต่อหลังล็อกอิน (?next=) ต้องพาไปได้เฉพาะหน้าในเว็บเรา");
+// เคยเป็นช่องโหว่: เอาค่าจาก ?next= ไปใช้ตรงๆ คนร้ายส่งลิงก์ที่พาลูกค้าไปเว็บปลอม
+// ที่ทำหน้าตาเหมือนกันแล้วหลอกเอารหัสผ่านซ้ำได้ (open redirect)
+const goTo = q => {
+  window.history.replaceState({}, "", "/qqshop/login.html" + q);
+  globalThis.__nav = null;
+  window.afterLogin();
+  return globalThis.__nav;
+};
+ok("หน้าปกติในเว็บเรา ไปได้ตามเดิม", goTo("?next=purchases.html") === "purchases.html", goTo("?next=purchases.html"));
+ok("หน้าหลังบ้านก็ยังไปได้", goTo("?next=admin.html") === "admin.html");
+ok("ไม่ใส่ next มาเลย = กลับหน้าร้าน", goTo("") === "index.html");
+for (const bad of [
+  "https://เว็บปลอม.example/login",
+  "//เว็บปลอม.example",
+  "http://evil.example",
+  "javascript:alert(1)",
+  "/qqshop/../../etc/passwd",
+  "index.html.evil.example",
+]) {
+  ok("กันลิงก์นอกเว็บ: " + bad, goTo("?next=" + encodeURIComponent(bad)) === "index.html",
+    goTo("?next=" + encodeURIComponent(bad)));
+}
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;

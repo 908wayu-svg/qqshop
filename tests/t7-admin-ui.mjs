@@ -229,6 +229,28 @@ window.toggleLang();
 await tick(4);
 ok("กลับมาไทยได้", $("kpi-sales").textContent.includes("฿"));
 
+section("ข้อมูลผิดปกติต้องไม่ทำให้กราฟล่ม");
+{
+  // ออเดอร์เก่า/ข้อมูลที่ถูกแก้มือ อาจไม่มีชื่อสินค้าเลย
+  // เดิมกราฟสินค้าขายดีเรียก .length ใส่ค่าว่างตรงๆ แล้วพังทั้งหน้าภาพรวม
+  const { barChart } = await import("./sandbox/admin.mjs");
+  const box = document.createElement("div");
+  box.id = "chart-test";
+  document.body.appendChild(box);
+  const draw = items => {
+    try { barChart(box, items, { color: "#000", format: v => String(v) }); return null; }
+    catch (e) { return e.message; }
+  };
+  ok("สินค้าที่ไม่มีชื่อ (undefined) วาดได้ไม่ล่ม", draw([{ value: 20 }]) === null, String(draw([{ value: 20 }])));
+  ok("ชื่อเป็น null ก็วาดได้", draw([{ label: null, value: 5 }]) === null);
+  ok("ชื่อเป็นตัวเลขก็วาดได้", draw([{ label: 12345, value: 5 }]) === null);
+  ok("ชื่อยาวมากถูกตัดให้พอดี", (draw([{ label: "ก".repeat(60), value: 5 }]) === null)
+    && box.innerHTML.includes("…"));
+  ok("ชื่อปกติยังแสดงครบ", (draw([{ label: "เพชร 100 เม็ด", value: 5 }]) === null)
+    && box.innerHTML.includes("เพชร 100 เม็ด"));
+  box.remove();
+}
+
 section("ปุ่มคัดลอกข้อมูลลูกค้า (ของเติมเกม) ต้องคัดลอกได้จริง");
 {
   // เคยเป็นบั๊ก: หน้าหลังบ้านวาดปุ่มคัดลอกไว้ แต่ไม่มีตัวรับคลิกเลย กดแล้วเงียบ

@@ -14,7 +14,10 @@ const section = s => console.log("\n== " + s + " ==");
 const src = fs.readFileSync(path.join(SRC, "i18n.js"), "utf8");
 
 // รัน i18n.js โดยยัด document/localStorage ปลอมให้ (ไฟล์นี้ผูกกับ DOM ตอนโหลด)
-globalThis.document = { addEventListener() {}, querySelectorAll: () => [], documentElement: { lang: "th" } };
+globalThis.document = {
+  addEventListener() {}, dispatchEvent: () => true,
+  querySelectorAll: () => [], documentElement: { lang: "th" },
+};
 globalThis.localStorage = { getItem: () => null, setItem() {} };
 const I18N = new Function(src + "\n;return I18N;")();
 
@@ -66,6 +69,28 @@ for (const page of pages) {
 }
 ok("ตรวจครบทุกหน้า (" + pages.length + " หน้า)", pages.length >= 6, String(pages.length));
 ok("ไม่มี data-i18n ที่ไม่มีคำแปล", missingUsed.length === 0, missingUsed.slice(0, 5).join(" · "));
+
+section("เบราว์เซอร์ที่ปิดการเก็บข้อมูลเว็บ (โหมดส่วนตัว/บล็อกคุกกี้)");
+{
+  // เครื่องเหล่านี้จะ "โยนข้อผิดพลาด" ตอนแตะ localStorage ไม่ใช่แค่คืนค่าว่าง
+  // i18n.js ถูกเรียกจากทุกข้อความในเว็บ ถ้าไม่ดักไว้ = เปิดเว็บไม่ขึ้นเลยทั้งเว็บ
+  const boom = () => { throw new Error("SecurityError: storage is disabled"); };
+  globalThis.localStorage = { getItem: boom, setItem: boom, removeItem: boom };
+  const api = new Function(src + "\n;return { t, money, getLang, setLang, toggleLang, applyLang };")();
+
+  let crashed = null;
+  try { api.applyLang(); } catch (e) { crashed = e.message; }
+  ok("เปิดหน้าเว็บได้โดยไม่ล่ม", crashed === null, String(crashed));
+  ok("อ่านภาษาได้ (ถอยไปใช้ไทยเป็นค่าเริ่มต้น)", api.getLang() === "th", api.getLang());
+  ok("แปลข้อความได้ตามปกติ", api.t("cart") === I18N.th.cart, api.t("cart"));
+  ok("จัดรูปแบบเงินได้ตามปกติ", api.money(100).includes("100"), api.money(100));
+
+  let crashed2 = null;
+  try { api.setLang("en"); } catch (e) { crashed2 = e.message; }
+  ok("สลับภาษาได้ไม่ล่ม แม้บันทึกลงเครื่องไม่ได้", crashed2 === null, String(crashed2));
+  ok("สลับแล้วภาษาเปลี่ยนจริงในหน้านี้", api.getLang() === "en", api.getLang());
+  ok("ข้อความเปลี่ยนตามภาษาที่สลับ", api.t("cart") === I18N.en.cart, api.t("cart"));
+}
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
