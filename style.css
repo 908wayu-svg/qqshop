@@ -138,29 +138,6 @@ header{position:sticky;top:0;background:var(--card);
 .cat-tab.active:hover{transform:none}
 .cat-ico{font-size:16px;line-height:1}
 
-/* ---------- แถบค้นหา / กรองราคา / เรียงลำดับ หน้าร้าน ---------- */
-.shop-tools{display:flex;flex-direction:column;gap:11px;margin-bottom:20px;min-width:0}
-.search-box{position:relative;display:flex;align-items:center;min-width:0}
-.search-box .search-ico{position:absolute;left:14px;font-size:15px;line-height:1;pointer-events:none;opacity:.7}
-.search-box .search{padding-left:40px;padding-right:42px}
-.search-x{position:absolute;right:9px;width:28px;height:28px;padding:0;border:0;border-radius:50%;
-  background:transparent;color:var(--muted);font-size:21px;line-height:1;cursor:pointer;font-family:inherit;
-  display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
-.search-x:hover{background:var(--field);color:var(--brand)}
-.filter-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
-.price-range{display:flex;align-items:center;gap:8px;min-width:0}
-.price-range .fl{font-size:13px;font-weight:600;color:var(--text-2);white-space:nowrap}
-.price-range .dash{color:var(--muted)}
-.price-range input[type=number]{width:92px;margin:0;padding:9px 12px;font-size:14px}
-.filter-row select{width:auto;margin:0;padding:9px 12px;font-size:14px}
-.filter-row .btn-ghost{padding:9px 14px;font-size:14px}
-.result-count{font-size:13px;color:var(--muted)}
-@media(max-width:600px){
-  /* จอแคบ: ช่วงราคาลงมาเต็มบรรทัด แล้วให้ช่องตัวเลขยืดเอง กันล้นขอบจอ 320px */
-  .price-range{flex:1 1 100%}
-  .price-range input[type=number]{flex:1 1 0;width:auto;min-width:0}
-  .filter-row select{flex:1 1 0;min-width:0}
-}
 @media(max-width:600px){
   .cat-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
     margin:0 -14px 18px;padding:0 14px 6px;
@@ -299,6 +276,32 @@ input:focus,select:focus,.search:focus{outline:none;border-color:var(--accent);b
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 label.check{display:flex;align-items:center;gap:9px;margin-top:16px;cursor:pointer;font-weight:500}
 label.check input{width:auto;accent-color:var(--accent)}
+
+/* ---------- แถบค้นหา / กรองราคา / เรียงลำดับ หน้าร้าน ---------- */
+.shop-tools{display:flex;flex-direction:column;gap:11px;margin-bottom:20px;min-width:0}
+.search-box{position:relative;display:flex;align-items:center;min-width:0}
+.search-box .search-ico{position:absolute;left:14px;font-size:15px;line-height:1;pointer-events:none;opacity:.7}
+/* .search เดิมถูกจำกัด max-width:230px ไว้ให้ช่องค้นหาในหลังบ้าน
+   ช่องค้นหาหน้าร้านต้องกว้างเต็มแถว จึงต้องปลดเพดานตรงนี้ด้วย */
+.search-box .search{max-width:none;padding:10px 42px 10px 40px;font-size:15px}
+.search-x{position:absolute;right:9px;width:28px;height:28px;padding:0;border:0;border-radius:50%;
+  background:transparent;color:var(--muted);font-size:21px;line-height:1;cursor:pointer;font-family:inherit;
+  display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.search-x:hover{background:var(--field);color:var(--brand)}
+.filter-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.price-range{display:flex;align-items:center;gap:8px;min-width:0}
+.price-range .fl{font-size:13px;font-weight:600;color:var(--text-2);white-space:nowrap}
+.price-range .dash{color:var(--muted)}
+.price-range input[type=number]{width:92px;margin:0;padding:9px 12px;font-size:14px}
+.filter-row select{width:auto;margin:0;padding:9px 12px;font-size:14px}
+.filter-row .btn-ghost{padding:9px 14px;font-size:14px}
+.result-count{font-size:13px;color:var(--muted)}
+@media(max-width:600px){
+  /* จอแคบ: ช่วงราคาลงมาเต็มบรรทัด แล้วให้ช่องตัวเลขยืดเอง กันล้นขอบจอ 320px */
+  .price-range{flex:1 1 100%}
+  .price-range input[type=number]{flex:1 1 0;width:auto;min-width:0}
+  .filter-row select{flex:1 1 0;min-width:0}
+}
 .msg{display:none;font-size:14px;padding:12px 14px;border-radius:12px;margin:14px 0 0;line-height:1.55;
   border:1px solid transparent}
 .msg.show{display:block}
@@ -392,7 +395,9 @@ label.check input{width:auto;accent-color:var(--accent)}
 .range-btn:hover{color:var(--text-2)}
 .range-btn.active{background:var(--grad);color:#fff;font-weight:600;
   box-shadow:0 6px 14px -8px rgba(242,112,26,.85)}
-.search{max-width:230px;padding:9px 14px;font-size:14px}
+/* ช่องค้นหาสมาชิกในหลังบ้าน — จำกัดความกว้างเฉพาะช่องนี้
+   (เดิมเขียนเป็น .search ลอยๆ เลยไปหนีบช่องค้นหาหน้าร้านให้เหลือ 230px ด้วย) */
+#member-search{max-width:230px;padding:9px 14px;font-size:14px}
 
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
 .tile{position:relative;overflow:hidden;background:var(--card);border:1px solid var(--border);

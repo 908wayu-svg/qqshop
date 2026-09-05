@@ -4,8 +4,11 @@
 //  - ตัวกรองไม่ทำงานร่วมกับแท็บหมวดหมู่ (กรองแล้วหลุดข้ามหมวด)
 //  - หาไม่เจอแล้วขึ้นข้อความเดียวกับ "ร้านยังไม่มีของ" ลูกค้าเข้าใจผิดว่าร้านว่าง
 //  - สลับภาษาแล้วคำค้นที่พิมพ์ไว้หาย
-import { buildSandbox, makeDom, loadI18n, runClassic, tick } from "./harness.mjs";
+import { buildSandbox, makeDom, loadI18n, runClassic, tick, SRC } from "./harness.mjs";
 import * as store from "./fake/store.mjs";
+import { JSDOM } from "jsdom";
+import fs from "fs";
+import path from "path";
 
 buildSandbox(); makeDom("index.html"); loadI18n();
 const { QQ } = await import("./sandbox/auth.mjs");
@@ -55,6 +58,22 @@ ok("มีตัวเลือกเรียง 4 แบบ", $("sort").queryS
 ok("ปุ่มล้างคำค้นซ่อนอยู่ตอนยังไม่ได้พิมพ์", $("q-clear").classList.contains("hidden"));
 ok("ปุ่มล้างตัวกรองซ่อนอยู่ตอนยังไม่ได้กรอง", $("clear-filters").classList.contains("hidden"));
 ok("ยังไม่ได้กรอง = ไม่ต้องโชว์จำนวนที่พบ", $("result-count").textContent === "", $("result-count").textContent);
+
+// jsdom ไม่โหลด style.css ให้เอง จึงยัด CSS จริงเข้าไปแล้วอ่าน "ค่าที่ได้หลังกฎทับกัน"
+// (ไม่ใช่แค่เช็คว่าเขียนกฎไว้หรือยัง — บั๊กจริงคือกฎเก่าทับกฎใหม่)
+section("ช่องค้นหาต้องกว้างเต็มแถว (กฎ .search ของหลังบ้านเคยทับให้เหลือ 230px)");
+{
+  const css = fs.readFileSync(path.join(SRC, "style.css"), "utf8");
+  const dom = new JSDOM(`<style>${css}</style>
+    <main><div class="shop-tools"><div class="search-box">
+      <span class="search-ico">🔍</span><input type="text" class="search" id="s">
+    </div></div></main>`);
+  const cs = dom.window.getComputedStyle(dom.window.document.getElementById("s"));
+  ok("ปลดเพดานความกว้าง 230px แล้ว", cs.maxWidth === "none", cs.maxWidth || "(ว่าง)");
+  ok("กว้างเต็มแถว", cs.width === "100%", cs.width);
+  ok("เว้นที่ซ้ายให้ไอคอนแว่นขยาย", parseFloat(cs.paddingLeft) >= 36, cs.paddingLeft);
+  ok("เว้นที่ขวาให้ปุ่มกากบาท", parseFloat(cs.paddingRight) >= 36, cs.paddingRight);
+}
 
 section("ตอนเปิดหน้า โชว์ของที่เปิดขายทั้งหมด");
 ok("เห็นสินค้า 5 ชิ้น (ไม่รวมที่ปิดขาย)", names().length === 5, names().join(" | "));
