@@ -853,5 +853,12 @@ function showGate(msgKey, withLogin) {
 
   document.getElementById("gate").classList.add("hidden");
   document.getElementById("dash").classList.remove("hidden");
-  await reloadAll();
+  try { await reloadAll(); }
+  catch (e) {
+    // โหลดข้อมูลไม่ได้ ต้องบอกให้รู้ ไม่ใช่โชว์หน้าเปล่าเหมือนร้านไม่มีลูกค้า
+    console.error("โหลดข้อมูลหลังบ้านไม่ได้", e);
+    showGate("load_failed", false);
+    document.getElementById("gate").insertAdjacentHTML("beforeend",
+      `<div class="gate-box"><button class="btn-primary" onclick="location.reload()">${t("try_again")}</button></div>`);
+  }
 })();

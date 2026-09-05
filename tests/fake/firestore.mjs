@@ -34,7 +34,14 @@ const snapOf = (ref, data) => ({
   data: () => data === undefined ? undefined : clone(data),
 });
 
+// สวิตช์จำลอง "อ่านฐานข้อมูลไม่ได้" (เน็ตหลุด / Firestore ล่ม)
+function maybeFail() {
+  if (!state.failReads) return;
+  const e = new Error("เชื่อมต่อฐานข้อมูลไม่ได้"); e.code = "unavailable"; throw e;
+}
+
 function readDoc(ref) {
+  maybeFail();
   state.reads++;
   const data = state.docs.get(ref.__path);
   if (!can("read", ref.__path, null, data)) throw new PermissionError(ref.__path, "read");
@@ -50,6 +57,7 @@ const cmp = (a, b) => {
 };
 
 export async function getDocs(q) {
+  maybeFail();
   const col = q.__q ? q.col.__path : q.__path;
   const clauses = q.__q ? q.clauses : [];
   const wheres = clauses.filter(c => c.k === "where");

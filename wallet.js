@@ -201,9 +201,15 @@ async function submitTopup() {
 
 // ---------- ประวัติ ----------
 async function renderHistory() {
-  const topups = await QQ.fetchMyTopups();
-
   const tt = document.getElementById("table-topups");
+  let topups;
+  try { topups = await QQ.fetchMyTopups(); }
+  catch (e) {
+    console.warn("โหลดประวัติเติมเงินไม่ได้", e);
+    tt.innerHTML = `<tr><td class="empty">${t("load_failed")}</td></tr>`;
+    return;
+  }
+
   tt.innerHTML = !topups.length
     ? `<tr><td class="empty">${t("no_data")}</td></tr>`
     : `<thead><tr><th>${t("date")}</th><th>${t("method")}</th>

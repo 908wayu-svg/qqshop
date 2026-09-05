@@ -9,6 +9,7 @@ const I18N = {
     cancel: "ยกเลิก", save: "บันทึก", close: "ปิด", edit: "แก้ไข", delete: "ลบ",
     add: "เพิ่ม", confirm: "ยืนยัน", search: "ค้นหา", all: "ทั้งหมด", baht: "฿",
     saved: "บันทึกแล้ว", error_generic: "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง",
+    load_failed: "โหลดข้อมูลไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่", try_again: "ลองใหม่",
 
     // หน้าร้าน
     cart_title: "ตะกร้าสินค้า", cart_empty: "ตะกร้าว่างเปล่า", total: "รวมทั้งหมด",
@@ -188,6 +189,7 @@ const I18N = {
     cancel: "Cancel", save: "Save", close: "Close", edit: "Edit", delete: "Delete",
     add: "Add", confirm: "Confirm", search: "Search", all: "All", baht: "฿",
     saved: "Saved", error_generic: "Something went wrong, please try again",
+    load_failed: "Could not load your data — check your connection and try again", try_again: "Try again",
 
     cart_title: "Your cart", cart_empty: "Your cart is empty", total: "Total",
     checkout: "Place order", add_to_cart: "Add to cart", out_of_stock: "Out of stock",

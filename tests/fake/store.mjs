@@ -12,12 +12,12 @@ export const state = {
   docs: new Map(),          // path -> plain object
   user: null,               // { uid, email }
   clock: Date.now(),
-  reads: 0, writes: 0, denied: [],
+  reads: 0, writes: 0, denied: [], failReads: false,
 };
 
 export const reset = () => {
   state.docs = new Map(); state.user = null;
-  state.reads = 0; state.writes = 0; state.denied = [];
+  state.reads = 0; state.writes = 0; state.denied = []; state.failReads = false;
 };
 
 const clone = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v, (k, val) =>

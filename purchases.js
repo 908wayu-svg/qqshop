@@ -158,11 +158,19 @@ document.addEventListener("authchange", () => {
   document.getElementById("nav-credit-amount").textContent = money(QQ.credit);
 
   // รูปสินค้าดึงมาเสริม ถ้าดึงไม่ได้ก็ยังแสดงประวัติได้ตามปกติ
-  const [orders, products] = await Promise.all([
-    QQ.fetchMyOrders(200),
-    QQ.fetchProducts().catch(() => []),
-  ]);
-  ORDERS = orders;
-  PRODUCTS = products;
-  render();
+  try {
+    const [orders, products] = await Promise.all([
+      QQ.fetchMyOrders(200),
+      QQ.fetchProducts().catch(() => []),
+    ]);
+    ORDERS = orders;
+    PRODUCTS = products;
+    render();
+  } catch (e) {
+    // เน็ตหลุด/โหลดไม่ได้ ต้องบอกลูกค้า ไม่ใช่ปล่อยหน้าว่างเปล่าให้งง
+    console.warn("โหลดประวัติไม่ได้", e);
+    document.getElementById("list").innerHTML =
+      `<div class="card empty-box"><p class="empty">${t("load_failed")}</p>
+        <button class="btn-primary" onclick="location.reload()">${t("try_again")}</button></div>`;
+  }
 })();
