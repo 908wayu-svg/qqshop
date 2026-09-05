@@ -274,6 +274,16 @@ const str = f => String(f?.stringValue ?? "");
 // ปัดเศษเงินเป็น 2 ตำแหน่ง กัน 19.9 * 3 = 59.699999999999996
 const money2 = n => Math.round((Number(n) || 0) * 100) / 100;
 
+// อ่านยอดเงินจากเอกสาร แล้วยืนยันว่าเป็นตัวเลขที่ใช้คำนวณต่อได้จริง
+// เอกสารที่เสีย (แก้มือผิด/ข้อมูลเก่า) อาจมีค่าเป็น NaN ซึ่งเปรียบเทียบกับอะไรก็ได้ false หมด
+// ถ้าปล่อยผ่าน ด่านเช็ค "เครดิตพอไหม" จะกลายเป็นผ่านตลอด แล้วเขียนค่าเสียทับกลับลงไป
+// ทำให้เครดิตของลูกค้าคนนั้นพังถาวรและคำนวณอะไรต่อไม่ได้อีกเลย
+function safeMoney(v, errorCode = "BAD_REQUEST") {
+  const n = money2(v);
+  if (!Number.isFinite(n) || n < 0) throw new Error(errorCode);
+  return n;
+}
+
 // ---------- จำกัดจำนวนครั้งต่อคน ----------
 // กันคนยิงลิงก์รัวๆ จนทรูมันนี่บล็อกเซิร์ฟเวอร์เรา
 // แอดมินได้โควตาสูงกว่า เพราะกดอนุมัติทีละหลายรายการติดกันเป็นเรื่องปกติ
@@ -480,7 +490,7 @@ async function adminAdjustCredit(token, admin, { uid, amount, note = "" }) {
     const u = got[uid];
     if (!u) throw new Error("MEMBER_NOT_FOUND");
 
-    const before = money2(num(u.credit));
+    const before = safeMoney(num(u.credit));
     const after = money2(before + amt);
     if (after < 0) throw new Error("WOULD_GO_NEGATIVE");
 
@@ -543,7 +553,7 @@ async function adminApproveTopup(token, admin, { topupId, amount = null }) {
     const u = uGot[uid];
     if (!u) throw new Error("MEMBER_NOT_FOUND");
 
-    const before = money2(num(u.credit));
+    const before = safeMoney(num(u.credit));
     const after = money2(before + amt);
 
     await commit(token, [
@@ -622,22 +632,26 @@ async function adminApproveOrder(token, admin, { orderId }) {
     if (str(o.status) !== "pending") throw new Error("ALREADY_HANDLED");
 
     const uid = str(o.uid);
-    const total = money2(num(o.total));
+    const total = safeMoney(num(o.total));
     const items = (fsRead(o.items) || []).map(i => ({ ...i }));
-    if (!uid || !items.length) throw new Error("BAD_REQUEST");
+    if (!uid || !items.length || total <= 0) throw new Error("BAD_REQUEST");
 
     // ---- อ่านให้ครบก่อน ----
     const uGot = await batchGet(token, [`documents/users/${uid}`], tx);
     const u = uGot[uid];
     if (!u) throw new Error("MEMBER_NOT_FOUND");
-    const before = money2(num(u.credit));
+    const before = safeMoney(num(u.credit));
     if (before < total) throw new Error("INSUFFICIENT_CUSTOMER_CREDIT");
 
     const wanted = new Map();
     for (const i of items) {
       const pid = String(i.id || "");
       if (!isId(pid)) throw new Error("BAD_REQUEST");
-      wanted.set(pid, (wanted.get(pid) || 0) + Math.floor(Number(i.qty || 0)));
+      // จำนวนต้องเป็นตัวเลขจริงเสมอ — ถ้าเป็นค่าที่คำนวณไม่ได้ ด่านเช็คสต๊อกจะผ่านหมด
+      // แล้วจบลงที่เขียนสต๊อกเป็นค่าเสีย ทำให้สินค้านั้นขายได้ไม่จำกัด
+      const qty = Math.floor(Number(i.qty));
+      if (!Number.isFinite(qty) || qty < 1 || qty > 999) throw new Error("BAD_REQUEST");
+      wanted.set(pid, (wanted.get(pid) || 0) + qty);
     }
 
     const products = await batchGet(token,
@@ -691,8 +705,9 @@ async function adminApproveOrder(token, admin, { orderId }) {
     const newItems = items.map(i => {
       const pid = String(i.id);
       if (!queue[pid]) return i;
-      const take = queue[pid].splice(0, Math.floor(Number(i.qty || 0)));
-      if (take.length < Math.floor(Number(i.qty || 0))) throw new Error("STOCK_ITEM_TAKEN");
+      const need = Math.floor(Number(i.qty));      // ตรวจความถูกต้องไปแล้วตอนสร้าง wanted
+      const take = queue[pid].splice(0, need);
+      if (take.length < need) throw new Error("STOCK_ITEM_TAKEN");
       return {
         ...i,
         delivered: take.map(r => ({

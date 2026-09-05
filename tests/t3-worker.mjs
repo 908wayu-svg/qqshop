@@ -525,6 +525,58 @@ section("ตั้งสิทธิ์แล้วเขียนเอกส�
   FAIL_COMMIT_PATH = null;
 }
 
+section("เอกสารที่ข้อมูลเสีย ต้องไม่ลามไปทำเครดิต/สต๊อกพัง");
+{
+  // ค่าที่คำนวณไม่ได้ (NaN) เปรียบเทียบกับอะไรก็ได้ false หมด
+  // ถ้าไม่ดักไว้ ด่าน "เครดิตพอไหม/สต๊อกพอไหม" จะผ่านตลอด แล้วเขียนค่าเสียทับกลับลงฐานข้อมูล
+  // ห้ามล้างฐานข้อมูลตรงนี้ เทสหมวดถัดไปยังใช้ข้อมูลชุดเดิมอยู่
+  const A2 = mkAdmin(freshUid());
+  const C2 = freshUid();
+  DOCS.set("users/" + C2, F({ name: "ลูกค้า", email: "c@x.com", credit: 500, role: "member" }));
+  DOCS.set("products/pNaN", F({ name: "ของทดสอบ", price: 100, stock: 5, active: true, digital: true }));
+  DOCS.set("products/pNaN/stockItems/sN1", F({ login: "u1", password: "p1", status: "available" }));
+
+  const mkBadOrder = (id, fields, items) => DOCS.set("orders/" + id, {
+    ...F({ uid: C2, status: "pending", ...fields }),
+    items: { arrayValue: { values: [{ mapValue: { fields: F(items) } }] } },
+  });
+
+  // ยอดรวมเป็นค่าที่คำนวณไม่ได้
+  DOCS.set("orders/oNaN", {
+    ...F({ uid: C2, status: "pending" }),
+    total: { doubleValue: NaN },
+    items: { arrayValue: { values: [{ mapValue: { fields: F({ id: "pNaN", name: "x", price: 1, qty: 1 }) } }] } },
+  });
+  let rr = await call("/admin/order/approve", { idToken: "token:" + A2, orderId: "oNaN" });
+  ok("ยอดรวมเสีย = ปฏิเสธ ไม่หักเครดิต", rr.body.ok !== true, JSON.stringify(rr.body));
+  ok("เครดิตลูกค้ายังเท่าเดิม", numOf(DOCS.get("users/" + C2).credit) === 500);
+
+  // จำนวนสินค้าเป็นค่าที่คำนวณไม่ได้
+  mkBadOrder("oQty", { total: 300 }, { id: "pNaN", name: "x", price: 300, qty: "มั่ว" });
+  rr = await call("/admin/order/approve", { idToken: "token:" + A2, orderId: "oQty" });
+  ok("จำนวนสินค้าเสีย = ปฏิเสธ", rr.body.error === "BAD_REQUEST", JSON.stringify(rr.body));
+  ok("สต๊อกไม่ถูกเขียนเป็นค่าเสีย", Number.isFinite(numOf(DOCS.get("products/pNaN").stock)),
+    JSON.stringify(DOCS.get("products/pNaN").stock));
+
+  // เครดิตในเอกสารสมาชิกเสียเอง
+  DOCS.set("users/" + C2, { ...DOCS.get("users/" + C2), credit: { doubleValue: NaN } });
+  mkBadOrder("oCredit", { total: 100 }, { id: "pNaN", name: "x", price: 100, qty: 1 });
+  rr = await call("/admin/order/approve", { idToken: "token:" + A2, orderId: "oCredit" });
+  ok("เครดิตในเอกสารเสีย = ปฏิเสธ ไม่เขียนทับ", rr.body.ok !== true, JSON.stringify(rr.body));
+
+  // เครดิตที่เสียถูกอ่านเป็น 0 แล้วซ่อมกลับเป็นตัวเลขปกติ — ไม่ปล่อยให้ค้างเป็นค่าที่ใช้ไม่ได้
+  rr = await call("/admin/credit", { idToken: "token:" + A2, uid: C2, amount: 50 });
+  ok("ปรับเครดิตแล้วซ่อมค่าที่เสียให้กลับมาใช้ได้", rr.body.ok === true && rr.body.after === 50,
+    JSON.stringify(rr.body));
+  ok("เครดิตในฐานข้อมูลเป็นตัวเลขที่ใช้งานได้แล้ว",
+    Number.isFinite(numOf(DOCS.get("users/" + C2).credit)), JSON.stringify(DOCS.get("users/" + C2).credit));
+
+  DOCS.set("topups/tpBad", F({ uid: C2, amount: 50, method: "bank", hasSlip: true, status: "pending" }));
+  rr = await call("/admin/topup/approve", { idToken: "token:" + A2, topupId: "tpBad" });
+  ok("อนุมัติเติมเงินต่อจากนั้นได้ตามปกติ", rr.body.ok === true && rr.body.after === 100,
+    JSON.stringify(rr.body));
+}
+
 section("ลิงก์ซองที่รหัสยาวผิดปกติ");
 {
   const LU = freshUid(); withUser(LU);
