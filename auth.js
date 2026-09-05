@@ -151,6 +151,16 @@ function resizeImage(file, maxSide = 800, quality = 0.72) {
 
 const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+// ชิ้นในคลังที่ยังไม่ได้กรอกอะไรเลย ถือเป็นร่าง ยังขายไม่ได้
+const stockStatus = d => (String(d?.login || "").trim() || String(d?.password || "").trim())
+  ? "available" : "draft";
+
+// เรียกเซิร์ฟเวอร์แบบมีเพดานเวลา (30 วิ) กันหน้าจอค้างเมื่อเน็ตมีปัญหา
+export function fetchWithTimeout(url, opt = {}, ms = 30000) {
+  if (typeof AbortSignal?.timeout !== "function") return fetch(url, opt);
+  return fetch(url, { ...opt, signal: AbortSignal.timeout(ms) });
+}
+
 // เงินคิดเป็นทศนิยม 2 ตำแหน่งเสมอ กัน 0.1+0.2 = 0.30000000000000004
 const money2 = n => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -244,6 +254,14 @@ export const QQ = {
   },
 
   async deleteProduct(id) {
+    // ต้องล้างคลังไอดี/รหัสผ่านก่อน — Firestore ไม่ลบ subcollection ตามให้
+    // ถ้าไม่ล้าง รหัสผ่านของลูกค้าจะค้างอยู่ในฐานข้อมูลตลอดไปแบบมองไม่เห็น
+    const items = await getDocs(collection(db, "products", id, "stockItems"));
+    for (let i = 0; i < items.docs.length; i += 400) {
+      const batch = writeBatch(db);
+      items.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
     await deleteDoc(doc(db, "products", id));
     await deleteDoc(doc(db, "productImages", id)).catch(() => {});
   },
@@ -258,8 +276,8 @@ export const QQ = {
   saveStockItem(productId, itemId, data) {
     const col = collection(db, "products", productId, "stockItems");
     return itemId
-      ? updateDoc(doc(col, itemId), { ...data, updatedAt: serverTimestamp() })
-      : addDoc(col, { ...data, status: "available", createdAt: serverTimestamp() });
+      ? updateDoc(doc(col, itemId), { ...data, status: stockStatus(data), updatedAt: serverTimestamp() })
+      : addDoc(col, { ...data, status: stockStatus(data), createdAt: serverTimestamp() });
   },
 
   deleteStockItem: (productId, itemId) =>
@@ -271,7 +289,8 @@ export const QQ = {
     for (let i = 0; i < changes.length; i += 400) {
       const batch = writeBatch(db);
       changes.slice(i, i + 400).forEach(c =>
-        batch.update(doc(col, c.id), { ...c.data, updatedAt: serverTimestamp() }));
+        batch.update(doc(col, c.id),
+          { ...c.data, status: stockStatus(c.data), updatedAt: serverTimestamp() }));
       await batch.commit();
     }
   },
@@ -280,7 +299,18 @@ export const QQ = {
   // เขียนกลับลงฟิลด์ stock เพื่อให้หน้าร้านและเซิร์ฟเวอร์ใช้ตัวเลขเดียวกัน
   async syncDigitalStock(productId) {
     const items = await QQ.fetchStockItems(productId);
-    const available = items.filter(i => i.status !== "sold").length;
+
+    // ของเก่าที่เคยบันทึกเป็น available ทั้งที่ยังไม่ได้กรอกอะไร ต้องแก้ให้เป็นร่าง
+    // ไม่งั้นหน้าร้านโชว์ว่ามีของ แต่ลูกค้าซื้อไปได้ไอดีว่างเปล่า
+    const broken = items.filter(i => i.status === "available" && stockStatus(i) === "draft");
+    if (broken.length) {
+      const col = collection(db, "products", productId, "stockItems");
+      const batch = writeBatch(db);
+      broken.forEach(i => { batch.update(doc(col, i.id), { status: "draft" }); i.status = "draft"; });
+      await batch.commit();
+    }
+
+    const available = items.filter(i => i.status === "available").length;
     await updateDoc(doc(db, "products", productId), { stock: available });
     return available;
   },
@@ -289,15 +319,18 @@ export const QQ = {
   // สั่งซื้อผ่านเซิร์ฟเวอร์ ส่งไปแค่รหัสสินค้ากับจำนวน
   // ราคา/ยอดรวม/สต๊อก/เครดิต ตรวจและคิดที่ฝั่งเซิร์ฟเวอร์ทั้งหมด ลูกค้าแก้ไม่ได้
   async createOrder(items) {
-    const res = await fetch(ORDER_API, {
+    // มีเพดานเวลา ไม่งั้นเน็ตหลุดกลางทางแล้วปุ่มสั่งซื้อค้างไปเรื่อยๆ
+    const res = await fetchWithTimeout(ORDER_API, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         idToken: await auth.currentUser.getIdToken(),
         items: items.map(i => ({ id: i.id, qty: i.qty })),
       }),
-    });
-    const data = await res.json().catch(() => ({ ok: false, error: "BOT_UNREACHABLE" }));
+    }).catch(() => null);
+    const data = res
+      ? await res.json().catch(() => ({ ok: false, error: "BOT_UNREACHABLE" }))
+      : { ok: false, error: "BOT_UNREACHABLE" };
     if (!data.ok) throw Object.assign(new Error(data.error), { orderCode: data.error });
     return data;
   },
@@ -393,6 +426,10 @@ export const QQ = {
         const delivered = picked.map(s => {
           if (!s.exists() || s.data().status !== "available") {
             throw new Error(t("stock_item_taken"));   // มีคนคว้าไปก่อน ให้กดใหม่
+          }
+          // ห้ามส่งของว่างเปล่าให้ลูกค้าเด็ดขาด ให้แอดมินไปกรอกข้อมูลก่อน
+          if (!String(s.data().login || "").trim() && !String(s.data().password || "").trim()) {
+            throw new Error(`${t("empty_stock_item")}: ${i.name}`);
           }
           return {
             login: s.data().login || "",

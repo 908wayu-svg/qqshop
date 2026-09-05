@@ -397,9 +397,11 @@ async function loadStockItems() {
 
 function renderStockItems() {
   const box = document.getElementById("si-list");
-  const available = STOCK_ITEMS.filter(i => i.status !== "sold").length;
+  const available = STOCK_ITEMS.filter(i => i.status === "available").length;
+  const draft = STOCK_ITEMS.filter(i => i.status === "draft").length;
   document.getElementById("si-count").textContent =
-    `(${t("available")} ${available} / ${t("all")} ${STOCK_ITEMS.length})`;
+    `(${t("available")} ${available} / ${t("all")} ${STOCK_ITEMS.length}`
+    + (draft ? ` · ${t("draft_items")} ${draft}` : "") + ")";
 
   if (!STOCK_ITEMS.length) { box.innerHTML = `<div class="empty">${t("no_stock_items")}</div>`; return; }
 
@@ -416,7 +418,8 @@ function renderStockItems() {
                placeholder="${t("note_optional")}" ${sold ? "disabled" : ""}>
         ${sold
           ? `<span class="badge approved">${t("sold_out_item")}</span>`
-          : `<button class="btn-small danger" data-si-del="${it.id}">✕</button>`}
+          : `${it.status === "draft" ? `<span class="badge pending">${t("draft_item")}</span>` : ""}
+             <button class="btn-small danger" data-si-del="${it.id}">✕</button>`}
       </div>`;
   }).join("");
 }
@@ -611,9 +614,14 @@ document.getElementById("p-save").addEventListener("click", saveProduct);
 
 document.getElementById("p-delete").addEventListener("click", async () => {
   if (!EDITING_PRODUCT || !confirm(t("confirm_delete_product"))) return;
-  await QQ.deleteProduct(EDITING_PRODUCT.id);
-  closePanel("product-overlay");
-  await reloadProducts();
+  const btn = document.getElementById("p-delete");
+  btn.disabled = true;
+  try {
+    await QQ.deleteProduct(EDITING_PRODUCT.id);
+    closePanel("product-overlay");
+    await reloadProducts();
+  } catch (e) { setMsg("p-msg", QQ.friendlyError(e)); }
+  finally { btn.disabled = false; }
 });
 
 document.getElementById("p-digital").addEventListener("change", async () => {
@@ -640,9 +648,11 @@ document.getElementById("si-list").addEventListener("click", async e => {
   if (!del || !EDITING_PRODUCT) return;
   if (!confirm(t("confirm_delete_stock_item"))) return;
   del.disabled = true;
-  await QQ.deleteStockItem(EDITING_PRODUCT.id, del.dataset.siDel);
-  await loadStockItems();
-  await QQ.syncDigitalStock(EDITING_PRODUCT.id);
+  try {
+    await QQ.deleteStockItem(EDITING_PRODUCT.id, del.dataset.siDel);
+    await loadStockItems();
+    await QQ.syncDigitalStock(EDITING_PRODUCT.id);
+  } catch (err) { setMsg("p-msg", QQ.friendlyError(err)); del.disabled = false; }
 });
 
 // ---------- รีเซ็ตยอดขาย ----------

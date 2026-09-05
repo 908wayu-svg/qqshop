@@ -13,10 +13,29 @@ function crc16(str) {
 
 const tlv = (id, value) => id + String(value.length).padStart(2, "0") + value;
 
+// แปลงสิ่งที่เจ้าของร้านกรอก เป็นช่องข้อมูลผู้รับตามมาตรฐานพร้อมเพย์
+// รองรับทั้ง 0918200409 / 66918200409 / +66 91-820-0409 / เลขบัตรประชาชน 13 หลัก
+// คืนค่า null ถ้าอ่านไม่ออก — ดีกว่าสร้าง QR ที่พาลูกค้าโอนเข้าบัญชีผิด
+export function promptPayTarget(raw) {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+
+  // เลขบัตรประชาชน 13 หลัก (แต่ 0066xxxxxxxxx ก็ 13 หลักเหมือนกัน ต้องแยกให้ออก)
+  if (digits.length === 13 && !digits.startsWith("0066")) return { tag: "02", value: digits };
+
+  let local = digits;
+  if (local.startsWith("0066")) local = local.slice(4);
+  else if (local.startsWith("66") && local.length === 11) local = local.slice(2);
+  else if (local.startsWith("0") && local.length === 10) local = local.slice(1);
+
+  // เบอร์มือถือไทยตัดศูนย์หน้าแล้วต้องเหลือ 9 หลักเสมอ
+  return local.length === 9 ? { tag: "01", value: "0066" + local } : null;
+}
+
 export function promptPayPayload(phone, amount, shopName = "QQSHOP") {
-  const digits = String(phone).replace(/\D/g, "");
-  const local = digits.startsWith("0") ? digits.slice(1) : digits;
-  const merchantInfo = tlv("00", "A000000677010111") + tlv("01", "0066" + local);
+  const target = promptPayTarget(phone);
+  if (!target) return null;
+  const merchantInfo = tlv("00", "A000000677010111") + tlv(target.tag, target.value);
 
   let payload = "";
   payload += tlv("00", "01");

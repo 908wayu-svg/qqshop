@@ -118,3 +118,18 @@ ok("ฐานข้อมูลคืนค่ามาได้ แต่ตั
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
+
+section("ลบสินค้า = ต้องล้างคลังไอดี/รหัสผ่านตามไปด้วย");
+const P = (await QQ.saveProduct(null, { name: "ไอดีที่จะโดนลบ", price: 100, active: true, digital: true, stock: 0, image: IMG2 })).id;
+for (let i = 1; i <= 3; i++) await QQ.saveStockItem(P, null, { login: "secret" + i, password: "pw" + i, note: "", sort: i });
+const stockBefore = [...store.state.docs.keys()].filter(k => k.startsWith("products/" + P + "/stockItems/"));
+ok("มีของในคลัง 3 ชิ้น", stockBefore.length === 3, "ได้ " + stockBefore.length);
+await QQ.deleteProduct(P);
+const stockAfter = [...store.state.docs.keys()].filter(k => k.startsWith("products/" + P + "/stockItems/"));
+ok("ลบสินค้าแล้วคลังต้องหายหมด", stockAfter.length === 0, "เหลือ " + stockAfter.length + " ชิ้น");
+ok("ไม่มีรหัสผ่านตกค้างในฐานข้อมูล",
+  ![...store.state.docs.values()].some(d => String(d?.password || "").startsWith("pw")));
+ok("เอกสารสินค้าและรูปหายด้วย", !store.raw("products/" + P) && !store.raw("productImages/" + P));
+
+console.log("\nสรุป(รวมท้าย): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
+if (fail) process.exitCode = 1;

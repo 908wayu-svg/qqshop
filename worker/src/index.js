@@ -19,6 +19,14 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:8765",
 ];
 
+// ยิงออกนอกโดยมีเพดานเวลา — ถ้าปลายทางค้าง คำขอทั้งก้อนจะค้างตาม
+// ลูกค้าจะเห็นหน้าจอหมุนไม่จบ และรายการจะค้างสถานะกลางทาง
+const TIMEOUT_MS = 20000;
+function fetchWithTimeout(url, opt = {}, ms = TIMEOUT_MS) {
+  if (typeof AbortSignal?.timeout !== "function") return fetch(url, opt);
+  return fetch(url, { ...opt, signal: AbortSignal.timeout(ms) });
+}
+
 // ---------- helpers ----------
 function corsHeaders(origin) {
   const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
@@ -81,7 +89,7 @@ async function getAccessToken(saKeyJson) {
   const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key,
     new TextEncoder().encode(`${header}.${claim}`));
 
-  const res = await fetch("https://oauth2.googleapis.com/token", {
+  const res = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -98,7 +106,7 @@ async function getAccessToken(saKeyJson) {
 
 // ---------- ตรวจว่าใครเป็นคนเรียก ----------
 async function verifyUser(idToken) {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
   const data = await res.json();
@@ -265,7 +273,7 @@ async function createOrder(token, user, rawItems) {
 
 // ---------- กดรับซองอั่งเปา ----------
 async function redeemAngpao(code, phone) {
-  const res = await fetch(`https://gift.truemoney.com/campaign/vouchers/${code}/redeem`, {
+  const res = await fetchWithTimeout(`https://gift.truemoney.com/campaign/vouchers/${code}/redeem`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

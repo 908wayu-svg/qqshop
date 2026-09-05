@@ -154,3 +154,49 @@ ok("หักเครดิตครั้งเดียวตามยอด�
 
 console.log("\nสรุป(รวมท้าย): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
+
+section("ชิ้นในคลังที่ยังไม่ได้กรอกไอดี ต้องยังไม่ขึ้นขาย");
+const P4 = (await QQ.saveProduct(null, { name: "รอกรอกข้อมูล", price: 100, active: true, digital: true, stock: 0 })).id;
+await QQ.saveStockItem(P4, null, { login: "", password: "", note: "", sort: 1 });
+await QQ.saveStockItem(P4, null, { login: "", password: "", note: "", sort: 2 });
+await QQ.syncDigitalStock(P4);
+ok("กดเพิ่มชิ้นเปล่าแล้วสต๊อกยังเป็น 0", store.raw("products/" + P4).stock === 0, "ได้ " + store.raw("products/" + P4).stock);
+const empties = await QQ.fetchStockItems(P4);
+ok("ชิ้นเปล่าถูกทำเครื่องหมายว่าเป็นร่าง", empties.every(i => i.status === "draft"));
+
+await QQ.saveStockItemsBulk(P4, [{ id: empties[0].id, data: { login: "realuser", password: "realpw", note: "" } }]);
+await QQ.syncDigitalStock(P4);
+ok("กรอกข้อมูลแล้วสต๊อกขึ้นเป็น 1", store.raw("products/" + P4).stock === 1, "ได้ " + store.raw("products/" + P4).stock);
+
+store.put("users/draftbuyer", { uid: "draftbuyer", email: "d@x.com", name: "ผู้ซื้อ", role: "member", credit: 500, createdAt: new fs2.Timestamp(Date.now()) });
+mkOrder("draftA", "draftbuyer", [{ id: P4, name: "รอกรอกข้อมูล", price: 100, qty: 2 }], 200);
+await throws(() => QQ.approveOrder("draftA"), "ขายเกินจำนวนชิ้นที่กรอกจริงไม่ได้");
+mkOrder("draftB", "draftbuyer", [{ id: P4, name: "รอกรอกข้อมูล", price: 100, qty: 1 }], 100);
+await QQ.approveOrder("draftB");
+const got = store.raw("orders/draftB").items[0].delivered;
+ok("ลูกค้าได้ชิ้นที่กรอกข้อมูลไว้จริง", got?.[0]?.login === "realuser", JSON.stringify(got));
+ok("ไม่มีทางได้ไอดีว่างเปล่า", got.every(d => d.login || d.password));
+
+console.log("\nสรุป(รวมท้าย2): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
+if (fail) process.exitCode = 1;
+
+section("ซ่อมข้อมูลเก่า: ชิ้นว่างที่เคยถูกตั้งเป็นพร้อมขาย");
+const P5 = (await QQ.saveProduct(null, { name: "ของเก่ามีปัญหา", price: 100, active: true, digital: true, stock: 0 })).id;
+// จำลองข้อมูลที่ค้างมาจากโค้ดเวอร์ชันเก่า
+store.put("products/" + P5 + "/stockItems/old1", { login: "", password: "", note: "", status: "available", sort: 1 });
+store.put("products/" + P5 + "/stockItems/old2", { login: "ของจริง", password: "pw", note: "", status: "available", sort: 2 });
+const fixed = await QQ.syncDigitalStock(P5);
+ok("นับเฉพาะชิ้นที่มีข้อมูลจริง", fixed === 1, "ได้ " + fixed);
+ok("ชิ้นว่างถูกลดเป็นร่างให้อัตโนมัติ", store.raw("products/" + P5 + "/stockItems/old1").status === "draft");
+ok("ชิ้นที่มีข้อมูลไม่ถูกแตะ", store.raw("products/" + P5 + "/stockItems/old2").status === "available");
+
+// กันชั้นสุดท้าย: ถึงหลุดมาถึงตอนอนุมัติก็ต้องไม่ส่งของว่าง
+store.put("products/" + P5 + "/stockItems/old1", { login: "", password: "", note: "", status: "available", sort: 1 });
+store.put("products/" + P5, { ...store.raw("products/" + P5), stock: 2 });
+mkOrder("emptyA", "draftbuyer", [{ id: P5, name: "ของเก่ามีปัญหา", price: 100, qty: 2 }], 200);
+await throws(() => QQ.approveOrder("emptyA"), "อนุมัติแล้วเจอชิ้นว่าง = หยุดไว้ ไม่ส่งของว่าง");
+ok("ออเดอร์ยังไม่ถูกอนุมัติ", store.raw("orders/emptyA").status === "pending");
+ok("ยังไม่หักเครดิตลูกค้า", store.raw("users/draftbuyer").credit === 400, "ได้ " + store.raw("users/draftbuyer").credit);
+
+console.log("\nสรุป(รวมท้าย3): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
+if (fail) process.exitCode = 1;

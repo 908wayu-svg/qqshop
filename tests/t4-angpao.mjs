@@ -176,3 +176,17 @@ ok("ไม่มีเอกสารสมาชิกผีถูกสร้�
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
+
+section("ทรูมันนี่ค้างไม่ตอบ (เกินเวลา)");
+TM_THROWS = true;      // จำลอง fetch ที่ถูกตัดเพราะเกินเวลา
+const uT = fresh();
+const started = Date.now();
+const rT = await send(LINK("CODE0000000000011"), uT);
+ok("ไม่ค้างรอตลอดกาล", Date.now() - started < 5000, (Date.now() - started) + " ms");
+ok("ตอบกลับเป็น JSON ปกติ", rT.body.ok === false);
+ok("ลบการจองทิ้ง ลูกค้ายิงใหม่ได้", !DOCS.has("topups/angpao_CODE0000000000011"));
+ok("ไม่มีสถานะค้าง processing", !DOCS.has("topups/angpao_CODE0000000000011"));
+TM_THROWS = false;
+
+console.log("\nสรุป(รวมท้าย): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
+if (fail) process.exitCode = 1;

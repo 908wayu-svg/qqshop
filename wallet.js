@@ -1,5 +1,5 @@
 // ===== หน้ากระเป๋าเงิน: เติมเงิน + ประวัติ =====
-import { QQ } from "./auth.js";
+import { QQ, fetchWithTimeout } from "./auth.js";
 import { SHOP, parseAngpaoCode } from "./shop-config.js";
 import { promptPayPayload } from "./promptpay.js";
 
@@ -96,13 +96,16 @@ function renderMethodInfo() {
 
 function renderQR() {
   const box = document.getElementById("qr-canvas");
-  if (!box || !window.QRCode) return;
+  if (!box) return;
   const amount = Number(document.getElementById("amount").value) || 0;
+  const payload = promptPayPayload(SHOP.channels.promptpay.phone, amount, SHOP.name);
   box.innerHTML = "";
-  new QRCode(box, {
-    text: promptPayPayload(SHOP.channels.promptpay.phone, amount, SHOP.name),
-    width: 200, height: 200,
-  });
+
+  // เบอร์ในไฟล์ตั้งค่าผิดรูปแบบ = ห้ามสร้าง QR มั่วๆ ให้ลูกค้าโอนผิดบัญชี
+  if (!payload) { box.innerHTML = `<div class="hint">${t("promptpay_bad_config")}</div>`; return; }
+  if (!window.QRCode) { box.innerHTML = `<div class="hint">${t("qr_unavailable")}</div>`; return; }
+
+  new QRCode(box, { text: payload, width: 200, height: 200 });
 }
 
 const botEnabled = () => !!SHOP.channels.angpao?.botUrl;
@@ -116,7 +119,7 @@ async function redeemAngpaoViaBot(link) {
     const token = await QQ.getIdToken();
     if (!token) { setMsg(t("e_UNAUTHORIZED")); return; }
 
-    const res = await fetch(SHOP.channels.angpao.botUrl, {
+    const res = await fetchWithTimeout(SHOP.channels.angpao.botUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idToken: token, link }),
