@@ -505,6 +505,19 @@ body.has-contact-fab main,body.has-contact-fab .wallet-main{padding-bottom:96px}
 .contact-meta small{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
 .contact-go{color:var(--muted);font-size:22px;line-height:1}
 .contact-note{margin-bottom:0}
+/* ลิงก์นโยบายท้ายกล่องติดต่อ */
+.contact-policy{display:block;text-align:center;margin-top:12px;font-size:13px;
+  color:var(--muted);text-decoration:none}
+.contact-policy:hover{color:var(--brand);text-decoration:underline}
+
+/* ===== หน้านโยบายความเป็นส่วนตัว ===== */
+.wallet-main h1{font-size:28px;margin:0 0 4px}
+.policy-list{margin:0;padding-left:20px;line-height:1.75}
+.policy-list li{margin-bottom:9px}
+.policy-list li:last-child{margin-bottom:0}
+[data-lang-block] p{line-height:1.75}
+[data-lang-block] .card p:last-child{margin-bottom:0}
+[data-lang-block] .card .btn-primary{max-width:280px}
 
 @media(max-width:600px){
   #grid .empty{padding-top:150px;background-size:auto 130px}

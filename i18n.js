@@ -27,6 +27,7 @@ const I18N = {
     // ติดต่อแอดมิน
     contact_admin: "ติดต่อแอดมิน", contact_title: "ติดต่อแอดมิน",
     contact_note: "แจ้งเลขที่คำสั่งซื้อหรืออีเมลที่สมัครไว้ด้วย จะได้ตรวจให้เร็วขึ้น",
+    privacy_title: "นโยบายความเป็นส่วนตัว", privacy_link: "นโยบายความเป็นส่วนตัว",
     // คลังสินค้าดิจิทัล
     is_digital: "สินค้าดิจิทัล (มีไอดี/รหัสผ่านรายชิ้น)",
     digital_hint: "เมื่อเปิด สต๊อกจะนับจากจำนวนชิ้นในคลังอัตโนมัติ ลูกค้าจะเห็นไอดี/รหัสผ่านในประวัติการซื้อทันทีที่คุณอนุมัติออเดอร์",
@@ -213,6 +214,7 @@ const I18N = {
     // Contact admin
     contact_admin: "Contact admin", contact_title: "Contact the admin",
     contact_note: "Include your order number or the email you signed up with so we can check it faster",
+    privacy_title: "Privacy Policy", privacy_link: "Privacy Policy",
     is_digital: "Digital product (per-item login / password)",
     digital_hint: "When on, stock is counted from the items below automatically. Buyers see the login and password in their purchase history as soon as you approve the order.",
     stock_items: "Inventory",

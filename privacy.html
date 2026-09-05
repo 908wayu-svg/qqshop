@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QQSHOP — นโยบายความเป็นส่วนตัว</title>
+<meta name="theme-color" content="#ef7c17">
+<meta name="description" content="นโยบายความเป็นส่วนตัวของ QQSHOP ร้านขายไอดีเกม — เก็บข้อมูลอะไร เอาไปใช้ทำอะไร และติดต่อขอลบข้อมูลได้ที่ไหน">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="brand" href="index.html">QQSHOP <small data-i18n="privacy_title">นโยบายความเป็นส่วนตัว</small></a>
+  <div class="header-actions">
+    <button class="btn-lang" onclick="toggleLang()"><span data-lang-label>EN</span></button>
+    <a class="btn-ghost" href="index.html" data-i18n="back_to_shop">กลับหน้าร้าน</a>
+  </div>
+</header>
+
+<main class="wallet-main">
+
+<!-- ===== ไทย ===== -->
+<div data-lang-block="th">
+  <h1>นโยบายความเป็นส่วนตัว</h1>
+  <p class="muted">ปรับปรุงล่าสุด 5 กันยายน 2569</p>
+
+  <div class="card">
+    <h3>เราคือใคร</h3>
+    <p>QQSHOP เป็นร้านขายไอดีเกมและสินค้าดิจิทัลออนไลน์ ให้บริการผ่านเว็บไซต์
+      <b>908wayu-svg.github.io/qqshop</b> นโยบายนี้อธิบายว่าเราเก็บข้อมูลอะไรของคุณบ้าง
+      เก็บไปทำไม และคุณขอให้เราลบได้อย่างไร</p>
+  </div>
+
+  <div class="card">
+    <h3>ข้อมูลที่เราเก็บ</h3>
+    <ul class="policy-list">
+      <li><b>ข้อมูลบัญชี</b> — อีเมล ชื่อที่คุณตั้ง และเบอร์โทร (เฉพาะถ้าคุณกรอก)</li>
+      <li><b>ถ้าเข้าสู่ระบบด้วย Google หรือ Facebook</b> — เรารับเฉพาะ ชื่อ และ อีเมล
+        จากผู้ให้บริการนั้นเท่านั้น เราไม่เห็นรหัสผ่านของคุณ ไม่โพสต์อะไรลงบัญชีของคุณ
+        และไม่เข้าถึงรายชื่อเพื่อนหรือข้อมูลอื่นใด</li>
+      <li><b>รหัสผ่าน</b> — เก็บและเข้ารหัสโดย Firebase Authentication ของ Google
+        ทางร้านมองไม่เห็นรหัสผ่านของคุณ</li>
+      <li><b>ข้อมูลการซื้อขาย</b> — รายการสั่งซื้อ ยอดเงิน ยอดเครดิตคงเหลือ และประวัติการเติมเงิน</li>
+      <li><b>หลักฐานการโอนเงิน</b> — สลิปที่คุณอัปโหลด หรือลิงก์ซองอั่งเปาที่คุณวาง
+        ใช้เพื่อยืนยันการเติมเงินเท่านั้น</li>
+    </ul>
+    <p class="hint">เราไม่เก็บเลขบัตรเครดิต และไม่มีระบบรับข้อมูลบัตรบนเว็บนี้</p>
+  </div>
+
+  <div class="card">
+    <h3>เอาไปใช้ทำอะไร</h3>
+    <ul class="policy-list">
+      <li>ยืนยันตัวตนและให้คุณเข้าสู่ระบบได้</li>
+      <li>ประมวลผลคำสั่งซื้อ ส่งมอบไอดีเกมที่คุณซื้อ และดูแลยอดเครดิต</li>
+      <li>ตรวจสอบการเติมเงินให้ตรงกับที่โอนจริง</li>
+      <li>ติดต่อกลับเมื่อมีปัญหาเกี่ยวกับคำสั่งซื้อของคุณ</li>
+    </ul>
+    <p><b>เราไม่ขาย ไม่ให้เช่า และไม่ส่งต่อข้อมูลของคุณให้บุคคลที่สามเพื่อการโฆษณา</b></p>
+  </div>
+
+  <div class="card">
+    <h3>เก็บไว้ที่ไหน</h3>
+    <p>ข้อมูลทั้งหมดเก็บอยู่บน <b>Firebase</b> ของ Google (Firestore และ Firebase Authentication)
+      ซึ่งเป็นผู้ให้บริการที่เราใช้ประมวลผลข้อมูลให้ ระบบกำหนดสิทธิ์ไว้ว่า
+      ลูกค้าแต่ละคนอ่านได้เฉพาะข้อมูลของตัวเองเท่านั้น</p>
+    <p>ไอดีและรหัสผ่านของสินค้าที่คุณซื้อ จะแสดงให้เฉพาะเจ้าของคำสั่งซื้อนั้นเห็น
+      หลังจากแอดมินอนุมัติแล้ว</p>
+  </div>
+
+  <div class="card">
+    <h3>คุกกี้และข้อมูลในเครื่องคุณ</h3>
+    <p>เว็บนี้ไม่ใช้คุกกี้ติดตามโฆษณา เราเก็บไว้ในเบราว์เซอร์ของคุณแค่ 2 อย่าง คือ
+      <b>ตะกร้าสินค้า</b> และ <b>ภาษาที่คุณเลือก</b> ข้อมูลนี้อยู่ในเครื่องคุณเอง
+      ไม่ได้ส่งมาที่เรา และลบได้ด้วยการล้างข้อมูลเว็บไซต์ในเบราว์เซอร์</p>
+  </div>
+
+  <div class="card">
+    <h3>สิทธิ์ของคุณ</h3>
+    <p>คุณขอสิ่งเหล่านี้ได้ตลอดเวลาโดยทักหาแอดมิน</p>
+    <ul class="policy-list">
+      <li>ขอดูข้อมูลที่เราเก็บเกี่ยวกับคุณ</li>
+      <li>ขอแก้ไขข้อมูลที่ไม่ถูกต้อง</li>
+      <li><b>ขอลบบัญชีและข้อมูลของคุณทั้งหมด</b></li>
+    </ul>
+    <p class="hint">ข้อมูลบางส่วนที่จำเป็นต่อหลักฐานการซื้อขาย เราอาจต้องเก็บไว้ตามที่กฎหมายกำหนด</p>
+  </div>
+
+  <div class="card">
+    <h3>ติดต่อเรา</h3>
+    <p>มีคำถามเรื่องข้อมูลส่วนตัว หรือต้องการให้ลบบัญชี ทักได้ที่</p>
+    <p><a class="btn-primary" id="policy-contact-th" href="#" target="_blank" rel="noopener noreferrer">
+      ติดต่อแอดมินทาง Facebook</a></p>
+  </div>
+</div>
+
+<!-- ===== English ===== -->
+<div data-lang-block="en" hidden>
+  <h1>Privacy Policy</h1>
+  <p class="muted">Last updated 5 September 2026</p>
+
+  <div class="card">
+    <h3>Who we are</h3>
+    <p>QQSHOP is an online shop selling game accounts and digital goods, operating at
+      <b>908wayu-svg.github.io/qqshop</b>. This policy explains what data we collect,
+      why we collect it, and how you can ask us to delete it.</p>
+  </div>
+
+  <div class="card">
+    <h3>What we collect</h3>
+    <ul class="policy-list">
+      <li><b>Account details</b> — your email, the name you choose, and your phone number
+        (only if you enter one).</li>
+      <li><b>If you sign in with Google or Facebook</b> — we receive only your name and email
+        from that provider. We never see your password, we never post anything to your account,
+        and we do not access your friends or any other data.</li>
+      <li><b>Passwords</b> — stored and encrypted by Google's Firebase Authentication.
+        The shop cannot see your password.</li>
+      <li><b>Purchase data</b> — your orders, amounts, remaining credit, and top-up history.</li>
+      <li><b>Payment proof</b> — the transfer slip you upload or the gift link you paste,
+        used only to verify your top-up.</li>
+    </ul>
+    <p class="hint">We do not store card numbers, and this site has no way to accept card details.</p>
+  </div>
+
+  <div class="card">
+    <h3>How we use it</h3>
+    <ul class="policy-list">
+      <li>To sign you in and verify who you are.</li>
+      <li>To process your orders, deliver what you bought, and manage your credit balance.</li>
+      <li>To check that your top-up matches what you actually transferred.</li>
+      <li>To contact you if there is a problem with your order.</li>
+    </ul>
+    <p><b>We do not sell, rent, or share your data with third parties for advertising.</b></p>
+  </div>
+
+  <div class="card">
+    <h3>Where it is stored</h3>
+    <p>All data is stored on Google <b>Firebase</b> (Firestore and Firebase Authentication),
+      the provider that processes data on our behalf. Access rules are set so each customer
+      can only read their own data.</p>
+    <p>The login and password of a product you bought are shown only to the owner of that
+      order, and only after an admin approves it.</p>
+  </div>
+
+  <div class="card">
+    <h3>Cookies and local data</h3>
+    <p>This site uses no advertising or tracking cookies. We keep just two things in your
+      browser: your <b>shopping cart</b> and your <b>language choice</b>. Both stay on your
+      device, are never sent to us, and disappear when you clear site data in your browser.</p>
+  </div>
+
+  <div class="card">
+    <h3>Your rights</h3>
+    <p>You can ask us for any of the following at any time by messaging the admin:</p>
+    <ul class="policy-list">
+      <li>See what data we hold about you.</li>
+      <li>Correct anything that is wrong.</li>
+      <li><b>Delete your account and all your data.</b></li>
+    </ul>
+    <p class="hint">We may need to keep some purchase records for as long as the law requires.</p>
+  </div>
+
+  <div class="card">
+    <h3>Contact us</h3>
+    <p>For any privacy question, or to have your account deleted, message us at:</p>
+    <p><a class="btn-primary" id="policy-contact-en" href="#" target="_blank" rel="noopener noreferrer">
+      Contact the admin on Facebook</a></p>
+  </div>
+</div>
+
+</main>
+
+<script src="i18n.js"></script>
+<script src="ui.js"></script>
+<script type="module" src="contact.js"></script>
+<script type="module">
+// ลิงก์ติดต่อดึงมาจาก shop-config.js ที่เดียว จะได้ไม่ต้องแก้ 2 ที่เวลาเปลี่ยนช่องทาง
+import { SHOP } from "./shop-config.js";
+
+const fb = (SHOP.contact?.channels || []).find(c => c.id === "facebook" && c.enabled !== false);
+for (const id of ["policy-contact-th", "policy-contact-en"]) {
+  const a = document.getElementById(id);
+  if (!a) continue;
+  if (fb) a.href = fb.url; else a.closest(".card")?.remove();
+}
+
+// สลับภาษาแบบทั้งบล็อก — เนื้อหานโยบายยาวเกินกว่าจะยัดเป็น key ในตารางคำแปล
+function applyPolicyLang() {
+  const lang = typeof getLang === "function" ? getLang() : "th";
+  document.querySelectorAll("[data-lang-block]").forEach(el => {
+    el.hidden = el.dataset.langBlock !== lang;
+  });
+}
+applyPolicyLang();
+document.addEventListener("langchange", applyPolicyLang);
+</script>
+</body>
+</html>
