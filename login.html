@@ -54,9 +54,10 @@
     <button class="btn-social btn-google" onclick="doGoogle()">
       <span class="ico">G</span><span data-i18n="continue_google">เข้าสู่ระบบด้วย Google</span>
     </button>
-    <button class="btn-social btn-facebook" onclick="doFacebook()">
-      <span class="ico">f</span><span data-i18n="continue_facebook">เข้าสู่ระบบด้วย Facebook</span>
-    </button>
+    <!-- ปุ่มเข้าสู่ระบบด้วย Facebook ถอดออกไปก่อน — แอปสร้างแล้วที่ developers.facebook.com
+         (App ID 1721138543349738) แต่ต้องผ่าน Business Verification ของ Meta ก่อนถึงจะเปิดให้
+         ลูกค้าทั่วไปใช้ได้ (ตอนนี้ใช้ได้เฉพาะเจ้าของแอป) ระหว่างรอ ไม่โชว์ปุ่มนี้ให้ลูกค้าเห็น
+         โค้ด doFacebook()/loginWithFacebook() ยังอยู่ครบ พร้อมเปิดใช้ทันทีที่ผ่านการตรวจสอบ -->
 
     <a class="btn-link center" href="index.html" data-i18n="browse_shop">ดูสินค้าก่อน</a>
   </div>
