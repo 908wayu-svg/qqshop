@@ -61,7 +61,7 @@ section("จอมือถือก็ต้องไม่ทับ");
 
 section(".empty ที่อยู่นอกหน้าร้าน (เช่นในตะกร้า) ไม่ต้องมีรูป");
 {
-  const cs = styleOf('<div class="panel"><div id="cart-list"><div class="empty" id="e">ตะกร้าว่างเปล่า</div></div></div>', "e");
+  const cs = styleOf('<div class="panel"><div id="buy-fields"><div class="empty" id="e">ยังไม่ได้เลือกสินค้า</div></div></div>', "e");
   ok("ในตะกร้าไม่ต้องเว้นที่ให้รูป", px(cs.paddingTop) < 100, cs.paddingTop);
 }
 

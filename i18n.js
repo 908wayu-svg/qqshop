@@ -4,7 +4,7 @@
 const I18N = {
   th: {
     // ทั่วไป
-    cart: "ตะกร้า", login: "เข้าสู่ระบบ", logout: "ออกจากระบบ", register: "สมัครสมาชิก",
+    login: "เข้าสู่ระบบ", logout: "ออกจากระบบ", register: "สมัครสมาชิก",
     admin_panel: "หลังบ้าน", back_to_shop: "กลับหน้าร้าน", loading: "กำลังโหลด...",
     cancel: "ยกเลิก", save: "บันทึก", close: "ปิด", edit: "แก้ไข", delete: "ลบ",
     add: "เพิ่ม", confirm: "ยืนยัน", search: "ค้นหา", all: "ทั้งหมด", baht: "฿",
@@ -12,14 +12,31 @@ const I18N = {
     load_failed: "โหลดข้อมูลไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่", try_again: "ลองใหม่",
 
     // หน้าร้าน
-    cart_title: "ตะกร้าสินค้า", cart_empty: "ตะกร้าว่างเปล่า", total: "รวมทั้งหมด",
-    checkout: "สั่งซื้อ", add_to_cart: "เพิ่มลงตะกร้า", out_of_stock: "สินค้าหมด",
+    total: "รวมทั้งหมด", out_of_stock: "สินค้าหมด",
     stock_left: "เหลือ", order_no: "เลขที่คำสั่งซื้อ",
-    order_placed: "สั่งซื้อเรียบร้อย! รอแอดมินอนุมัติ เครดิตจะถูกหักเมื่ออนุมัติแล้ว",
     login_required: "กรุณาเข้าสู่ระบบก่อนสั่งซื้อ",
     not_enough_credit: "เครดิตไม่พอ กรุณาเติมเงินก่อน",
-    cart_updated: "ราคาหรือจำนวนสินค้าในตะกร้ามีการเปลี่ยนแปลง กรุณาตรวจสอบแล้วกดสั่งซื้ออีกครั้ง",
     topup_now: "เติมเงิน",
+
+    // ===== หน้าต่างสั่งซื้อทันที (ไม่มีตะกร้าแล้ว) =====
+    buy_now: "สั่งซื้อ", buy_title: "ยืนยันการสั่งซื้อ",
+    quantity: "จำนวน", qty_minus: "ลดจำนวน", qty_plus: "เพิ่มจำนวน",
+    unit_price: "ราคาต่อชิ้น", credit_after: "เครดิตคงเหลือหลังซื้อ",
+    stock_not_enough: "สต๊อกเหลือไม่พอกับจำนวนที่เลือก",
+    order_terms_head: "เงื่อนไขการเคลม — อ่านก่อนกดยืนยัน",
+    order_terms_video_id: "ต้องอัดวิดีโอตั้งแต่ตอนกดสั่งซื้อ จนเข้าเกมได้ ห้ามตัดต่อ ห้ามหยุดกลางคัน",
+    order_terms_video_topup: "ต้องอัดวิดีโอตั้งแต่ตอนกดสั่งซื้อ จนของเข้าเกม ห้ามตัดต่อ ห้ามหยุดกลางคัน",
+    order_terms_time: "เข้าเกมไม่ได้ / ของไม่เข้า ต้องแจ้งแอดมินภายใน {n} นาที เกินกว่านั้นร้านไม่รับประกัน",
+    order_terms_novideo: "ไม่มีวิดีโอ = เคลมไม่ได้",
+    accept_terms: "ฉันอ่านและยอมรับเงื่อนไขข้างต้นแล้ว",
+    accept_terms_required: "ต้องติ๊กยอมรับเงื่อนไขก่อน ถึงจะกดยืนยันได้",
+    confirm_buy: "ยืนยันสั่งซื้อ",
+    buy_success_title: "ซื้อสำเร็จ!",
+    buy_success_digital: "ไอดีและรหัสผ่านอยู่ในประวัติการซื้อของคุณแล้ว กดดูได้เลย",
+    buy_success_topup: "รับคำสั่งซื้อแล้ว แอดมินกำลังจัดการให้ ดูสถานะได้ในประวัติการซื้อ",
+    claim_timer_started: "เริ่มนับเวลาแจ้งเคลม {n} นาทีแล้ว",
+    claim_timer_later: "เวลาแจ้งเคลม {n} นาที จะเริ่มนับตอนแอดมินกดว่าทำเสร็จแล้ว",
+    go_purchases: "ไปที่ประวัติการซื้อ", keep_shopping: "เลือกซื้อต่อ",
     // ค้นหา / กรอง / เรียงลำดับ หน้าร้าน
     search_products: "ค้นหาชื่อสินค้า...", clear_search: "ล้างคำค้น",
     price_range: "ช่วงราคา", price_min: "ต่ำสุด", price_max: "สูงสุด",
@@ -33,7 +50,7 @@ const I18N = {
     price_range_invalid: "ราคาต่ำสุดมากกว่าราคาสูงสุดอยู่ ลองสลับตัวเลขกันดู",
     // แบนเนอร์หน้าร้าน
     hero_title: "ร้านไอดีเกม QQSHOP",
-    hero_sub: "ไอดีเกมของแท้ ราคาถูก จ่ายด้วยเครดิต ได้ของทันทีหลังแอดมินอนุมัติ",
+    hero_sub: "ไอดีเกมของแท้ ราคาถูก จ่ายด้วยเครดิต ซื้อปุ๊บได้ไอดีทันที",
     hero_b1: "⚡ ได้ของไว", hero_b2: "🔒 ปลอดภัย", hero_b3: "💬 แอดมินตอบตลอด",
     // ติดต่อแอดมิน
     contact_admin: "ติดต่อแอดมิน", contact_title: "ติดต่อแอดมิน",
@@ -42,7 +59,7 @@ const I18N = {
     terms_title: "เงื่อนไขการให้บริการ", terms_link: "เงื่อนไข & การคืนสินค้า",
     // คลังสินค้าดิจิทัล
     is_digital: "สินค้าดิจิทัล (มีไอดี/รหัสผ่านรายชิ้น)",
-    digital_hint: "เมื่อเปิด สต๊อกจะนับจากจำนวนชิ้นในคลังอัตโนมัติ ลูกค้าจะเห็นไอดี/รหัสผ่านในประวัติการซื้อทันทีที่คุณอนุมัติออเดอร์",
+    digital_hint: "เมื่อเปิด สต๊อกจะนับจากจำนวนชิ้นในคลังอัตโนมัติ ลูกค้าจะได้ไอดี/รหัสผ่านทันทีที่กดซื้อ โดยไม่ต้องรอคุณอนุมัติ",
     stock_items: "คลังสินค้า",
     stock_items_hint: "แต่ละชิ้นคือของ 1 ชุดที่ขายได้ 1 ครั้ง ใส่ชื่อผู้ใช้และรหัสผ่านของชุดนั้น แล้วกดบันทึก (ชิ้นที่ยังไม่กรอกจะยังไม่ขึ้นขายหน้าร้าน)",
     save_product_first: "กดบันทึกสินค้าก่อน แล้วค่อยเพิ่มชิ้นในคลังได้",
@@ -72,23 +89,27 @@ const I18N = {
     confirm_reset_sales: "รีเซ็ตยอดขายให้เป็นศูนย์?\n\nออเดอร์เก่าจะไม่ถูกลบ ลูกค้ายังเห็นประวัติการซื้อครบเหมือนเดิม แค่แดชบอร์ดจะเริ่มนับใหม่จากตอนนี้ และยกเลิกทีหลังได้",
     confirm_undo_reset: "กลับไปนับยอดขายตั้งแต่ต้นเหมือนเดิม?",
 
-    o_PRODUCT_NOT_FOUND: "มีสินค้าในตะกร้าที่ไม่มีขายแล้ว ระบบเอาออกให้แล้ว",
-    o_PRODUCT_INACTIVE: "มีสินค้าในตะกร้าที่ปิดขายไปแล้ว",
-    o_OUT_OF_STOCK: "สินค้าบางรายการมีไม่พอ กรุณาลดจำนวนลง",
+    o_PRODUCT_NOT_FOUND: "สินค้าชิ้นนี้ไม่มีขายแล้ว",
+    o_PRODUCT_INACTIVE: "สินค้าชิ้นนี้ปิดขายไปแล้ว",
+    o_OUT_OF_STOCK: "ของเหลือไม่พอกับจำนวนที่สั่ง กรุณาลดจำนวนลง",
     o_NOT_ENOUGH_CREDIT: "เครดิตไม่พอ กรุณาเติมเงินก่อน",
     o_NEED_CUSTOMER_INFO: "กรุณากรอกข้อมูลไอดีเกมให้ครบก่อนสั่งซื้อ",
-    o_EMPTY_CART: "ตะกร้าว่างเปล่า",
+    o_EMPTY_CART: "ยังไม่ได้เลือกสินค้า",
     o_BAD_QTY: "จำนวนสินค้าไม่ถูกต้อง",
     o_BAD_ITEM: "ข้อมูลสินค้าไม่ถูกต้อง",
-    o_RATE_LIMITED: "สั่งซื้อถี่เกินไป กรุณารอสักครู่",
+    o_RATE_LIMITED: "กดถี่เกินไป กรุณารอสักครู่",
     o_UNAUTHORIZED: "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่แล้วสั่งซื้ออีกครั้ง",
     o_BOT_UNREACHABLE: "ติดต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่",
-    o_TOO_MANY_ITEMS: "มีสินค้าในตะกร้ามากเกินไป",
+    o_TOO_MANY_ITEMS: "สั่งครั้งเดียวหลายรายการเกินไป",
     o_BAD_PRICE: "ราคาสินค้าบางรายการยังไม่ถูกตั้ง กรุณาแจ้งแอดมิน",
     o_BAD_TOTAL: "ยอดรวมไม่ถูกต้อง",
     o_NO_PROFILE: "ไม่พบบัญชีของคุณ กรุณาเข้าสู่ระบบใหม่",
     o_ORDER_FAILED: "สั่งซื้อไม่สำเร็จ กรุณาลองใหม่",
     o_SERVER_NOT_READY: "ระบบสั่งซื้อยังไม่พร้อม กรุณาแจ้งแอดมิน",
+    o_ITEM_NOT_READY: "สินค้าชิ้นนี้ยังไม่พร้อมส่ง กรุณาแจ้งแอดมิน",
+    o_BUSY: "มีคนกดพร้อมกันพอดี กรุณากดใหม่อีกครั้ง",
+    o_ORDER_NOT_FOUND: "ไม่พบคำสั่งซื้อนี้",
+    o_EDIT_LOCKED: "แอดมินเริ่มดำเนินการแล้ว แก้ข้อมูลไม่ได้",
 
 
     // กระเป๋าเงิน / เติมเงิน
@@ -131,16 +152,30 @@ const I18N = {
     order_number: "เลขที่", order_items: "สินค้าที่ซื้อ", qty_short: "จำนวน",
     purchased_on: "ซื้อเมื่อ", ordered_on: "สั่งเมื่อ",
     total_spent: "ยอดซื้อสะสม", purchase_count: "จำนวนครั้งที่ซื้อ",
-    pending_note: "รอแอดมินอนุมัติ เครดิตจะถูกหักเมื่ออนุมัติแล้ว",
+    pending_note: "หักเครดิตแล้ว รอแอดมินดำเนินการ",
+    processing_note: "แอดมินกำลังดำเนินการให้",
+    completed_note: "ซื้อสำเร็จ หักเครดิตเรียบร้อย",
+    cancelled_note: "ยกเลิกแล้ว คืนเครดิตเข้ากระเป๋าเรียบร้อย",
     approved_note: "ซื้อสำเร็จ หักเครดิตเรียบร้อย",
     rejected_note: "ไม่อนุมัติ เครดิตไม่ถูกหัก",
     view_all_purchases: "ดูประวัติการซื้อทั้งหมด",
     topup_history: "ประวัติเติมเงิน", order_history: "ประวัติการสั่งซื้อ",
     min_amount: "จำนวนเงินขั้นต่ำ", amount_invalid: "จำนวนเงินไม่ถูกต้อง",
 
+    // ===== แก้ข้อมูลไอดีเกมในประวัติการซื้อ (เฉพาะตอน "รอดำเนินการ") =====
+    edit_info: "แก้ไขข้อมูลไอดีเกม",
+    edit_info_hint: "แก้ได้เฉพาะตอนสถานะ “รอดำเนินการ” เท่านั้น",
+    edit_info_warn: "ถ้าแก้ช้าจนแอดมินเติมเข้าไอดีเดิมไปแล้ว ร้านไม่รับผิดชอบ",
+    edit_info_saved: "บันทึกข้อมูลใหม่แล้ว",
+    info_edited_at: "แก้ไขล่าสุด",
+    claim_window: "เวลาแจ้งเคลม",
+    claim_left: "เหลือเวลาแจ้งเคลมอีก {n} นาที",
+    claim_expired: "หมดเวลาแจ้งเคลมแล้ว",
+    claim_note: "มีปัญหาต้องแจ้งภายใน {n} นาทีหลังได้รับของ พร้อมวิดีโอตั้งแต่ตอนกดสั่งซื้อ",
+
     // สถานะ
-    status: "สถานะ", st_pending: "รออนุมัติ", st_approved: "อนุมัติแล้ว", st_rejected: "ไม่อนุมัติ",
-    st_processing: "กำลังดำเนินการ",
+    status: "สถานะ", st_pending: "รอดำเนินการ", st_approved: "อนุมัติแล้ว", st_rejected: "ไม่อนุมัติ",
+    st_processing: "กำลังดำเนินการ", st_completed: "สำเร็จ", st_cancelled: "ยกเลิกแล้ว",
     // ===== ข้อความผิดพลาดจากเส้นทางแอดมินฝั่งเซิร์ฟเวอร์ (/admin/*) =====
     // ทุกคำสั่งที่แตะเครดิต/สิทธิ์ ทำที่เซิร์ฟเวอร์ รหัสที่ตอบกลับมาแปลที่นี่
     a_ADMIN_ONLY: "ไม่มีสิทธิ์แอดมิน (อาจถูกถอนสิทธิ์แล้ว) ลองออกจากระบบแล้วเข้าใหม่",
@@ -170,6 +205,8 @@ const I18N = {
     a_SERVER_NOT_READY: "เซิร์ฟเวอร์ยังไม่พร้อม กรุณาลองใหม่",
     a_NO_PROFILE: "ยังไม่มีข้อมูลสมาชิกในระบบ",
     a_ADMIN_FAILED: "ทำรายการไม่สำเร็จ กรุณาลองใหม่",
+    a_OLD_ORDER: "ออเดอร์นี้เป็นของระบบเก่า (ยังไม่ได้หักเครดิต) ใช้ปุ่มอนุมัติ/ไม่อนุมัติแทน",
+    a_NEW_FLOW_ORDER: "ออเดอร์นี้หักเครดิตไปแล้วตอนลูกค้ากดสั่ง ใช้ปุ่มเริ่มดำเนินการ / ทำเสร็จแล้ว / ยกเลิกแทน",
     not_found: "ไม่พบรายการนี้ (อาจถูกลบไปแล้ว)",
     already_handled: "รายการนี้ถูกดำเนินการไปแล้ว กรุณารีเฟรชหน้าจอ",
     amount_missing: "รายการนี้ยังไม่มียอดเงิน กรุณาใส่ยอดก่อนอนุมัติ",
@@ -216,6 +253,14 @@ const I18N = {
     method: "ช่องทาง", view_slip: "ดูสลิป", open_angpao: "เปิดลิงก์ซอง",
     confirm_approve_order: "อนุมัติออเดอร์นี้? เครดิตลูกค้าจะถูกหักทันที",
     confirm_reject: "ไม่อนุมัติรายการนี้?",
+    // ปุ่มออเดอร์ระบบใหม่ (หักเครดิตตั้งแต่ลูกค้ากดสั่ง)
+    start_order: "เริ่มดำเนินการ", complete_order: "ทำเสร็จแล้ว", cancel_refund: "ยกเลิก + คืนเครดิต",
+    confirm_start_order: "เริ่มดำเนินการออเดอร์นี้?\n\nพอกดแล้วลูกค้าจะแก้ไอดีเกมของตัวเองไม่ได้อีก",
+    confirm_complete_order: "ทำเสร็จแล้วใช่ไหม?\n\nระบบจะเริ่มจับเวลาแจ้งเคลมของลูกค้า และลบชื่อผู้ใช้/รหัสผ่านของลูกค้าออกจากออเดอร์ให้อัตโนมัติ",
+    confirm_cancel_order: "ยกเลิกออเดอร์นี้และคืนเครดิตให้ลูกค้า?\n\nคืนเต็มจำนวน และคืนสต๊อกเฉพาะของที่ยังไม่ได้ส่งมอบ",
+    order_kind: "ประเภท", kind_digital: "ไอดีเกม", kind_topup: "เติมเกม",
+    info_edit_history: "ลูกค้าแก้ข้อมูลเอง",
+    legacy_order: "ออเดอร์ระบบเก่า",
     confirm_approve_topup: "อนุมัติการเติมเงินนี้? เครดิตจะเข้าบัญชีลูกค้าทันที",
     insufficient_customer_credit: "เครดิตลูกค้าไม่พอ อนุมัติไม่ได้",
     price_mismatch: "ยอดเงินไม่ตรงกับราคาสินค้าปัจจุบัน — ตัวเลขสีส้มคือยอดที่ถูกต้อง",
@@ -260,21 +305,38 @@ const I18N = {
   },
 
   en: {
-    cart: "Cart", login: "Sign in", logout: "Sign out", register: "Sign up",
+    login: "Sign in", logout: "Sign out", register: "Sign up",
     admin_panel: "Admin", back_to_shop: "Back to shop", loading: "Loading...",
     cancel: "Cancel", save: "Save", close: "Close", edit: "Edit", delete: "Delete",
     add: "Add", confirm: "Confirm", search: "Search", all: "All", baht: "฿",
     saved: "Saved", error_generic: "Something went wrong, please try again",
     load_failed: "Could not load your data — check your connection and try again", try_again: "Try again",
 
-    cart_title: "Your cart", cart_empty: "Your cart is empty", total: "Total",
-    checkout: "Place order", add_to_cart: "Add to cart", out_of_stock: "Out of stock",
+    total: "Total", out_of_stock: "Out of stock",
     stock_left: "left", order_no: "Order number",
-    order_placed: "Order placed! Waiting for admin approval — credit is deducted on approval.",
     login_required: "Please sign in before ordering",
     not_enough_credit: "Not enough credit. Please top up first.",
-    cart_updated: "Prices or quantities in your cart changed — please review and order again.",
     topup_now: "Top up",
+
+    // ===== Instant buy dialog (the cart is gone) =====
+    buy_now: "Buy now", buy_title: "Confirm your order",
+    quantity: "Quantity", qty_minus: "Decrease quantity", qty_plus: "Increase quantity",
+    unit_price: "Unit price", credit_after: "Credit left after this order",
+    stock_not_enough: "Not enough stock for that quantity",
+    order_terms_head: "Refund rules — read before you confirm",
+    order_terms_video_id: "You must record a video from the moment you press Buy until you are inside the game. No cuts, no pauses.",
+    order_terms_video_topup: "You must record a video from the moment you press Buy until the items land in your game. No cuts, no pauses.",
+    order_terms_time: "If you cannot log in, or the items never arrive, tell the admin within {n} minutes. After that we cannot cover it.",
+    order_terms_novideo: "No video means no refund.",
+    accept_terms: "I have read and accept the rules above",
+    accept_terms_required: "Tick the box to accept the rules before confirming",
+    confirm_buy: "Confirm order",
+    buy_success_title: "Purchase complete!",
+    buy_success_digital: "Your login and password are in your purchase history — open it any time.",
+    buy_success_topup: "Order received. The admin is working on it — follow the status in your purchase history.",
+    claim_timer_started: "Your {n}-minute refund window starts now",
+    claim_timer_later: "Your {n}-minute refund window starts once the admin marks it done",
+    go_purchases: "Go to purchase history", keep_shopping: "Keep shopping",
     // Storefront search / filter / sort
     search_products: "Search products...", clear_search: "Clear search",
     price_range: "Price", price_min: "Min", price_max: "Max",
@@ -288,7 +350,7 @@ const I18N = {
     price_range_invalid: "Min price is higher than max price — try swapping them",
     // Storefront banner
     hero_title: "QQSHOP Game Accounts",
-    hero_sub: "Genuine game accounts at low prices. Pay with credit, get your account right after admin approval.",
+    hero_sub: "Genuine game accounts at low prices. Pay with credit and get your account instantly.",
     hero_b1: "⚡ Fast delivery", hero_b2: "🔒 Secure", hero_b3: "💬 Admin always online",
     // Contact admin
     contact_admin: "Contact admin", contact_title: "Contact the admin",
@@ -296,7 +358,7 @@ const I18N = {
     privacy_title: "Privacy Policy", privacy_link: "Privacy Policy",
     terms_title: "Terms of Service", terms_link: "Terms & refunds",
     is_digital: "Digital product (per-item login / password)",
-    digital_hint: "When on, stock is counted from the items below automatically. Buyers see the login and password in their purchase history as soon as you approve the order.",
+    digital_hint: "When on, stock is counted from the items below automatically. Buyers get the login and password the moment they buy — no approval needed.",
     stock_items: "Inventory",
     stock_items_hint: "Each row is one set that can be sold once. Fill in its login and password, then save. Rows left empty are not put on sale.",
     save_product_first: "Save the product first, then you can add inventory items",
@@ -325,23 +387,27 @@ const I18N = {
     confirm_reset_sales: "Reset sales figures to zero?\n\nNo orders are deleted and customers keep their full purchase history — the dashboard just starts counting from now, and you can undo it later.",
     confirm_undo_reset: "Go back to counting sales from the very beginning?",
 
-    o_PRODUCT_NOT_FOUND: "Your cart had a product that is no longer sold — it has been removed",
-    o_PRODUCT_INACTIVE: "Your cart has a product that is no longer listed",
-    o_OUT_OF_STOCK: "Not enough stock for some items — please reduce the quantity",
+    o_PRODUCT_NOT_FOUND: "This product is no longer sold",
+    o_PRODUCT_INACTIVE: "This product is no longer listed",
+    o_OUT_OF_STOCK: "Not enough stock for that quantity — please order fewer",
     o_NOT_ENOUGH_CREDIT: "Not enough credit. Please top up first.",
     o_NEED_CUSTOMER_INFO: "Please fill in your game account details before ordering",
-    o_EMPTY_CART: "Your cart is empty",
+    o_EMPTY_CART: "No product selected",
     o_BAD_QTY: "Invalid quantity",
     o_BAD_ITEM: "Invalid product data",
     o_RATE_LIMITED: "Too many orders — please wait a moment",
     o_UNAUTHORIZED: "Your session expired — please sign in again and re-order",
     o_BOT_UNREACHABLE: "Can not reach the server — please try again",
-    o_TOO_MANY_ITEMS: "Too many items in the cart",
+    o_TOO_MANY_ITEMS: "Too many items in one order",
     o_BAD_PRICE: "Some products have no price set — please contact an admin",
     o_BAD_TOTAL: "The order total is invalid",
     o_NO_PROFILE: "Your account was not found — please sign in again",
     o_ORDER_FAILED: "The order could not be placed, please try again",
     o_SERVER_NOT_READY: "The ordering service is not ready — please contact an admin",
+    o_ITEM_NOT_READY: "This item is not ready to be delivered — please contact an admin",
+    o_BUSY: "Someone pressed at the same moment — please try again",
+    o_ORDER_NOT_FOUND: "Order not found",
+    o_EDIT_LOCKED: "The admin already started this order — details can no longer be changed",
 
 
     wallet: "Wallet", my_credit: "My credit", credit: "Credit",
@@ -382,15 +448,29 @@ const I18N = {
     order_number: "Order", order_items: "Items", qty_short: "Qty",
     purchased_on: "Purchased", ordered_on: "Ordered",
     total_spent: "Total spent", purchase_count: "Purchases",
-    pending_note: "Waiting for admin approval — credit is deducted on approval",
+    pending_note: "Credit deducted — waiting for the admin",
+    processing_note: "The admin is working on it",
+    completed_note: "Purchase complete, credit deducted",
+    cancelled_note: "Cancelled — credit refunded to your wallet",
     approved_note: "Purchase complete, credit deducted",
     rejected_note: "Rejected — no credit was deducted",
     view_all_purchases: "View all purchases",
     topup_history: "Top-up history", order_history: "Order history",
     min_amount: "Minimum amount", amount_invalid: "Invalid amount",
 
+    // ===== Editing your game details while the order is still pending =====
+    edit_info: "Edit game account details",
+    edit_info_hint: "Only editable while the status is “Pending”.",
+    edit_info_warn: "If you edit too late and the admin already topped up the old account, we cannot cover it.",
+    edit_info_saved: "Your new details are saved",
+    info_edited_at: "Last edited",
+    claim_window: "Refund window",
+    claim_left: "{n} minutes left to report a problem",
+    claim_expired: "The refund window has closed",
+    claim_note: "Report any problem within {n} minutes of delivery, with a video recorded from the moment you pressed Buy.",
+
     status: "Status", st_pending: "Pending", st_approved: "Approved", st_rejected: "Rejected",
-    st_processing: "Processing",
+    st_processing: "In progress", st_completed: "Completed", st_cancelled: "Cancelled",
     // ===== errors from the server-side admin routes (/admin/*) =====
     a_ADMIN_ONLY: "You no longer have admin access — sign out and sign in again",
     a_NOT_FOUND: "That record no longer exists",
@@ -419,6 +499,8 @@ const I18N = {
     a_SERVER_NOT_READY: "The server is not ready — please try again",
     a_NO_PROFILE: "No member profile found",
     a_ADMIN_FAILED: "That action failed — please try again",
+    a_OLD_ORDER: "This is an old-flow order (credit not deducted yet) — use Approve / Reject instead",
+    a_NEW_FLOW_ORDER: "Credit for this order was already deducted when the customer ordered — use Start / Mark done / Cancel instead",
     not_found: "That record no longer exists",
     already_handled: "This record has already been handled — please refresh",
     amount_missing: "This record has no amount yet — enter one before approving",
@@ -463,6 +545,14 @@ const I18N = {
     method: "Method", view_slip: "View slip", open_angpao: "Open angpao link",
     confirm_approve_order: "Approve this order? The customer's credit will be deducted now.",
     confirm_reject: "Reject this item?",
+    // Buttons for the new order flow (credit taken when the customer orders)
+    start_order: "Start", complete_order: "Mark done", cancel_refund: "Cancel & refund",
+    confirm_start_order: "Start working on this order?\n\nOnce you do, the customer can no longer edit their game details.",
+    confirm_complete_order: "Mark this order as done?\n\nThe customer refund window starts now, and their username/password are wiped from the order automatically.",
+    confirm_cancel_order: "Cancel this order and refund the customer?\n\nThe full amount goes back, and stock is restored only for items that were never delivered.",
+    order_kind: "Type", kind_digital: "Game account", kind_topup: "In-game top-up",
+    info_edit_history: "Edited by the customer",
+    legacy_order: "Old-flow order",
     confirm_approve_topup: "Approve this top-up? Credit will be added to the customer now.",
     insufficient_customer_credit: "Customer doesn't have enough credit",
     price_mismatch: "Total doesn't match current product prices — the orange figure is the correct total",
@@ -531,6 +621,14 @@ function toggleLang() { setLang(getLang() === "th" ? "en" : "th"); }
 function t(key) {
   const lang = getLang();
   return (I18N[lang] && I18N[lang][key]) || I18N.th[key] || key;
+}
+
+// t() แบบใส่ค่าแทนที่ {ชื่อ} ในข้อความ — ใช้กับข้อความที่มีตัวเลขมาจาก shop-config
+// เช่น tv("claim_left", { n: 7 }) -> "เหลือเวลาแจ้งเคลมอีก 7 นาที"
+// ทำแบบนี้เพื่อให้ข้อความทั้งประโยคอยู่ในไฟล์แปลไฟล์เดียว ไม่ต้องต่อสตริงในโค้ด
+// (ภาษาอังกฤษกับไทยเรียงลำดับคำไม่เหมือนกัน ต่อสตริงเองแล้วประโยคจะเพี้ยน)
+function tv(key, vars = {}) {
+  return String(t(key)).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 }
 
 // จัดรูปแบบเงินบาท — โชว์ทศนิยมเฉพาะตอนที่มีเศษจริง (ซองอั่งเปาอาจได้ 25.50 บาท)

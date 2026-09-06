@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QQSHOP — ร้านขายไอดีเกม & เติมเกม ราคาถูก ได้ของไว</title>
-<meta name="description" content="ร้านขายไอดีเกมของแท้และรับเติมเกม จ่ายด้วยเครดิตในเว็บ เติมเงินผ่านทรูมันนี่ ซองอั่งเปา พร้อมเพย์ หรือโอนธนาคาร ได้ของทันทีหลังแอดมินอนุมัติ">
+<meta name="description" content="ร้านขายไอดีเกมของแท้และรับเติมเกม จ่ายด้วยเครดิตในเว็บ เติมเงินผ่านทรูมันนี่ ซองอั่งเปา พร้อมเพย์ หรือโอนธนาคาร ซื้อปุ๊บได้ไอดีทันที ไม่ต้องรออนุมัติ">
 <link rel="canonical" href="https://908wayu-svg.github.io/qqshop/">
 <meta name="theme-color" content="#ef7c17">
 
@@ -20,14 +20,14 @@
 <meta property="og:locale" content="th_TH">
 <meta property="og:url" content="https://908wayu-svg.github.io/qqshop/">
 <meta property="og:title" content="QQSHOP — ร้านขายไอดีเกม & เติมเกม ราคาถูก ได้ของไว">
-<meta property="og:description" content="ร้านขายไอดีเกมของแท้และรับเติมเกม จ่ายด้วยเครดิตในเว็บ เติมเงินผ่านทรูมันนี่ ซองอั่งเปา พร้อมเพย์ หรือโอนธนาคาร ได้ของทันทีหลังแอดมินอนุมัติ">
+<meta property="og:description" content="ร้านขายไอดีเกมของแท้และรับเติมเกม จ่ายด้วยเครดิตในเว็บ เติมเงินผ่านทรูมันนี่ ซองอั่งเปา พร้อมเพย์ หรือโอนธนาคาร ซื้อปุ๊บได้ไอดีทันที ไม่ต้องรออนุมัติ">
 <meta property="og:image" content="https://908wayu-svg.github.io/qqshop/og-image.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="QQSHOP ร้านขายไอดีเกมและรับเติมเกม">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="QQSHOP — ร้านขายไอดีเกม & เติมเกม ราคาถูก ได้ของไว">
-<meta name="twitter:description" content="ร้านขายไอดีเกมของแท้และรับเติมเกม จ่ายด้วยเครดิตในเว็บ เติมเงินผ่านทรูมันนี่ ซองอั่งเปา พร้อมเพย์ หรือโอนธนาคาร ได้ของทันทีหลังแอดมินอนุมัติ">
+<meta name="twitter:description" content="ร้านขายไอดีเกมของแท้และรับเติมเกม จ่ายด้วยเครดิตในเว็บ เติมเงินผ่านทรูมันนี่ ซองอั่งเปา พร้อมเพย์ หรือโอนธนาคาร ซื้อปุ๊บได้ไอดีทันที ไม่ต้องรออนุมัติ">
 <meta name="twitter:image" content="https://908wayu-svg.github.io/qqshop/og-image.jpg">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -127,7 +127,6 @@ try {
     <a class="btn-ghost hidden" id="nav-admin" href="admin.html" data-i18n="admin_panel">หลังบ้าน</a>
     <a class="btn-ghost" id="nav-login" href="login.html" data-i18n="login">เข้าสู่ระบบ</a>
     <button class="btn-ghost hidden" id="nav-logout" onclick="QQ.logout()" data-i18n="logout">ออกจากระบบ</button>
-    <button id="cart-btn" onclick="openCart()">🛒 <span data-i18n="cart">ตะกร้า</span> (<span id="cart-count">0</span>)</button>
   </div>
 </header>
 
@@ -135,7 +134,7 @@ try {
   <section class="hero">
     <div class="hero-text">
       <h1 data-i18n="hero_title">ร้านไอดีเกม QQSHOP</h1>
-      <p data-i18n="hero_sub">ไอดีเกมของแท้ ราคาถูก จ่ายด้วยเครดิต ได้ของทันทีหลังแอดมินอนุมัติ</p>
+      <p data-i18n="hero_sub">ไอดีเกมของแท้ ราคาถูก จ่ายด้วยเครดิต ซื้อปุ๊บได้ไอดีทันที</p>
       <div class="hero-badges">
         <span data-i18n="hero_b1">⚡ ได้ของไว</span>
         <span data-i18n="hero_b2">🔒 ปลอดภัย</span>
@@ -175,23 +174,69 @@ try {
   <div class="grid" id="grid"><div class="empty" data-i18n="loading">กำลังโหลด...</div></div>
 </main>
 
-<!-- ตะกร้า -->
-<div class="overlay" id="cart-overlay">
-  <div class="panel">
-    <button class="btn-close" onclick="closePanel('cart-overlay')">×</button>
-    <h2 data-i18n="cart_title">ตะกร้าสินค้า</h2>
-    <div id="cart-list"></div>
-    <div class="cart-total">
-      <span data-i18n="total">รวมทั้งหมด</span>
-      <span id="cart-total-amount">฿0</span>
+<!-- หน้าต่างสั่งซื้อทันที (เปิดจากปุ่ม "สั่งซื้อ" ที่การ์ดสินค้า) -->
+<div class="overlay" id="buy-overlay">
+  <div class="panel buy-panel">
+    <button class="btn-close" onclick="closePanel('buy-overlay')" data-i18n-title="close" title="ปิด">×</button>
+
+    <!-- ขั้นที่ 1 — เลือกจำนวน กรอกข้อมูล ยอมรับเงื่อนไข -->
+    <div id="buy-form">
+      <h2 data-i18n="buy_title">ยืนยันการสั่งซื้อ</h2>
+      <div class="buy-head" id="buy-head"></div>
+
+      <div class="buy-qty-row">
+        <label for="buy-qty" data-i18n="quantity">จำนวน</label>
+        <div class="qty">
+          <button type="button" id="buy-minus" data-i18n-title="qty_minus" title="ลดจำนวน">−</button>
+          <input type="number" id="buy-qty" min="1" step="1" value="1" inputmode="numeric"
+                 autocomplete="off">
+          <button type="button" id="buy-plus" data-i18n-title="qty_plus" title="เพิ่มจำนวน">+</button>
+        </div>
+      </div>
+
+      <div id="buy-fields"></div>
+
+      <div class="buy-terms">
+        <div class="bt-head" data-i18n="order_terms_head">เงื่อนไขการเคลม — อ่านก่อนกดยืนยัน</div>
+        <ul id="buy-terms-list"></ul>
+      </div>
+      <label class="buy-accept" for="buy-accept">
+        <input type="checkbox" id="buy-accept">
+        <span data-i18n="accept_terms">ฉันอ่านและยอมรับเงื่อนไขข้างต้นแล้ว</span>
+      </label>
+
+      <div class="cart-total">
+        <span data-i18n="total">รวมทั้งหมด</span>
+        <span id="buy-total">฿0</span>
+      </div>
+      <div class="credit-row" id="buy-credit-row">
+        <span data-i18n="my_credit">เครดิตของฉัน</span>
+        <span id="buy-credit">฿0</span>
+      </div>
+      <div class="credit-row" id="buy-after-row">
+        <span data-i18n="credit_after">เครดิตคงเหลือหลังซื้อ</span>
+        <span id="buy-after">฿0</span>
+      </div>
+
+      <div id="buy-msg" class="msg"></div>
+      <button class="btn-primary" id="buy-confirm" data-i18n="confirm_buy">ยืนยันสั่งซื้อ</button>
+      <a class="btn-link center" href="wallet.html" data-i18n="topup_now">เติมเงิน</a>
     </div>
-    <div class="credit-row" id="cart-credit-row">
-      <span data-i18n="my_credit">เครดิตของฉัน</span>
-      <span id="cart-credit">฿0</span>
+
+    <!-- ขั้นที่ 2 — ซื้อสำเร็จ -->
+    <div id="buy-done" class="hidden">
+      <div class="done-mark" aria-hidden="true">✅</div>
+      <h2 data-i18n="buy_success_title">ซื้อสำเร็จ!</h2>
+      <p id="buy-done-msg"></p>
+      <div class="done-order">
+        <span data-i18n="order_no">เลขที่คำสั่งซื้อ</span>
+        <b id="buy-done-id"></b>
+        <button class="copy" id="buy-done-copy" data-copy="">⧉</button>
+      </div>
+      <div class="hint" id="buy-done-claim"></div>
+      <a class="btn-primary" href="purchases.html" data-i18n="go_purchases">ไปที่ประวัติการซื้อ</a>
+      <button class="btn-link center" id="buy-again" data-i18n="keep_shopping">เลือกซื้อต่อ</button>
     </div>
-    <div id="cart-msg" class="msg"></div>
-    <button class="btn-primary" id="cart-checkout" onclick="doCheckout()" data-i18n="checkout">สั่งซื้อ</button>
-    <a class="btn-link center" href="wallet.html" data-i18n="topup_now">เติมเงิน</a>
   </div>
 </div>
 

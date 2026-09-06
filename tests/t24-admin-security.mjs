@@ -4,7 +4,7 @@
 import { buildSandbox, makeDom, loadI18n, tick } from "./harness.mjs";
 import * as store from "./fake/store.mjs";
 import * as fs2 from "./fake/firestore.mjs";
-import { installAdminServer, BOOTSTRAP_SECRET, handleAdmin } from "./fake/admin-server.mjs";
+import { installAdminServer, BOOTSTRAP_SECRET, handleAdmin, handleOrder } from "./fake/admin-server.mjs";
 
 buildSandbox(); makeDom("index.html"); loadI18n();
 const { QQ } = await import("./sandbox/auth.mjs");
@@ -24,6 +24,7 @@ const allowed = async (fn, n) => {
 };
 // ยิงเส้นทางเซิร์ฟเวอร์ตรงๆ แล้วดูรหัสที่ตอบกลับ
 const call = (path, uid, body = {}) => handleAdmin(path, { idToken: "token:" + uid, ...body });
+const callOrder = (path, uid, body = {}) => handleOrder(path, { idToken: "token:" + uid, ...body });
 const errOf = r => (r.data && r.data.error) || "";
 
 const db = fs2.getFirestore();
@@ -125,6 +126,14 @@ ok("ลูกค้ายิง /admin/credit ไม่ผ่าน", errOf(call
 ok("ลูกค้ายิง /admin/role ตั้งตัวเองไม่ผ่าน", errOf(call("/admin/role", CUST_UID,
   { uid: CUST_UID, makeAdmin: true })) === "ADMIN_ONLY");
 ok("ลูกค้ายิง /admin/order/approve ไม่ผ่าน", errOf(call("/admin/order/approve", CUST_UID,
+  { orderId: "oVictim" })) === "ADMIN_ONLY");
+// ปุ่มชุดใหม่ของออเดอร์ (เริ่ม/เสร็จ/ยกเลิกคืนเครดิต) ต้องกันเหมือนกันทุกเส้นทาง
+// ปุ่มยกเลิกอันตรายที่สุด เพราะมันเพิ่มเครดิตให้คนอื่นได้
+ok("ลูกค้ายิง /admin/order/start ไม่ผ่าน", errOf(call("/admin/order/start", CUST_UID,
+  { orderId: "oVictim" })) === "ADMIN_ONLY");
+ok("ลูกค้ายิง /admin/order/complete ไม่ผ่าน", errOf(call("/admin/order/complete", CUST_UID,
+  { orderId: "oVictim" })) === "ADMIN_ONLY");
+ok("ลูกค้ายิง /admin/order/cancel (คืนเครดิต) ไม่ผ่าน", errOf(call("/admin/order/cancel", CUST_UID,
   { orderId: "oVictim" })) === "ADMIN_ONLY");
 ok("ลูกค้ายิง /admin/bootstrap ด้วยรหัสมั่วไม่ผ่าน", errOf(call("/admin/bootstrap", CUST_UID,
   { secret: "aaaaaaaaaaaaaaaaaaaa" })) === "BOOTSTRAP_BAD_SECRET");
@@ -248,6 +257,89 @@ ok("บันทึกมียอดก่อน/หลังของราย
       .every(l => typeof l.before === "number" && typeof l.after === "number"));
 await allowed(() => fs2.getDoc(fs2.doc(db, "adminLogs", "log1")), "แอดมินอ่านบันทึกได้");
 
+section("สคริปต์จากเว็บนอกต้องตรึงเวอร์ชัน + ตรวจลายเซ็นไฟล์");
+{
+  // เว็บนี้รับเงินจริง ถ้า CDN ถูกแฮกแล้วสลับไฟล์สคริปต์
+  // คนร้ายเปลี่ยน QR/เลขบัญชีที่โชว์ให้ลูกค้าโอนได้เลย — integrity ปิดทางนี้
+  const fsNode = await import("fs");
+  const pathNode = await import("path");
+  const { SRC: ROOT } = await import("./harness.mjs");
+  const files = fsNode.readdirSync(ROOT).filter(f => /\.(html|js)$/.test(f));
+  const problems = [];
+  for (const f of files) {
+    const src = fsNode.readFileSync(pathNode.join(ROOT, f), "utf8");
+    // แท็กสคริปต์ในไฟล์ HTML
+    for (const m of src.matchAll(/<script\b[^>]*\bsrc="(https?:\/\/[^"]+)"[^>]*>/g)) {
+      if (!/\bintegrity=/.test(m[0])) problems.push(f + " → ไม่มี integrity: " + m[1]);
+      if (!/\d+\.\d+\.\d+/.test(m[1])) problems.push(f + " → ไม่ได้ตรึงเวอร์ชัน: " + m[1]);
+    }
+    // สคริปต์ที่โหลดเองจาก JS (เช่น ตัวอ่านสลิป)
+    for (const m of src.matchAll(/\.src\s*=\s*"(https?:\/\/[^"]+\.js)"/g)) {
+      if (!/\.integrity\s*=/.test(src)) problems.push(f + " → โหลดสคริปต์เองแต่ไม่ตั้ง integrity: " + m[1]);
+      if (!/\d+\.\d+\.\d+/.test(m[1])) problems.push(f + " → ไม่ได้ตรึงเวอร์ชัน: " + m[1]);
+    }
+  }
+  ok("ทุกสคริปต์ภายนอกตรึงเวอร์ชันและมีลายเซ็นครบ", problems.length === 0, problems.join(" · "));
+}
+
+// ================================================================
+section("เส้นทางสั่งซื้อของลูกค้า — สิ่งที่ต้องทำไม่ได้");
+{
+  store.put("products/pOrd", { name: "ของทดสอบ", price: 100, stock: 5, active: true, askUid: true });
+  // ออเดอร์ของเหยื่อ ที่ยังแก้ข้อมูลได้ (สถานะรอดำเนินการ)
+  store.put("orders/oEdit", { uid: "victim", total: 100, status: "pending", paid: true, kind: "topup",
+    createdAt: new fs2.Timestamp(Date.now()),
+    items: [{ id: "pOrd", name: "ของทดสอบ", price: 100, qty: 1, gameUid: "ของเหยื่อ" }] });
+
+  // 1) แก้ออเดอร์คนอื่นไม่ได้ และต้องไม่บอกใบ้ว่ามีออเดอร์นี้อยู่จริง
+  ok("แก้ข้อมูลในออเดอร์ของคนอื่นไม่ได้",
+    errOf(callOrder("/order/edit-info", CUST_UID,
+      { orderId: "oEdit", items: [{ index: 0, gameUid: "โดนแก้" }] })) === "ORDER_NOT_FOUND");
+  ok("ข้อมูลของเหยื่อไม่ถูกแตะ", store.raw("orders/oEdit").items[0].gameUid === "ของเหยื่อ");
+
+  // 2) เขียนทับ orders ตรงๆ ผ่านเบราว์เซอร์ไม่ได้ (กฎ Firestore ปิดไว้)
+  await denied(() => fs2.updateDoc(fs2.doc(db, "orders", "oEdit"), { status: "completed" }),
+    "เปลี่ยนสถานะออเดอร์เองผ่านเบราว์เซอร์ไม่ได้");
+
+  // 3) ออเดอร์ของตัวเอง แก้ได้เฉพาะช่องที่สินค้าขอ ห้ามแตะราคา/จำนวน/ยอดรวม
+  store.put("orders/oMine", { uid: CUST_UID, total: 100, status: "pending", paid: true, kind: "topup",
+    createdAt: new fs2.Timestamp(Date.now()),
+    items: [{ id: "pOrd", name: "ของทดสอบ", price: 100, qty: 1, gameUid: "111" }] });
+  callOrder("/order/edit-info", CUST_UID,
+    { orderId: "oMine", items: [{ index: 0, gameUid: "222", qty: 999, price: 1 }] });
+  const mine = store.raw("orders/oMine");
+  ok("แก้ช่องที่สินค้าขอได้ตามปกติ", mine.items[0].gameUid === "222");
+  ok("แก้จำนวนในออเดอร์ตัวเองไม่ได้", mine.items[0].qty === 1, String(mine.items[0].qty));
+  ok("แก้ราคาในออเดอร์ตัวเองไม่ได้", mine.items[0].price === 100, String(mine.items[0].price));
+  ok("ยอดรวมไม่ขยับ", mine.total === 100);
+
+  // 4) เพิ่มช่องที่สินค้าไม่ได้ขอเข้ามาใหม่ไม่ได้ (กันยัดรหัสผ่านมั่วเข้าออเดอร์)
+  callOrder("/order/edit-info", CUST_UID,
+    { orderId: "oMine", items: [{ index: 0, gamePassword: "แอบยัด" }] });
+  ok("เพิ่มช่องที่สินค้าไม่ได้ขอไม่ได้", !store.raw("orders/oMine").items[0].gamePassword);
+
+  // 5) พอแอดมินเริ่มดำเนินการแล้ว ต้องล็อกทันที
+  store.put("orders/oMine", { ...store.raw("orders/oMine"), status: "processing" });
+  ok("แอดมินเริ่มแล้ว ลูกค้าแก้ไม่ได้อีก",
+    errOf(callOrder("/order/edit-info", CUST_UID,
+      { orderId: "oMine", items: [{ index: 0, gameUid: "333" }] })) === "EDIT_LOCKED");
+  ok("ค่ายังเป็นค่าล่าสุดก่อนล็อก", store.raw("orders/oMine").items[0].gameUid === "222");
+
+  // 6) สั่งซื้อเกินเครดิตไม่ได้ และห้ามเหลือออเดอร์ค้างไว้
+  store.put("products/pRich", { name: "ของแพง", price: 100000, stock: 5, active: true });
+  const before = store.raw("users/" + CUST_UID).credit;
+  const ordersBefore = [...store.state.docs.keys()].filter(k => k.startsWith("orders/")).length;
+  ok("สั่งซื้อเกินเครดิตที่มีไม่ได้",
+    errOf(callOrder("/order", CUST_UID, { items: [{ id: "pRich", qty: 1 }] })) === "NOT_ENOUGH_CREDIT");
+  ok("เครดิตไม่ขยับหลังสั่งไม่ผ่าน", store.raw("users/" + CUST_UID).credit === before,
+    String(store.raw("users/" + CUST_UID).credit));
+  ok("ไม่มีออเดอร์ค้างไว้",
+    [...store.state.docs.keys()].filter(k => k.startsWith("orders/")).length === ordersBefore);
+  ok("สต๊อกไม่ถูกตัดตอนสั่งไม่ผ่าน", store.raw("products/pRich").stock === 5);
+
+}
+
+// ================================================================
 section("สคริปต์จากเว็บนอกต้องตรึงเวอร์ชัน + ตรวจลายเซ็นไฟล์");
 {
   // เว็บนี้รับเงินจริง ถ้า CDN ถูกแฮกแล้วสลับไฟล์สคริปต์

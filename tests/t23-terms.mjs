@@ -51,16 +51,22 @@ ok("โยงไปหน้านโยบายความเป็นส่�
 
 section("ระยะเวลาเคลมต้องมาจาก shop-config.js ที่เดียว");
 {
-  const spots = [...document.querySelectorAll('[data-policy="claimHours"]')];
+  const spots = [...document.querySelectorAll('[data-policy="claimMinutes"]')];
   ok("มีจุดที่ใส่ตัวเลขไว้", spots.length >= 2, "เจอ " + spots.length + " จุด");
   ok("ทุกจุดใช้เลขเดียวกับใน shop-config",
-    spots.every(el => el.textContent === String(SHOP.policy.claimHours)),
+    spots.every(el => el.textContent === String(SHOP.policy.claimMinutes)),
     spots.map(el => el.textContent).join(","));
   ok("ทั้งไทยและอังกฤษมีตัวเลขนี้",
-    textOf("th").includes(String(SHOP.policy.claimHours)) &&
-    textOf("en").includes(String(SHOP.policy.claimHours)));
-  ok("ตั้งค่า SHOP.policy.claimHours ไว้จริง (ไม่ใช่ค่าว่าง)",
-    Number(SHOP.policy?.claimHours) > 0, String(SHOP.policy?.claimHours));
+    textOf("th").includes(String(SHOP.policy.claimMinutes)) &&
+    textOf("en").includes(String(SHOP.policy.claimMinutes)));
+  ok("ตั้งค่า SHOP.policy.claimMinutes ไว้จริง (ไม่ใช่ค่าว่าง)",
+    Number(SHOP.policy?.claimMinutes) > 0, String(SHOP.policy?.claimMinutes));
+  // เงื่อนไขวิดีโอเป็นหัวใจของนโยบายเคลมรอบนี้ ถ้าหายไปจากหน้า = ร้านเคลมอะไรไม่ได้เลย
+  ok("บอกว่าต้องอัดวิดีโอ (ไทย)", textOf("th").includes("อัดวิดีโอ"));
+  ok("บอกว่าไม่มีวิดีโอเคลมไม่ได้ (ไทย)", textOf("th").includes("ไม่มีวิดีโอ"));
+  ok("บอกว่าต้องอัดวิดีโอ (อังกฤษ)", /record a video/i.test(textOf("en")));
+  ok("บอกว่าไม่มีวิดีโอเคลมไม่ได้ (อังกฤษ)", /No video means no refund/i.test(textOf("en")));
+  ok("บอกว่านับเวลาเป็นนาที ไม่ใช่ชั่วโมง (ไทย)", textOf("th").includes("นาที") && !/d+ ชั่วโมง/.test(textOf("th")));
 }
 
 section("เนื้อหาที่ร้านขายของออนไลน์ต้องมี (ไทย)");
@@ -68,7 +74,9 @@ section("เนื้อหาที่ร้านขายของออน�
   const th = textOf("th");
   for (const [name, kw] of [
     ["บอกว่าจ่ายด้วยเครดิต", "เครดิต"],
-    ["บอกว่าเครดิตหักตอนแอดมินอนุมัติ", "อนุมัติ"],
+    ["บอกว่าเครดิตหักทันทีที่กดยืนยัน", "หักทันทีที่กดยืนยัน"],
+    ["บอก 3 สถานะของออเดอร์เติมเกม", "กำลังดำเนินการ"],
+    ["บอกว่าแก้ข้อมูลเองได้ตอนรอดำเนินการ", "รอดำเนินการ"],
     ["บอกว่าได้ของเมื่อไหร่", "ประวัติการซื้อ"],
     ["มีหัวข้อเคลม/คืนเครดิต", "คืนเป็นเครดิต"],
     ["ระบุกรณีที่ไม่รับประกัน", "ไม่รับประกัน"],

@@ -79,14 +79,27 @@ try {
     <h2 data-i18n="my_purchases">ประวัติการซื้อของฉัน</h2>
     <div class="range-filter" id="status-filter">
       <button class="range-btn active" data-st="all" data-i18n="all">ทั้งหมด</button>
-      <button class="range-btn" data-st="approved" data-i18n="st_approved">อนุมัติแล้ว</button>
-      <button class="range-btn" data-st="pending" data-i18n="st_pending">รออนุมัติ</button>
-      <button class="range-btn" data-st="rejected" data-i18n="st_rejected">ไม่อนุมัติ</button>
+      <button class="range-btn" data-st="completed" data-i18n="st_completed">สำเร็จ</button>
+      <button class="range-btn" data-st="pending" data-i18n="st_pending">รอดำเนินการ</button>
+      <button class="range-btn" data-st="cancelled" data-i18n="st_cancelled">ยกเลิกแล้ว</button>
     </div>
   </div>
 
   <div id="list"></div>
 </main>
+
+<!-- แก้ไขข้อมูลไอดีเกม (ได้เฉพาะออเดอร์ที่ยัง "รอดำเนินการ") -->
+<div class="overlay" id="edit-overlay">
+  <div class="panel">
+    <button class="btn-close" onclick="closePanel('edit-overlay')" data-i18n-title="close" title="ปิด">×</button>
+    <h2 data-i18n="edit_info">แก้ไขข้อมูลไอดีเกม</h2>
+    <div class="hint" data-i18n="edit_info_hint">แก้ได้เฉพาะตอนสถานะ “รอดำเนินการ” เท่านั้น</div>
+    <div id="edit-list"></div>
+    <div class="hint warn-note" data-i18n="edit_info_warn">ถ้าแก้ช้าจนแอดมินเติมเข้าไอดีเดิมไปแล้ว ร้านไม่รับผิดชอบ</div>
+    <div id="edit-msg" class="msg"></div>
+    <button class="btn-primary" id="edit-save" data-i18n="save">บันทึก</button>
+  </div>
+</div>
 
 <!-- ไอดี/รหัสผ่านที่ซื้อมา -->
 <div class="overlay" id="cred-overlay">

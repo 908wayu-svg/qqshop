@@ -56,7 +56,9 @@ store.put("topups/t3", { uid: "c2", name: "ลูกค้า สอง", email:
 store.put("topups/t4", { uid: "c2", name: "ลูกค้า สอง", email: "c2@x.com", amount: 30, method: "truewallet",
   slip: "ไม่ใช่รูป<script>", status: "pending", createdAt: TS(20) });   // ข้อมูลผิดปกติแบบเก่า
 
-await import("./sandbox/admin.mjs");
+const ADMIN = await import("./sandbox/admin.mjs");
+// หน้าหลังบ้านโหลดข้อมูลครั้งเดียวตอนเปิด — เทสที่ยัดข้อมูลใหม่เข้าฐานต้องสั่งโหลดใหม่เอง
+const reloadAdmin = async () => { await ADMIN.reloadAll(); await tick(6); };
 await tick(12);
 
 section("เข้าหลังบ้าน");
@@ -81,8 +83,10 @@ ok("เตือนเมื่ออ้างสินค้าที่ไม�
 ok("แสดงเครดิตคงเหลือของลูกค้า", $("table-orders").innerHTML.includes("credit-note"));
 click(document.querySelector('#orders-filter [data-st="all"]'));
 ok("กรอง 'ทั้งหมด' เห็นครบ 4", $("table-orders").querySelectorAll("tbody tr").length === 4);
-click(document.querySelector('#orders-filter [data-st="approved"]'));
-ok("กรองเฉพาะอนุมัติแล้ว", $("table-orders").querySelectorAll("tbody tr").length === 1);
+click(document.querySelector('#orders-filter [data-st="completed"]'));
+// ออเดอร์เก่าที่เป็น approved ต้องยังนับเป็น "สำเร็จ" ไม่งั้นประวัติการขายหายไปทั้งก้อน
+ok("กรองเฉพาะสำเร็จ (รวมออเดอร์เก่าที่เป็น approved)",
+  $("table-orders").querySelectorAll("tbody tr").length === 1);
 
 section("ตารางเติมเงิน");
 click(document.querySelector('#tabs [data-tab="topups"]'));
@@ -145,6 +149,81 @@ click(o2btn());
 await tick(10);
 ok("เตือนว่าของในคลังไม่พอ", globalThis.__alerts.some(a => a.includes("ไม่พอ")), JSON.stringify(globalThis.__alerts));
 ok("ออเดอร์ยังไม่ถูกอนุมัติ", store.raw("orders/o2").status === "pending");
+
+section("ออเดอร์ระบบใหม่ — ปุ่มคนละชุดกับออเดอร์เก่า");
+{
+  // ออเดอร์ที่หักเครดิตไปแล้วตอนลูกค้ากดสั่ง (paid=true) ต้องไม่มีปุ่ม "อนุมัติ" ให้กดอีก
+  // ไม่งั้นแอดมินกดแล้วเครดิตลูกค้าโดนหักซ้ำ
+  store.put("orders/n1", { uid: "c2", customerName: "ลูกค้า สอง", customerEmail: "c2@x.com",
+    total: 50, status: "pending", paid: true, kind: "topup", createdAt: TS(5),
+    items: [{ id: "pB", name: "ของทั่วไป", price: 50, qty: 1, gameUid: "555", gameLogin: "me", gamePassword: "sec" }] });
+  await reloadAdmin();
+  click(document.querySelector('#orders-filter [data-st="pending"]'));
+  await tick(4);
+
+  const rowBtns = act => [...$("table-orders").querySelectorAll('[data-act="' + act + '"]')]
+    .filter(b => b.dataset.id === "n1");
+  ok("ไม่มีปุ่มอนุมัติแบบเก่า", rowBtns("approve-order").length === 0);
+  ok("มีปุ่มเริ่มดำเนินการ", rowBtns("start-order").length === 1);
+  ok("มีปุ่มยกเลิก + คืนเครดิต", rowBtns("cancel-order").length === 1);
+  ok("ยังไม่มีปุ่มทำเสร็จแล้ว (ต้องเริ่มก่อน)", rowBtns("complete-order").length === 0);
+  ok("ออเดอร์เก่ายังมีปุ่มอนุมัติตามเดิม",
+    [...$("table-orders").querySelectorAll('[data-act="approve-order"]')].some(b => b.dataset.id === "o4"));
+  ok("บอกว่าออเดอร์เก่าคือระบบเก่า", $("table-orders").textContent.includes("ออเดอร์ระบบเก่า"));
+
+  globalThis.__confirm = true;
+  click(rowBtns("start-order")[0]);
+  await tick(10);
+  ok("กดเริ่มดำเนินการแล้วสถานะเปลี่ยน", store.raw("orders/n1").status === "processing",
+    store.raw("orders/n1").status);
+
+  click(document.querySelector('#orders-filter [data-st="pending"]'));
+  await tick(4);
+  ok("กำลังดำเนินการยังโผล่ในตัวกรองรอดำเนินการ",
+    [...$("table-orders").querySelectorAll('[data-act="complete-order"]')].some(b => b.dataset.id === "n1"));
+
+  click([...$("table-orders").querySelectorAll('[data-act="complete-order"]')].find(b => b.dataset.id === "n1"));
+  await tick(10);
+  const done = store.raw("orders/n1");
+  ok("กดทำเสร็จแล้วสถานะเป็นสำเร็จ", done.status === "completed", done.status);
+  ok("เริ่มจับเวลาเคลมให้ลูกค้า", !!done.claimTimerStartedAt);
+  ok("ลบรหัสผ่านลูกค้าอัตโนมัติ", !done.items[0].gamePassword);
+  ok("ไอดีเกม/UID ยังอยู่เป็นหลักฐาน", done.items[0].gameUid === "555");
+}
+
+section("ยกเลิกออเดอร์ + คืนเครดิต");
+{
+  const creditBefore = store.raw("users/c2").credit;
+  store.put("orders/n2", { uid: "c2", customerName: "ลูกค้า สอง", customerEmail: "c2@x.com",
+    total: 50, status: "pending", paid: true, kind: "topup", createdAt: TS(4),
+    items: [{ id: "pB", name: "ของทั่วไป", price: 50, qty: 1, gameUid: "666" }] });
+  await reloadAdmin();
+  click(document.querySelector('#orders-filter [data-st="pending"]'));
+  await tick(4);
+
+  globalThis.__confirm = true;
+  click([...$("table-orders").querySelectorAll('[data-act="cancel-order"]')].find(b => b.dataset.id === "n2"));
+  await tick(12);
+  ok("สถานะเป็นยกเลิกแล้ว", store.raw("orders/n2").status === "cancelled", store.raw("orders/n2").status);
+  ok("คืนเครดิตให้ลูกค้าเต็มจำนวน", store.raw("users/c2").credit === creditBefore + 50,
+    store.raw("users/c2").credit + " (ก่อนหน้า " + creditBefore + ")");
+  ok("คืนสต๊อกของที่ยังไม่ได้ส่งมอบ", store.raw("products/pB").stock === 11,
+    String(store.raw("products/pB").stock));
+  ok("บันทึกยอดที่คืนไว้", store.raw("orders/n2").refundAmount === 50);
+}
+
+section("ประวัติที่ลูกค้าแก้ข้อมูลเอง ต้องโผล่ให้แอดมินเห็น");
+{
+  store.put("orders/n3", { uid: "c2", customerName: "ลูกค้า สอง", customerEmail: "c2@x.com",
+    total: 50, status: "pending", paid: true, kind: "topup", createdAt: TS(3),
+    items: [{ id: "pB", name: "ของทั่วไป", price: 50, qty: 1, gameUid: "777" }],
+    infoEdits: [{ at: TS(3), index: 0, field: "gameUid", from: "111" }] });
+  await reloadAdmin();
+  click(document.querySelector('#orders-filter [data-st="pending"]'));
+  await tick(4);
+  ok("โชว์หัวข้อประวัติการแก้", $("table-orders").textContent.includes("ลูกค้าแก้ข้อมูลเอง"));
+  ok("โชว์ค่าเดิมที่ลูกค้าเคยกรอกไว้", $("table-orders").textContent.includes("111"));
+}
 
 section("สมาชิก");
 click(document.querySelector('#tabs [data-tab="members"]'));

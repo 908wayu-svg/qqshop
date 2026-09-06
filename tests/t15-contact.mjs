@@ -80,16 +80,16 @@ window.toggleLang();
 await tick(2);
 ok("สลับกลับเป็นไทยได้", fab.textContent.includes("ติดต่อแอดมิน"));
 
-section("ตะกร้ากับกล่องติดต่อไม่ตีกัน");
-$("cart-overlay").classList.add("open");
+section("หน้าต่างสั่งซื้อกับกล่องติดต่อไม่ตีกัน");
+$("buy-overlay").classList.add("open");
 await tick(2);
 clickOn(fab);
 ok("เปิดกล่องติดต่อทับตะกร้าได้", overlay.classList.contains("open"));
 press("Escape");
 ok("Esc ปิดกล่องบนสุด (ติดต่อ) ก่อน", !overlay.classList.contains("open"));
-ok("ตะกร้ายังเปิดอยู่", $("cart-overlay").classList.contains("open"));
+ok("หน้าต่างสั่งซื้อยังเปิดอยู่", $("buy-overlay").classList.contains("open"));
 press("Escape");
-ok("Esc อีกครั้งปิดตะกร้า", !$("cart-overlay").classList.contains("open"));
+ok("Esc อีกครั้งปิดหน้าต่างสั่งซื้อ", !$("buy-overlay").classList.contains("open"));
 await tick(2);
 ok("ปลดล็อกการเลื่อนแล้ว", document.body.style.overflow === "");
 

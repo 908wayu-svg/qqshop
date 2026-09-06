@@ -170,6 +170,13 @@ function resetDb() {
   DOCS.set("products/pLogin", F({ name: "เติมเข้าไอดีลูกค้า", price: 80, active: true, askLogin: true }));
 }
 const withUser = (uid, credit = 1000) => DOCS.set("users/" + uid, F({ name: "ลูกค้า", email: "c@x.com", credit }));
+// เติมไอดีลงคลังของสินค้าดิจิทัล — ตอนนี้ /order จ่ายของให้ทันที ถ้าคลังว่างจะสั่งไม่ผ่าน
+const withStock = (pid, n = 5) => {
+  for (let i = 1; i <= n; i++) {
+    DOCS.set("products/" + pid + "/stockItems/k" + i,
+      F({ login: "acc" + i, password: "pw" + i, note: "", status: "available" }));
+  }
+};
 
 section("ความปลอดภัยพื้นฐาน");
 resetDb();
@@ -182,17 +189,55 @@ ok("GET ถูกปฏิเสธ", g.status === 405);
 const nonjson = await W.fetch(new Request("https://b.dev/order", { method: "POST", headers: { Origin: ORIGIN }, body: "ไม่ใช่ json" }), env);
 ok("body ที่ไม่ใช่ JSON ไม่ทำให้ล่ม", (await nonjson.json()).error === "BAD_JSON");
 
-section("สั่งซื้อ — ราคาคิดจากฐานข้อมูล");
-resetDb();
+section("สั่งซื้อ — ราคาคิดจากฐานข้อมูล + หักเครดิตทันที");
+resetDb(); withStock("p1");
 let u = freshUid(); withUser(u);
 let r = await call("/order", { idToken: "token:" + u, items: [{ id: "p1", qty: 2, price: 1, name: "ของถูก" }] });
 ok("สั่งซื้อสำเร็จ", r.body.ok === true, JSON.stringify(r.body));
 ok("ยอดคิดจากราคาจริง ไม่ใช่ราคาที่ส่งมา", r.body.total === 600, "ได้ " + r.body.total);
 const oKey = [...DOCS.keys()].find(k => k.startsWith("orders/"));
 ok("บันทึกออเดอร์ลงฐานข้อมูล", !!oKey);
-ok("สถานะเริ่มที่ pending", DOCS.get(oKey).status.stringValue === "pending");
+ok("ไอดีเกมจบในตัว สถานะเป็น completed", DOCS.get(oKey).status.stringValue === "completed",
+  DOCS.get(oKey).status.stringValue);
 ok("ชื่อสินค้าเอามาจากฐานข้อมูล", DOCS.get(oKey).items.arrayValue.values[0].mapValue.fields.name.stringValue === "ไอดีเกม A");
-ok("ยังไม่หักเครดิตตอนสั่ง", DOCS.get("users/" + u).credit.integerValue === "1000");
+ok("หักเครดิตทันทีตอนสั่ง", Number(DOCS.get("users/" + u).credit.integerValue ?? DOCS.get("users/" + u).credit.doubleValue) === 400,
+  JSON.stringify(DOCS.get("users/" + u).credit));
+ok("ทำเครื่องหมายว่าหักเครดิตแล้ว (paid)", DOCS.get(oKey).paid.booleanValue === true);
+{
+  const d = DOCS.get(oKey).items.arrayValue.values[0].mapValue.fields.delivered;
+  ok("ส่งมอบไอดีให้ลูกค้าทันที 2 ชุด", !!d && d.arrayValue.values.length === 2);
+  ok("ไอดีที่ส่งมีรหัสผ่านจริง",
+    String(d.arrayValue.values[0].mapValue.fields.password.stringValue || "").length > 0);
+  ok("ตัดสต๊อกทันที", Number(DOCS.get("products/p1").stock.integerValue) === 3,
+    JSON.stringify(DOCS.get("products/p1").stock));
+  ok("ชิ้นในคลังถูกทำเครื่องหมายว่าขายแล้ว",
+    DOCS.get("products/p1/stockItems/k1").status.stringValue === "sold");
+  ok("เริ่มจับเวลาเคลมทันที (ไอดีเกม)", !!DOCS.get(oKey).claimTimerStartedAt);
+}
+
+// ของเติมเกม — หักเครดิตเหมือนกัน แต่ต้องรอแอดมินทำให้
+resetDb(); u = freshUid(); withUser(u);
+r = await call("/order", { idToken: "token:" + u, items: [{ id: "pUid", qty: 1, gameUid: "555" }] });
+{
+  const k = [...DOCS.keys()].find(x => x.startsWith("orders/"));
+  ok("ของเติมเกมสถานะเป็น pending", DOCS.get(k).status.stringValue === "pending", JSON.stringify(r.body));
+  ok("ของเติมเกมก็หักเครดิตทันที", Number(DOCS.get("users/" + u).credit.integerValue) === 950);
+  ok("ยังไม่เริ่มจับเวลาเคลม (รอแอดมินทำเสร็จก่อน)", !DOCS.get(k).claimTimerStartedAt);
+}
+
+// สินค้าดิจิทัลที่ไม่มีไอดีในคลัง = ขายไม่ได้ ห้ามหักเครดิตเด็ดขาด
+resetDb(); u = freshUid(); withUser(u);
+r = await call("/order", { idToken: "token:" + u, items: [{ id: "p1", qty: 1 }] });
+ok("คลังไอดีว่าง = สั่งไม่ผ่าน", r.body.error === "OUT_OF_STOCK", JSON.stringify(r.body));
+ok("เครดิตไม่ถูกหักตอนสั่งไม่ผ่าน", Number(DOCS.get("users/" + u).credit.integerValue) === 1000);
+ok("ไม่มีออเดอร์ค้างไว้", ![...DOCS.keys()].some(k => k.startsWith("orders/")));
+
+// ชิ้นในคลังที่ยังไม่ได้กรอกไอดี ห้ามส่งให้ลูกค้า
+resetDb(); u = freshUid(); withUser(u);
+DOCS.set("products/p1/stockItems/blank", F({ login: "", password: "", note: "", status: "available" }));
+r = await call("/order", { idToken: "token:" + u, items: [{ id: "p1", qty: 1 }] });
+ok("ชิ้นว่างเปล่าในคลัง = หยุดไว้ ไม่ส่งของว่าง", r.body.error === "ITEM_NOT_READY", JSON.stringify(r.body));
+ok("เครดิตไม่ถูกหักตอนเจอชิ้นว่าง", Number(DOCS.get("users/" + u).credit.integerValue) === 1000);
 
 section("สั่งซื้อ — เคสที่ต้องปฏิเสธ");
 const bad = async (items, expect, name) => {
@@ -590,6 +635,133 @@ section("ลิงก์ซองที่รหัสยาวผิดปก�
 
 section("เส้นทางแอดมินที่ไม่มีอยู่จริง");
 ok("เส้นทางมั่วถูกปฏิเสธ", (await call("/admin/ห้าม", { idToken: "token:" + A })).body.error === "NOT_FOUND");
+
+// =====================================================================
+// ===== ออเดอร์ระบบใหม่: 3 สถานะ + ยกเลิกคืนเครดิต + ลูกค้าแก้ข้อมูลเอง =====
+section("ออเดอร์ระบบใหม่ — 3 สถานะ");
+{
+  resetDb();
+  const AD = mkAdmin(freshUid(), "boss@x.com");
+  const CU = freshUid(); withUser(CU, 500);
+  // สั่งของเติมเกมผ่านเส้นทางจริง จะได้ออเดอร์ที่มี paid=true เหมือนของจริง
+  let rr = await call("/order", { idToken: "token:" + CU,
+    items: [{ id: "pLogin", qty: 1, gameLogin: "player01", gamePassword: "pw1234" }] });
+  ok("สั่งของเติมเกมสำเร็จ", rr.body.ok === true, JSON.stringify(rr.body));
+  const OID = rr.body.orderId;
+  ok("หักเครดิตแล้ว", numOf(DOCS.get("users/" + CU).credit) === 420,
+    String(numOf(DOCS.get("users/" + CU).credit)));
+
+  // กดข้ามขั้นไม่ได้ ต้องกดเริ่มดำเนินการก่อนเสมอ
+  ok("กด ทำเสร็จแล้ว ข้ามขั้นไม่ได้",
+    (await call("/admin/order/complete", { idToken: "token:" + AD, orderId: OID })).body.error === "ALREADY_HANDLED");
+
+  rr = await call("/admin/order/start", { idToken: "token:" + AD, orderId: OID });
+  ok("เริ่มดำเนินการได้", rr.body.ok === true && strOf(DOCS.get("orders/" + OID).status) === "processing",
+    JSON.stringify(rr.body));
+  ok("บันทึกลง adminLogs", logsOf().some(l => strOf(l.action) === "order.start"));
+  ok("กดเริ่มซ้ำไม่ได้",
+    (await call("/admin/order/start", { idToken: "token:" + AD, orderId: OID })).body.error === "ALREADY_HANDLED");
+
+  rr = await call("/admin/order/complete", { idToken: "token:" + AD, orderId: OID });
+  const done = DOCS.get("orders/" + OID);
+  const di = done.items.arrayValue.values[0].mapValue.fields;
+  ok("ทำเสร็จแล้วได้", rr.body.ok === true && strOf(done.status) === "completed", JSON.stringify(rr.body));
+  ok("เริ่มจับเวลาเคลมตอนกดว่าเสร็จ", !!done.claimTimerStartedAt);
+  ok("ลบรหัสผ่านลูกค้าอัตโนมัติ", !di.gamePassword, JSON.stringify(di.gamePassword));
+  ok("ลบชื่อผู้ใช้ลูกค้าอัตโนมัติด้วย", !di.gameLogin);
+  ok("บันทึกเวลาที่ลบข้อมูลไว้", !!done.customerInfoClearedAt);
+  ok("กดเสร็จซ้ำไม่ได้",
+    (await call("/admin/order/complete", { idToken: "token:" + AD, orderId: OID })).body.error === "ALREADY_HANDLED");
+  ok("ใช้ปุ่มระบบเก่ากับออเดอร์ใหม่ไม่ได้",
+    (await call("/admin/order/approve", { idToken: "token:" + AD, orderId: OID })).body.error === "NEW_FLOW_ORDER");
+}
+
+section("ออเดอร์ระบบใหม่ — ยกเลิก + คืนเครดิต");
+{
+  resetDb();
+  const AD = mkAdmin(freshUid(), "boss2@x.com");
+  const CU = freshUid(); withUser(CU, 500);
+  let rr = await call("/order", { idToken: "token:" + CU, items: [{ id: "pUid", qty: 2, gameUid: "777" }] });
+  const OID = rr.body.orderId;
+  ok("สั่งซื้อและหักเครดิตแล้ว", numOf(DOCS.get("users/" + CU).credit) === 400,
+    String(numOf(DOCS.get("users/" + CU).credit)));
+
+  rr = await call("/admin/order/cancel", { idToken: "token:" + AD, orderId: OID, note: "ของหมดจริง" });
+  ok("ยกเลิกได้", rr.body.ok === true, JSON.stringify(rr.body));
+  ok("คืนเครดิตเต็มจำนวน", numOf(DOCS.get("users/" + CU).credit) === 500,
+    String(numOf(DOCS.get("users/" + CU).credit)));
+  ok("สถานะเป็น cancelled", strOf(DOCS.get("orders/" + OID).status) === "cancelled");
+  ok("บันทึกยอดที่คืนไว้", numOf(DOCS.get("orders/" + OID).refundAmount) === 100);
+  ok("บันทึกลง adminLogs", logsOf().some(l => strOf(l.action) === "order.cancel"));
+  ok("กดยกเลิกซ้ำแล้วไม่คืนเครดิตซ้ำ",
+    (await call("/admin/order/cancel", { idToken: "token:" + AD, orderId: OID })).body.error === "ALREADY_HANDLED");
+  ok("เครดิตยังเท่าเดิมหลังกดซ้ำ", numOf(DOCS.get("users/" + CU).credit) === 500);
+}
+
+section("ยกเลิกออเดอร์ไอดีเกมที่ส่งของไปแล้ว — คืนเงินแต่ไม่คืนไอดีเข้าคลัง");
+{
+  resetDb(); withStock("p1", 2);
+  const AD = mkAdmin(freshUid(), "boss3@x.com");
+  const CU = freshUid(); withUser(CU, 1000);
+  const rr = await call("/order", { idToken: "token:" + CU, items: [{ id: "p1", qty: 1 }] });
+  const OID = rr.body.orderId;
+  ok("ตัดสต๊อกไปแล้ว", numOf(DOCS.get("products/p1").stock) === 4);
+
+  await call("/admin/order/cancel", { idToken: "token:" + AD, orderId: OID });
+  ok("คืนเครดิตให้ลูกค้า", numOf(DOCS.get("users/" + CU).credit) === 1000);
+  // ไอดีที่ลูกค้าเห็นรหัสไปแล้ว เอากลับมาขายใหม่ไม่ได้
+  ok("ไม่คืนสต๊อกของที่ส่งไปแล้ว", numOf(DOCS.get("products/p1").stock) === 4,
+    String(numOf(DOCS.get("products/p1").stock)));
+  ok("ชิ้นในคลังยังเป็น sold", strOf(DOCS.get("products/p1/stockItems/k1").status) === "sold");
+}
+
+section("ลูกค้าแก้ข้อมูลไอดีเกมของตัวเอง");
+{
+  resetDb();
+  const AD = mkAdmin(freshUid(), "boss4@x.com");
+  const CU = freshUid(); withUser(CU, 500);
+  const OTHER = freshUid(); withUser(OTHER, 500);
+  let rr = await call("/order", { idToken: "token:" + CU,
+    items: [{ id: "pLogin", qty: 1, gameLogin: "old_user", gamePassword: "old_pw" }] });
+  const OID = rr.body.orderId;
+  const itemsOf = () => DOCS.get("orders/" + OID).items.arrayValue.values[0].mapValue.fields;
+
+  rr = await call("/order/edit-info", { idToken: "token:" + CU, orderId: OID,
+    items: [{ index: 0, gameLogin: "  new_user  ", gamePassword: "new_pw" }] });
+  ok("แก้ข้อมูลตอน รอดำเนินการ ได้", rr.body.ok === true, JSON.stringify(rr.body));
+  ok("ค่าใหม่ถูกบันทึก (ตัดช่องว่างหัวท้าย)", strOf(itemsOf().gameLogin) === "new_user",
+    strOf(itemsOf().gameLogin));
+  ok("รหัสผ่านใหม่ถูกบันทึก", strOf(itemsOf().gamePassword) === "new_pw");
+
+  const edits = DOCS.get("orders/" + OID).infoEdits.arrayValue.values.map(v => v.mapValue.fields);
+  ok("เก็บประวัติการแก้ไว้ 2 รายการ", edits.length === 2, String(edits.length));
+  ok("ประวัติเก็บค่าเดิมของชื่อผู้ใช้", edits.some(e => strOf(e.from) === "old_user"));
+  ok("ประวัติไม่เก็บรหัสผ่านเดิมเป็นข้อความล้วน",
+    edits.every(e => strOf(e.from) !== "old_pw") && edits.some(e => strOf(e.from) === "***"));
+
+  ok("แก้ออเดอร์ของคนอื่นไม่ได้",
+    (await call("/order/edit-info", { idToken: "token:" + OTHER, orderId: OID,
+      items: [{ index: 0, gameLogin: "hacker" }] })).body.error === "ORDER_NOT_FOUND");
+  ok("ค่าไม่ถูกแตะจากคนอื่น", strOf(itemsOf().gameLogin) === "new_user");
+
+  ok("กรอกช่องว่างไม่ได้",
+    (await call("/order/edit-info", { idToken: "token:" + CU, orderId: OID,
+      items: [{ index: 0, gameLogin: "   " }] })).body.error === "NEED_CUSTOMER_INFO");
+
+  // ห้ามแอบแก้ราคา/จำนวนผ่านเส้นทางนี้ (เหตุผลที่ไม่เปิดกฎ Firestore ให้เขียน orders ตรงๆ)
+  await call("/order/edit-info", { idToken: "token:" + CU, orderId: OID,
+    items: [{ index: 0, qty: 999, price: 1, gameLogin: "still_ok" }] });
+  ok("แก้จำนวนผ่านช่องนี้ไม่ได้", numOf(itemsOf().qty) === 1, String(numOf(itemsOf().qty)));
+  ok("แก้ราคาผ่านช่องนี้ไม่ได้", numOf(itemsOf().price) === 80, String(numOf(itemsOf().price)));
+  ok("ยอดรวมของออเดอร์ไม่ขยับ", numOf(DOCS.get("orders/" + OID).total) === 80);
+
+  // พอแอดมินเริ่มดำเนินการ ต้องล็อกทันที
+  await call("/admin/order/start", { idToken: "token:" + AD, orderId: OID });
+  ok("แอดมินเริ่มแล้ว ลูกค้าแก้ไม่ได้อีก",
+    (await call("/order/edit-info", { idToken: "token:" + CU, orderId: OID,
+      items: [{ index: 0, gameLogin: "too_late" }] })).body.error === "EDIT_LOCKED");
+  ok("ค่ายังเป็นค่าล่าสุดก่อนล็อก", strOf(itemsOf().gameLogin) === "still_ok");
+}
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;

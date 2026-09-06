@@ -322,6 +322,10 @@ const CLIENT_ERRORS = new Set([
   "EMPTY_CART", "TOO_MANY_ITEMS", "BAD_ITEM", "BAD_QTY", "PRODUCT_NOT_FOUND",
   "PRODUCT_INACTIVE", "OUT_OF_STOCK", "BAD_PRICE", "BAD_TOTAL",
   "NO_PROFILE", "NOT_ENOUGH_CREDIT", "NEED_CUSTOMER_INFO",
+  // ของในคลังยังไม่ได้กรอกไอดี/รหัสผ่าน — ขายไม่ได้ ต้องให้แอดมินเติมข้อมูลก่อน
+  "ITEM_NOT_READY",
+  // แก้ข้อมูลไอดีเกมในออเดอร์ของตัวเอง
+  "ORDER_NOT_FOUND", "EDIT_LOCKED",
 ]);
 
 // รหัสข้อผิดพลาดของเส้นทางแอดมิน (หน้าเว็บแปลเป็นข้อความไทย/อังกฤษเอง)
@@ -332,11 +336,20 @@ const ADMIN_ERRORS = new Set([
   "AMOUNT_TOO_LARGE", "WOULD_GO_NEGATIVE", "CANNOT_CHANGE_SELF", "BAD_REQUEST",
   "CLAIMS_PERMISSION", "CLAIMS_FAILED", "BOOTSTRAP_DISABLED", "BOOTSTRAP_BAD_SECRET",
   "NO_PROFILE", "BUSY",
+  // ออเดอร์เก่า (ก่อนระบบหักเครดิตทันที) กับออเดอร์ใหม่ ใช้ปุ่มคนละชุด
+  "OLD_ORDER", "NEW_FLOW_ORDER",
 ]);
 
-// ---------- สร้างออเดอร์ (คิดราคาจากฝั่งเซิร์ฟเวอร์) ----------
+// ---------- สร้างออเดอร์: หักเครดิต + จ่ายของ ในชุดเดียว ----------
 // เบราว์เซอร์ส่งมาแค่ "รหัสสินค้า + จำนวน" เท่านั้น ราคาทั้งหมดอ่านจากฐานข้อมูลเอง
 // ลูกค้าจึงแก้ราคาไม่ได้ ต่อให้ดัดแปลงหน้าเว็บ
+//
+// ระบบใหม่ (6 ก.ย. 2569) — ไม่ต้องรอแอดมินอนุมัติแล้ว:
+//   ไอดีเกม (digital) : หักเครดิต → จับไอดีในคลังใส่ออเดอร์ → status = completed ทันที
+//   ของเติมเกม        : หักเครดิตทันทีเหมือนกัน แต่ status = pending รอแอดมินเติมให้
+//
+// ทุกขั้นอยู่ใน transaction เดียวกัน ถ้าพลาดตรงไหนจะไม่เกิดอะไรขึ้นเลยสักอย่าง
+// (เครดิตไม่ถูกหัก ของไม่ถูกจอง สต๊อกไม่ลด) — สำคัญมากเพราะตอนนี้เงินขยับตั้งแต่ลูกค้ากดปุ่ม
 async function createOrder(token, user, rawItems) {
   if (!Array.isArray(rawItems) || !rawItems.length) throw new Error("EMPTY_CART");
   if (rawItems.length > 50) throw new Error("TOO_MANY_ITEMS");
@@ -347,73 +360,245 @@ async function createOrder(token, user, rawItems) {
   for (const it of rawItems) {
     const id = String(it?.id || "");
     const qty = Math.floor(Number(it?.qty));
-    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error("BAD_ITEM");
+    if (!isId(id)) throw new Error("BAD_ITEM");
     if (!Number.isFinite(qty) || qty < 1 || qty > 999) throw new Error("BAD_QTY");
     want.set(id, (want.get(id) || 0) + qty);
     // สินค้าเดียวกันส่งมาหลายแถว ใช้ค่าที่กรอกมาแถวแรกที่มีข้อมูล
     if (!info.has(id)) info.set(id, it);
   }
 
-  const products = await batchGet(token, [...want.keys()].map(id => `documents/products/${id}`));
+  const tx = await beginTx(token);
+  try {
+    // ---- อ่านทุกอย่างในหมายเลข transaction เดียวกันก่อน ----
+    const products = await batchGet(token,
+      [...want.keys()].map(id => `documents/products/${id}`), tx);
 
-  let total = 0;
-  const items = [];
-  for (const [id, qty] of want) {
-    const p = products[id];
-    if (!p) throw new Error("PRODUCT_NOT_FOUND");
-    if (p.active?.booleanValue === false) throw new Error("PRODUCT_INACTIVE");
+    let total = 0;
+    let allDigital = true;
+    const items = [];
+    for (const [id, qty] of want) {
+      const p = products[id];
+      if (!p) throw new Error("PRODUCT_NOT_FOUND");
+      if (p.active?.booleanValue === false) throw new Error("PRODUCT_INACTIVE");
 
-    const stock = p.stock && p.stock.nullValue === undefined ? num(p.stock) : null;
-    if (stock !== null && stock < qty) throw new Error("OUT_OF_STOCK");
+      const stock = p.stock && p.stock.nullValue === undefined ? num(p.stock) : null;
+      if (stock !== null && stock < qty) throw new Error("OUT_OF_STOCK");
 
-    const price = num(p.price);
-    if (price <= 0) throw new Error("BAD_PRICE");
+      const price = safeMoney(num(p.price), "BAD_PRICE");
+      if (price <= 0) throw new Error("BAD_PRICE");
 
-    total = money2(total + price * qty);
+      total = money2(total + price * qty);
 
-    // ของเติมเกม: เก็บเฉพาะช่องที่สินค้านั้น "ติ๊กว่าขอ" เท่านั้น
-    // ลูกค้าแนบอะไรมาเกินก็ไม่ถูกบันทึก และถ้าขอแล้วไม่กรอกก็สั่งไม่ผ่าน
-    const asked = {};
-    const raw = info.get(id) || {};
-    const clean = v => String(v ?? "").trim().slice(0, 120);
-    if (p.askUid?.booleanValue === true) asked.gameUid = clean(raw.gameUid);
-    if (p.askLogin?.booleanValue === true) {
-      asked.gameLogin = clean(raw.gameLogin);
-      asked.gamePassword = clean(raw.gamePassword);
+      // ของเติมเกม: เก็บเฉพาะช่องที่สินค้านั้น "ติ๊กว่าขอ" เท่านั้น
+      // ลูกค้าแนบอะไรมาเกินก็ไม่ถูกบันทึก และถ้าขอแล้วไม่กรอกก็สั่งไม่ผ่าน
+      const asked = {};
+      const raw = info.get(id) || {};
+      const clean = v => String(v ?? "").trim().slice(0, 120);
+      if (p.askUid?.booleanValue === true) asked.gameUid = clean(raw.gameUid);
+      if (p.askLogin?.booleanValue === true) {
+        asked.gameLogin = clean(raw.gameLogin);
+        asked.gamePassword = clean(raw.gamePassword);
+      }
+      if (Object.values(asked).some(v => !v)) throw new Error("NEED_CUSTOMER_INFO");
+
+      if (p.digital?.booleanValue !== true) allDigital = false;
+      items.push({ id, name: p.name?.stringValue || "", price, qty, ...asked });
     }
-    if (Object.values(asked).some(v => !v)) throw new Error("NEED_CUSTOMER_INFO");
+    if (total <= 0) throw new Error("BAD_TOTAL");
 
-    items.push({ id, name: p.name?.stringValue || "", price, qty, ...asked });
-  }
-  if (total <= 0) throw new Error("BAD_TOTAL");
+    const users = await batchGet(token, [`documents/users/${user.uid}`], tx);
+    const me = users[user.uid];
+    if (!me) throw new Error("NO_PROFILE");
+    // เครดิตที่เป็นค่าเสีย (NaN/ติดลบ) ห้ามเอามาคำนวณต่อ ไม่งั้นด่านเช็คนี้ผ่านตลอด
+    const before = safeMoney(num(me.credit), "NOT_ENOUGH_CREDIT");
+    if (before < total) throw new Error("NOT_ENOUGH_CREDIT");
 
-  // เครดิตต้องพอตั้งแต่ตอนสั่ง (หักจริงตอนแอดมินอนุมัติ)
-  const users = await batchGet(token, [`documents/users/${user.uid}`]);
-  const me = users[user.uid];
-  if (!me) throw new Error("NO_PROFILE");
-  if (num(me.credit) < total) throw new Error("NOT_ENOUGH_CREDIT");
+    // ---- จองไอดีในคลัง (อ่านใน transaction = คนอื่นแย่งระหว่างนี้ไม่ได้) ----
+    const picked = {};
+    for (const [pid, qty] of want) {
+      if (products[pid].digital?.booleanValue !== true) continue;
+      const found = await runQuery(token, `products/${pid}`, {
+        from: [{ collectionId: "stockItems" }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: "status" },
+            op: "EQUAL",
+            value: { stringValue: "available" },
+          },
+        },
+        limit: qty,
+      }, tx);
+      if (found.length < qty) throw new Error("OUT_OF_STOCK");
+      // ห้ามส่งของว่างเปล่าให้ลูกค้าเด็ดขาด — ให้แอดมินไปกรอกข้อมูลก่อน
+      for (const r of found) {
+        if (!str(r.fields.login).trim() && !str(r.fields.password).trim()) {
+          throw new Error("ITEM_NOT_READY");
+        }
+      }
+      picked[pid] = found;
+    }
 
-  const orderId = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
-  await commit(token, [{
-    update: {
-      name: docPath("orders", orderId),
-      fields: {
-        ...fsFields({
-          uid: user.uid,
-          customerName: me.name?.stringValue || user.name || "",
-          customerEmail: me.email?.stringValue || user.email || "",
-          total,
-          status: "pending",
-          createdAt: new Date(),
-          serverPriced: true,     // บอกหลังบ้านว่าออเดอร์นี้ราคาผ่านการตรวจแล้ว
-        }),
-        items: { arrayValue: { values: items.map(i => ({ mapValue: { fields: fsFields(i) } })) } },
+    // ---- ตรวจครบแล้วค่อยเขียน ----
+    const now = new Date();
+    const orderId = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+    const writes = [];
+
+    // ตัดสต๊อก (เฉพาะสินค้าที่กำหนดจำนวนไว้ ของที่ปล่อยว่าง = ไม่จำกัด)
+    for (const [pid, qty] of want) {
+      const p = products[pid];
+      if (!p.stock || p.stock.nullValue !== undefined) continue;
+      const left = num(p.stock) - qty;
+      if (left < 0) throw new Error("OUT_OF_STOCK");
+      writes.push({
+        update: { name: docPath("products", pid), fields: fsFields({ stock: left }) },
+        updateMask: { fieldPaths: ["stock"] },
+      });
+    }
+
+    // จับไอดีใส่ออเดอร์ + ตัดชิ้นนั้นออกจากคลัง
+    const queue = Object.fromEntries(Object.entries(picked).map(([pid, arr]) => [pid, [...arr]]));
+    const finalItems = items.map(i => {
+      const pid = String(i.id);
+      if (!queue[pid]) return i;
+      const take = queue[pid].splice(0, i.qty);
+      if (take.length < i.qty) throw new Error("OUT_OF_STOCK");
+      return {
+        ...i,
+        delivered: take.map(r => ({
+          login: str(r.fields.login),
+          password: str(r.fields.password),
+          note: str(r.fields.note),
+        })),
+      };
+    });
+
+    for (const arr of Object.values(picked)) {
+      for (const r of arr) {
+        writes.push({
+          update: {
+            name: r.name,
+            fields: fsFields({ status: "sold", orderId, uid: user.uid, soldAt: now }),
+          },
+          updateMask: { fieldPaths: ["status", "orderId", "uid", "soldAt"] },
+        });
+      }
+    }
+
+    const after = money2(before - total);
+    writes.push({
+      update: { name: docPath("users", user.uid), fields: fsFields({ credit: after }) },
+      updateMask: { fieldPaths: ["credit"] },
+    });
+
+    const kind = allDigital ? "digital" : "topup";
+    writes.push({
+      update: {
+        name: docPath("orders", orderId),
+        fields: {
+          ...fsFields({
+            uid: user.uid,
+            customerName: me.name?.stringValue || user.name || "",
+            customerEmail: me.email?.stringValue || user.email || "",
+            total,
+            status: allDigital ? "completed" : "pending",
+            kind,
+            // paid = เครดิตถูกหักไปแล้วตั้งแต่ตอนสั่ง (ออเดอร์ของระบบใหม่)
+            // ออเดอร์เก่าที่ค้างอยู่ไม่มีฟิลด์นี้ ต้องอนุมัติด้วยเส้นทางเดิมเท่านั้น
+            // ไม่งั้นจะได้ของไปฟรีๆ เพราะไม่เคยมีใครหักเครดิต
+            paid: true,
+            createdAt: now,
+            paidAt: now,
+            creditBefore: before,
+            creditAfter: after,
+            serverPriced: true,     // บอกหลังบ้านว่าออเดอร์นี้ราคาผ่านการตรวจแล้ว
+            // เวลาเริ่มนับเวลาเคลม — ไอดีเกมเริ่มทันทีที่ลูกค้าได้รหัส
+            // ของเติมเกมเริ่มตอนแอดมินกด "ทำเสร็จแล้ว" (ดู adminCompleteOrder)
+            ...(allDigital ? { claimTimerStartedAt: now, completedAt: now } : {}),
+          }),
+          items: { arrayValue: { values: finalItems.map(i => ({ mapValue: { fields: fsFields(i) } })) } },
+        },
       },
-    },
-    currentDocument: { exists: false },
-  }]);
+      currentDocument: { exists: false },
+    });
 
-  return { orderId, total, items };
+    await commit(token, writes, tx);
+    return { orderId, total, kind, status: allDigital ? "completed" : "pending", credit: after };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ---------- ลูกค้าแก้ข้อมูลไอดีเกมในออเดอร์ของตัวเอง ----------
+// แก้ได้เฉพาะออเดอร์ของตัวเอง และเฉพาะตอนสถานะ "รอดำเนินการ" เท่านั้น
+// พอแอดมินกด "เริ่มดำเนินการ" ช่องแก้ไขจะหายไป เพราะแอดมินอาจเติมเข้าไอดีเดิมไปแล้ว
+//
+// ทำไมไม่เปิดกฎ Firestore ให้ลูกค้าเขียน orders เอง:
+//   ข้อมูลพวกนี้อยู่ใน items[] ซึ่งเป็นอาร์เรย์ กฎ Firestore ตรวจทีละสมาชิกในอาร์เรย์ไม่ได้
+//   ถ้าเปิดให้เขียนฟิลด์ items ได้ ลูกค้าก็แก้ qty/price ที่อยู่ในอาร์เรย์เดียวกันได้ด้วย
+//   = สั่ง 1 ชิ้นแล้วแก้เป็น 999 ชิ้น ปั๊มของออกไปฟรี จึงต้องผ่านเซิร์ฟเวอร์เท่านั้น (กฎเหล็กข้อ 1)
+async function updateOrderInfo(token, user, { orderId, items: patchItems }) {
+  if (!isId(orderId)) throw new Error("BAD_ITEM");
+  if (!Array.isArray(patchItems) || !patchItems.length || patchItems.length > 50) {
+    throw new Error("BAD_ITEM");
+  }
+
+  const patch = new Map();
+  for (const p of patchItems) {
+    const idx = Math.floor(Number(p?.index));
+    if (!Number.isFinite(idx) || idx < 0 || idx > 999) throw new Error("BAD_ITEM");
+    patch.set(idx, p);
+  }
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/orders/${orderId}`], tx);
+    const o = got[orderId];
+    // ออเดอร์ของคนอื่นตอบเหมือน "ไม่มีออเดอร์นี้" — ไม่บอกใบ้ว่ามีอยู่จริงไหม
+    if (!o || str(o.uid) !== user.uid) throw new Error("ORDER_NOT_FOUND");
+    if (str(o.status) !== "pending") throw new Error("EDIT_LOCKED");
+
+    const clean = v => String(v ?? "").trim().slice(0, 120);
+    const items = fsRead(o.items) || [];
+    const edits = fsRead(o.infoEdits) || [];
+    const at = new Date();
+    let changed = 0;
+
+    const next = items.map((it, idx) => {
+      const p = patch.get(idx);
+      if (!p) return it;
+      const out = { ...it };
+      for (const k of ["gameUid", "gameLogin", "gamePassword"]) {
+        // ช่องที่สินค้าชิ้นนี้ไม่ได้ขอ ห้ามให้ลูกค้าเพิ่มเข้ามาใหม่
+        if (!(k in it) || !(k in p)) continue;
+        const v = clean(p[k]);
+        if (!v) throw new Error("NEED_CUSTOMER_INFO");
+        if (v === it[k]) continue;
+        // เก็บร่องรอยว่าแก้อะไรตอนไหน กันเถียงกันทีหลังว่า "ผมกรอกถูกแล้ว"
+        // รหัสผ่านเก็บแค่ว่าเปลี่ยนแล้ว ไม่เก็บของเดิมไว้ในระบบ
+        edits.push({ at, index: idx, field: k, from: k === "gamePassword" ? "***" : String(it[k] ?? "") });
+        out[k] = v;
+        changed++;
+      }
+      return out;
+    });
+
+    if (!changed) { await rollbackTx(token, tx); return { ok: true, changed: 0 }; }
+    // ประวัติยาวไม่จำกัดจะทำให้เอกสารโตจนชนเพดาน 1MB ของ Firestore
+    if (edits.length > 100) edits.splice(0, edits.length - 100);
+
+    await commit(token, [{
+      update: {
+        name: docPath("orders", orderId),
+        fields: fsFields({ items: next, infoEdits: edits, infoEditedAt: at }),
+      },
+      updateMask: { fieldPaths: ["items", "infoEdits", "infoEditedAt"] },
+    }], tx);
+    return { ok: true, changed };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
 }
 
 // ================= เส้นทางแอดมิน =================
@@ -618,9 +803,12 @@ async function adminRejectTopup(token, admin, { topupId, note = "" }) {
   }
 }
 
-// ---------- แอดมิน: อนุมัติออเดอร์ ----------
+// ---------- แอดมิน: อนุมัติออเดอร์ (เส้นทางเก่า) ----------
 // หักเครดิต + ตัดสต๊อก + จับไอดีในคลังส่งให้ลูกค้า + เปลี่ยนสถานะ ในชุดเดียว
 // ถ้าขั้นใดพลาด จะไม่เกิดอะไรขึ้นเลยสักอย่าง
+//
+// *** ใช้กับออเดอร์เก่าที่ค้างอยู่ก่อนเปลี่ยนเป็นระบบ "หักเครดิตตอนสั่ง" เท่านั้น ***
+// ออเดอร์ใหม่ (paid = true) หักเครดิตไปแล้วตั้งแต่ลูกค้ากดสั่ง ถ้ามาเข้าทางนี้จะโดนหักซ้ำ
 async function adminApproveOrder(token, admin, { orderId }) {
   if (!isId(orderId)) throw new Error("BAD_REQUEST");
 
@@ -629,6 +817,7 @@ async function adminApproveOrder(token, admin, { orderId }) {
     const got = await batchGet(token, [`documents/orders/${orderId}`], tx);
     const o = got[orderId];
     if (!o) throw new Error("NOT_FOUND");
+    if (o.paid?.booleanValue === true) throw new Error("NEW_FLOW_ORDER");
     if (str(o.status) !== "pending") throw new Error("ALREADY_HANDLED");
 
     const uid = str(o.uid);
@@ -758,7 +947,9 @@ async function adminApproveOrder(token, admin, { orderId }) {
   }
 }
 
-// ---------- แอดมิน: ไม่อนุมัติออเดอร์ ----------
+// ---------- แอดมิน: ไม่อนุมัติออเดอร์ (เส้นทางเก่า) ----------
+// ออเดอร์เก่ายังไม่ถูกหักเครดิต จึงแค่ปิดรายการทิ้งได้เลย
+// ออเดอร์ใหม่ต้องใช้ "ยกเลิก + คืนเครดิต" (adminCancelOrder) แทน
 async function adminRejectOrder(token, admin, { orderId, note = "" }) {
   if (!isId(orderId)) throw new Error("BAD_REQUEST");
   const memo = String(note ?? "").slice(0, 300);
@@ -768,6 +959,7 @@ async function adminRejectOrder(token, admin, { orderId, note = "" }) {
     const got = await batchGet(token, [`documents/orders/${orderId}`], tx);
     const o = got[orderId];
     if (!o) throw new Error("NOT_FOUND");
+    if (o.paid?.booleanValue === true) throw new Error("NEW_FLOW_ORDER");
     if (str(o.status) !== "pending") throw new Error("ALREADY_HANDLED");
 
     await commit(token, [
@@ -786,6 +978,178 @@ async function adminRejectOrder(token, admin, { orderId, note = "" }) {
       auditWrite(admin, "order.reject", { orderId, targetUid: str(o.uid), note: memo }),
     ], tx);
     return { ok: true };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ===== ออเดอร์ระบบใหม่: 3 สถานะ + ยกเลิกคืนเครดิต =====
+// รอดำเนินการ (pending) → กำลังดำเนินการ (processing) → สำเร็จ (completed)
+// ทุกปุ่มเช็คสถานะปัจจุบันใน transaction ก่อนเปลี่ยนเสมอ (กฎเหล็กข้อ 10)
+// กันทั้ง "กดซ้ำ" และ "กดข้ามขั้น" — ถ้าลัดจาก รอ → สำเร็จ ได้ ลูกค้าจะยังแก้ไอดีได้อยู่
+// ตอนที่แอดมินเติมไปแล้ว แล้วมาเถียงกันทีหลังว่าเติมผิดไอดี
+
+// ---------- แอดมิน: เริ่มดำเนินการ (รอดำเนินการ → กำลังดำเนินการ) ----------
+// จุดนี้คือจุดที่ล็อกไม่ให้ลูกค้าแก้ไอดีเกมได้อีก
+async function adminStartOrder(token, admin, { orderId }) {
+  if (!isId(orderId)) throw new Error("BAD_REQUEST");
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/orders/${orderId}`], tx);
+    const o = got[orderId];
+    if (!o) throw new Error("NOT_FOUND");
+    if (o.paid?.booleanValue !== true) throw new Error("OLD_ORDER");
+    if (str(o.status) !== "pending") throw new Error("ALREADY_HANDLED");
+
+    await commit(token, [
+      {
+        update: {
+          name: docPath("orders", orderId),
+          fields: fsFields({
+            status: "processing",
+            startedAt: new Date(),
+            handledBy: admin.email || "",
+          }),
+        },
+        updateMask: { fieldPaths: ["status", "startedAt", "handledBy"] },
+      },
+      auditWrite(admin, "order.start", { orderId, targetUid: str(o.uid) }),
+    ], tx);
+    return { status: "processing" };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ---------- แอดมิน: ทำเสร็จแล้ว (กำลังดำเนินการ → สำเร็จ) ----------
+// จุดนี้ทำ 2 อย่างพร้อมกัน:
+//   1) เริ่มจับเวลาเคลม (claimTimerStartedAt) — ลูกค้ามีเวลาแจ้งปัญหาตามที่ระบุใน SHOP.policy
+//   2) ลบชื่อผู้ใช้/รหัสผ่านของลูกค้าทิ้งอัตโนมัติ เหลือแค่ไอดีเกม/UID ไว้เป็นหลักฐาน
+//      (เดิมต้องรอแอดมินกดลบเอง ซึ่งลืมได้ แล้วรหัสผ่านลูกค้าค้างอยู่ในระบบไปเรื่อยๆ)
+async function adminCompleteOrder(token, admin, { orderId }) {
+  if (!isId(orderId)) throw new Error("BAD_REQUEST");
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/orders/${orderId}`], tx);
+    const o = got[orderId];
+    if (!o) throw new Error("NOT_FOUND");
+    if (o.paid?.booleanValue !== true) throw new Error("OLD_ORDER");
+    if (str(o.status) !== "processing") throw new Error("ALREADY_HANDLED");
+
+    const now = new Date();
+    const before = fsRead(o.items) || [];
+    const hadSecret = before.some(i => i.gameLogin || i.gamePassword);
+    const items = before.map(({ gameLogin, gamePassword, ...keep }) => keep);
+
+    await commit(token, [
+      {
+        update: {
+          name: docPath("orders", orderId),
+          fields: fsFields({
+            items,
+            status: "completed",
+            completedAt: now,
+            claimTimerStartedAt: now,
+            handledBy: admin.email || "",
+            ...(hadSecret ? { customerInfoClearedAt: now } : {}),
+          }),
+        },
+        updateMask: {
+          fieldPaths: ["items", "status", "completedAt", "claimTimerStartedAt", "handledBy",
+            ...(hadSecret ? ["customerInfoClearedAt"] : [])],
+        },
+      },
+      auditWrite(admin, "order.complete", { orderId, targetUid: str(o.uid), clearedInfo: hadSecret }),
+    ], tx);
+    return { status: "completed", clearedInfo: hadSecret };
+  } catch (e) {
+    await rollbackTx(token, tx);
+    throw e;
+  }
+}
+
+// ---------- แอดมิน: ยกเลิกออเดอร์ + คืนเครดิต ----------
+// ใช้แทนปุ่ม "ไม่อนุมัติ" ของระบบเก่า เพราะตอนนี้เครดิตถูกหักไปตั้งแต่ลูกค้ากดสั่ง
+// ยกเลิกได้ทั้งตอนยังไม่เริ่มทำ กำลังทำ และหลังส่งของแล้ว (เคสลูกค้าเคลมภายในเวลาที่กำหนด)
+//
+// สต๊อกคืนเฉพาะของที่ยังไม่ได้ส่งมอบ — ไอดีเกมที่ลูกค้าเห็นรหัสไปแล้ว
+// เอากลับมาขายใหม่ไม่ได้ ต้องให้แอดมินไปเพิ่มชิ้นใหม่ในคลังเอง
+const CANCELLABLE = ["pending", "processing", "completed"];
+
+async function adminCancelOrder(token, admin, { orderId, note = "" }) {
+  if (!isId(orderId)) throw new Error("BAD_REQUEST");
+  const memo = String(note ?? "").slice(0, 300);
+
+  const tx = await beginTx(token);
+  try {
+    const got = await batchGet(token, [`documents/orders/${orderId}`], tx);
+    const o = got[orderId];
+    if (!o) throw new Error("NOT_FOUND");
+    if (o.paid?.booleanValue !== true) throw new Error("OLD_ORDER");
+    // cancelled เป็นสถานะปลายทาง กดซ้ำจึงคืนเครดิตซ้ำไม่ได้
+    if (!CANCELLABLE.includes(str(o.status))) throw new Error("ALREADY_HANDLED");
+
+    const uid = str(o.uid);
+    const refund = safeMoney(num(o.total));
+    if (!uid || refund <= 0) throw new Error("BAD_REQUEST");
+
+    const uGot = await batchGet(token, [`documents/users/${uid}`], tx);
+    const u = uGot[uid];
+    if (!u) throw new Error("MEMBER_NOT_FOUND");
+    const before = safeMoney(num(u.credit));
+    const after = money2(before + refund);
+
+    // คืนสต๊อกของที่ยังไม่ได้ส่งมอบ
+    const items = fsRead(o.items) || [];
+    const restore = new Map();
+    for (const i of items) {
+      if (Array.isArray(i.delivered) && i.delivered.length) continue;
+      const pid = String(i.id || "");
+      const qty = Math.floor(Number(i.qty));
+      if (!isId(pid) || !Number.isFinite(qty) || qty < 1 || qty > 999) continue;
+      restore.set(pid, (restore.get(pid) || 0) + qty);
+    }
+    const prods = restore.size
+      ? await batchGet(token, [...restore.keys()].map(p => `documents/products/${p}`), tx)
+      : {};
+
+    const writes = [];
+    for (const [pid, qty] of restore) {
+      const p = prods[pid];
+      if (!p) continue;                                        // สินค้าถูกลบไปแล้ว
+      if (!p.stock || p.stock.nullValue !== undefined) continue;  // สต๊อกไม่จำกัด
+      writes.push({
+        update: { name: docPath("products", pid), fields: fsFields({ stock: num(p.stock) + qty }) },
+        updateMask: { fieldPaths: ["stock"] },
+      });
+    }
+
+    writes.push({
+      update: { name: docPath("users", uid), fields: fsFields({ credit: after }) },
+      updateMask: { fieldPaths: ["credit"] },
+    });
+    writes.push({
+      update: {
+        name: docPath("orders", orderId),
+        fields: fsFields({
+          status: "cancelled",
+          note: memo,
+          refundAmount: refund,
+          cancelledAt: new Date(),
+          handledBy: admin.email || "",
+        }),
+      },
+      updateMask: { fieldPaths: ["status", "note", "refundAmount", "cancelledAt", "handledBy"] },
+    });
+    writes.push(auditWrite(admin, "order.cancel",
+      { orderId, targetUid: uid, amount: refund, before, after }));
+
+    await commit(token, writes, tx);
+    return { refund, before, after, status: "cancelled" };
   } catch (e) {
     await rollbackTx(token, tx);
     throw e;
@@ -950,8 +1314,13 @@ async function adminRoute(path, body, token, env, user) {
     case "/admin/credit":            return adminAdjustCredit(token, me, body);
     case "/admin/topup/approve":     return adminApproveTopup(token, me, body);
     case "/admin/topup/reject":      return adminRejectTopup(token, me, body);
+    // ออเดอร์เก่า (ยังไม่ถูกหักเครดิต) — อนุมัติ/ไม่อนุมัติแบบเดิม
     case "/admin/order/approve":     return adminApproveOrder(token, me, body);
     case "/admin/order/reject":      return adminRejectOrder(token, me, body);
+    // ออเดอร์ระบบใหม่ (หักเครดิตตอนสั่ง) — 3 สถานะ + ยกเลิกคืนเครดิต
+    case "/admin/order/start":       return adminStartOrder(token, me, body);
+    case "/admin/order/complete":    return adminCompleteOrder(token, me, body);
+    case "/admin/order/cancel":      return adminCancelOrder(token, me, body);
     case "/admin/order/clear-info":  return adminClearOrderInfo(token, me, body);
     case "/admin/role":              return adminSetRole(token, env, me, body);
     default: throw new Error("NOT_FOUND");
@@ -988,8 +1357,9 @@ async function redeemAngpao(code, phone) {
 // เปิดไว้ให้สคริปต์ทดสอบเรียกใช้ (Cloudflare ใช้แค่ default export)
 export {
   parseAngpaoCode, getAccessToken, commit, docPath, fsFields, fsValue, fsRead,
-  redeemAngpao, createOrder, batchGet, money2, safeEqual, requireAdmin,
+  redeemAngpao, createOrder, updateOrderInfo, batchGet, money2, safeEqual, requireAdmin,
   adminAdjustCredit, adminApproveTopup, adminApproveOrder, adminSetRole,
+  adminStartOrder, adminCompleteOrder, adminCancelOrder,
 };
 
 // ---------- main ----------
@@ -1041,15 +1411,19 @@ export default {
       }
     }
 
-    // ===== เส้นทางสั่งซื้อ =====
-    if (path === "/order") {
+    // ===== เส้นทางสั่งซื้อ / แก้ข้อมูลในออเดอร์ของตัวเอง =====
+    if (path === "/order" || path === "/order/edit-info") {
       try {
-        const r = await createOrder(token, user, body.items);
+        const r = path === "/order"
+          ? await createOrder(token, user, body.items)
+          : await updateOrderInfo(token, user, body);
         return json({ ok: true, ...r }, 200, origin);
       } catch (e) {
         // ข้อความผิดพลาดภายใน (เช่น Firestore ล่ม) ไม่ควรหลุดออกไปหน้าเว็บ
-        const code = CLIENT_ERRORS.has(e.message) ? e.message : "ORDER_FAILED";
-        if (code === "ORDER_FAILED") console.error("createOrder", e);
+        // แต่ "มีคนแย่งของชิ้นสุดท้ายพอดี" เป็นเรื่องปกติ ต้องบอกให้ลูกค้ากดใหม่ ไม่ใช่ขึ้นว่าระบบพัง
+        const busy = e.fsCode === "ABORTED" || /ABORTED|contention/i.test(e.message || "");
+        const code = CLIENT_ERRORS.has(e.message) ? e.message : (busy ? "BUSY" : "ORDER_FAILED");
+        if (code === "ORDER_FAILED") console.error("order " + path, e);
         return json({ ok: false, error: code }, 400, origin);
       }
     }

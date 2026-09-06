@@ -239,6 +239,7 @@ async function callAdmin(path, payload = {}) {
 export const QQ = {
   isConfigured,
   CATEGORIES,   // หมวดหมู่สินค้า — app.js (สคริปต์ธรรมดา) อ่านผ่าน window.QQ.CATEGORIES
+  SHOP,         // ตั้งค่าร้าน (เงื่อนไขเคลม ฯลฯ) — สคริปต์ธรรมดาอ่านผ่าน window.QQ.SHOP
   get user() { return currentUser; },
   get profile() { return currentProfile; },
   get credit() { return Number(currentProfile?.credit || 0); },
@@ -429,9 +430,34 @@ export const QQ = {
     return sortByCreatedDesc(rows(await myQuery("orders", max)));
   },
 
+  // ลูกค้าแก้ไอดีเกม/UID ในออเดอร์ของตัวเอง (ได้เฉพาะตอนสถานะ "รอดำเนินการ")
+  // ต้องผ่านเซิร์ฟเวอร์เหมือนตอนสั่งซื้อ — กฎ Firestore ปิดไม่ให้เบราว์เซอร์เขียน orders เลย
+  // items = [{ index, gameUid?, gameLogin?, gamePassword? }]
+  async updateOrderInfo(orderId, items) {
+    const idToken = await auth?.currentUser?.getIdToken();
+    if (!idToken) throw Object.assign(new Error(t("o_UNAUTHORIZED")), { orderCode: "UNAUTHORIZED" });
+
+    const res = await fetchWithTimeout(ORDER_API + "/edit-info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken, orderId, items }),
+    }).catch(() => null);
+    const data = res
+      ? await res.json().catch(() => ({ ok: false, error: "BOT_UNREACHABLE" }))
+      : { ok: false, error: "BOT_UNREACHABLE" };
+    if (!data.ok) throw Object.assign(new Error(data.error), { orderCode: data.error });
+    return data;
+  },
+
   // อนุมัติออเดอร์ = หักเครดิต + ตัดสต๊อก + ส่งมอบไอดี/รหัสผ่าน + เปลี่ยนสถานะ
   // ทำที่เซิร์ฟเวอร์ทั้งหมดใน transaction เดียว (เบราว์เซอร์แตะเครดิตเองไม่ได้แล้ว)
+  // *** ใช้กับออเดอร์เก่าที่ค้างอยู่ก่อนเปลี่ยนเป็นระบบหักเครดิตตอนสั่งเท่านั้น ***
   approveOrder: orderId => callAdmin("/admin/order/approve", { orderId }),
+
+  // ออเดอร์ระบบใหม่: รอดำเนินการ → กำลังดำเนินการ → สำเร็จ · หรือยกเลิกแล้วคืนเครดิต
+  startOrder: orderId => callAdmin("/admin/order/start", { orderId }),
+  completeOrder: orderId => callAdmin("/admin/order/complete", { orderId }),
+  cancelOrder: (orderId, note = "") => callAdmin("/admin/order/cancel", { orderId, note }),
 
   // ต้องเช็คสถานะก่อนเสมอ — ถ้าเผลอกด "ไม่อนุมัติ" ทับออเดอร์ที่อนุมัติไปแล้ว
   // เครดิตที่หักไปกับของที่ส่งมอบไปแล้วจะไม่ถูกคืน แต่ประวัติกลับขึ้นว่าไม่อนุมัติ

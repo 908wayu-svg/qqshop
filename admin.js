@@ -93,7 +93,8 @@ function parseSlipText(text) {
 
 // เปิดให้ชุดทดสอบเรียกใช้ตรงๆ ได้
 // (ทดสอบด้วยข้อความตัวอย่าง/จำลอง Tesseract และป้อนข้อมูลผิดปกติเข้ากราฟ โดยไม่ต้องพึ่ง OCR/ข้อมูลจริง)
-export { parseSlipText, showSlip, barChart };
+// reloadAll เปิดไว้ให้ชุดทดสอบสั่งโหลดข้อมูลใหม่ได้ (ของจริงเรียกเองตอนเปิดหน้า/หลังกดปุ่ม)
+export { parseSlipText, showSlip, barChart, reloadAll };
 
 function renderSlipOcr(info) {
   const box = document.getElementById("slip-ocr");
@@ -191,12 +192,18 @@ function rangeStart() {
 
 const statusBadge = s => `<span class="badge ${s}">${t("st_" + s)}</span>`;
 
-// processing = บอทเริ่มทำแล้วแต่ยังไม่จบ ต้องโผล่ในตัวกรอง "รออนุมัติ"
-// ไม่งั้นรายการค้างจะหายไปจากสายตาแอดมินทั้งที่ลูกค้าเสียเงินไปแล้ว
+// processing = งานที่เริ่มแล้วแต่ยังไม่จบ (ออเดอร์ = แอดมินกำลังเติมให้ · เติมเงิน = บอทกำลังกดซอง)
+// ต้องโผล่ในตัวกรอง "รอดำเนินการ" ด้วย ไม่งั้นรายการค้างจะหายไปจากสายตาแอดมิน
+// ทั้งที่ลูกค้าเสียเงินไปแล้ว
 const OPEN_STATES = ["pending", "processing"];
+// สถานะที่ถือว่า "ขายสำเร็จ" — completed คือของระบบใหม่ · approved คือออเดอร์เก่าที่ค้างอยู่
+const DONE_STATES = ["completed", "approved"];
+// สถานะที่ถือว่า "ไม่ได้ขาย" — cancelled คือยกเลิกแล้วคืนเครดิต · rejected คือของระบบเก่า
+const VOID_STATES = ["cancelled", "rejected"];
+const FILTER_GROUP = { pending: OPEN_STATES, completed: DONE_STATES, cancelled: VOID_STATES };
 const matchFilter = (status, filter) =>
   filter === "all" ? true
-  : filter === "pending" ? OPEN_STATES.includes(status)
+  : FILTER_GROUP[filter] ? FILTER_GROUP[filter].includes(status)
   : status === filter;
 
 function dailySeries(records, valueFn) {
@@ -323,7 +330,7 @@ function renderOverview() {
   info.textContent = reset ? `${t("counting_since")} ${fmtDateTime(reset)}` : "";
   document.getElementById("btn-undo-reset").classList.toggle("hidden", !reset);
 
-  const approved = inRange(ORDERS.filter(o => o.status === "approved"));
+  const approved = inRange(ORDERS.filter(o => DONE_STATES.includes(o.status)));
   // สมาชิกไม่เกี่ยวกับการรีเซ็ตยอดขาย จึงใช้ช่วงเวลาปกติ
   const users = USERS.filter(u => u._date && u._date >= rangeStart());
   const sales = approved.reduce((s, o) => s + (o.total || 0), 0);
@@ -380,15 +387,37 @@ function renderOrders() {
         <td data-label="${t("items")}"><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small>
             ${customerInfoBlock(o)}</td>
         <td class="num" data-label="${t("amount")}">${money(o.total)}${priceWarnLabel(pc)}</td>
-        <td data-label="${t("status")}">${statusBadge(o.status)}${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
-        <td class="actions">${o.status === "pending" ? `
-          <button class="btn-small ok" data-act="approve-order" data-id="${o.id}">${t("approve")}</button>
-          <button class="btn-small danger" data-act="reject-order" data-id="${o.id}">${t("reject")}</button>` : ""}
+        <td data-label="${t("status")}">${statusBadge(o.status)}${
+          // ออเดอร์เก่ายังไม่ได้หักเครดิต ใช้ปุ่มคนละชุด บอกไว้กันแอดมินงงว่าทำไมปุ่มไม่เหมือนกัน
+          o.paid !== true && o.status === "pending" ? `<br><small class="muted">${t("legacy_order")}</small>` : ""
+        }${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
+        <td class="actions">${orderActions(o)}
           ${hasCustomerPassword(o) ? `
           <button class="btn-small" data-act="clear-cust-info" data-id="${o.id}">${t("clear_customer_info")}</button>` : ""}
         </td>
       </tr>`;
     }).join("")}</tbody>`;
+}
+
+// ===== ปุ่มในแถวออเดอร์ =====
+// มีสองระบบอยู่ด้วยกัน ห้ามสลับปุ่มกันเด็ดขาด:
+//   ออเดอร์เก่า (ไม่มี paid) — ยังไม่ได้หักเครดิต ต้องกด "อนุมัติ" ถึงจะหักและส่งของ
+//   ออเดอร์ใหม่ (paid=true) — หักเครดิตไปแล้วตอนลูกค้ากดสั่ง เหลือแค่ทำงานให้เสร็จ หรือยกเลิกคืนเงิน
+// ถ้าเอาปุ่ม "อนุมัติ" ไปใช้กับออเดอร์ใหม่ = หักเครดิตซ้ำ (เซิร์ฟเวอร์กันไว้อีกชั้นด้วย)
+function orderActions(o) {
+  const btn = (act, cls, label) =>
+    `<button class="btn-small ${cls}" data-act="${act}" data-id="${o.id}">${label}</button>`;
+
+  if (o.paid !== true) {
+    return o.status === "pending"
+      ? btn("approve-order", "ok", t("approve")) + btn("reject-order", "danger", t("reject"))
+      : "";
+  }
+  const cancel = btn("cancel-order", "danger", t("cancel_refund"));
+  if (o.status === "pending") return btn("start-order", "ok", t("start_order")) + cancel;
+  if (o.status === "processing") return btn("complete-order", "ok", t("complete_order")) + cancel;
+  if (o.status === "completed") return cancel;   // ลูกค้าเคลมทัน ยังคืนเครดิตให้ได้
+  return "";                                     // ยกเลิกไปแล้ว ไม่เหลืออะไรให้กด
 }
 
 const creditOf = uid => Number(USERS.find(u => u.id === uid)?.credit || 0);
@@ -411,7 +440,19 @@ function customerInfoBlock(o) {
       ${line(t("item_password"), i.gamePassword)}
     </div>`).join("");
   return `<div class="cust-info"><div class="ci-head">${t("customer_info")}</div>${blocks}
+    ${editHistory(o)}
     ${o.customerInfoClearedAt ? `<div class="ci-cleared">${t("customer_info_cleared")}</div>` : ""}</div>`;
+}
+
+// ลูกค้าแก้ไอดีเกมเองได้ตอนสถานะ "รอดำเนินการ" — เก็บร่องรอยไว้กันเถียงกันทีหลัง
+// ว่าตอนแอดมินเริ่มเติม ค่าที่อยู่ในระบบคือค่าไหน
+function editHistory(o) {
+  const edits = Array.isArray(o.infoEdits) ? o.infoEdits.slice(-10) : [];
+  if (!edits.length) return "";
+  const label = { gameUid: "ask_uid", gameLogin: "item_login", gamePassword: "item_password" };
+  return `<div class="ci-edits"><div class="ci-head">${t("info_edit_history")}</div>${
+    edits.map(e => `<div class="ci-edit">${fmtDateTime(toDate(e.at))} ·
+      ${esc(t(label[e.field] || e.field))}: <s>${esc(e.from || "—")}</s></div>`).join("")}</div>`;
 }
 
 // ยอดเงินในออเดอร์ส่งมาจากเบราว์เซอร์ลูกค้า จึงต้องคิดใหม่จากราคาสินค้าจริงเพื่อกันการแก้ราคา
@@ -924,6 +965,23 @@ document.getElementById("dash").addEventListener("click", async e => {
       } else if (act === "reject-order" && confirm(t("confirm_reject"))) {
         await QQ.rejectOrder(id);
         await refreshAfter(() => patchRow(ORDERS, "orders", id));
+      } else if (act === "start-order" && confirm(t("confirm_start_order"))) {
+        // รอดำเนินการ → กำลังดำเนินการ (ลูกค้าแก้ไอดีเกมไม่ได้อีกตั้งแต่จุดนี้)
+        await QQ.startOrder(id);
+        await refreshAfter(() => patchRow(ORDERS, "orders", id));
+      } else if (act === "complete-order" && confirm(t("confirm_complete_order"))) {
+        // กำลังดำเนินการ → สำเร็จ (เริ่มจับเวลาเคลม + ลบรหัสผ่านลูกค้าอัตโนมัติ)
+        await QQ.completeOrder(id);
+        await refreshAfter(() => patchRow(ORDERS, "orders", id));
+      } else if (act === "cancel-order" && confirm(t("confirm_cancel_order"))) {
+        // ยกเลิก = คืนเครดิตให้ลูกค้า + คืนสต๊อกของที่ยังไม่ได้ส่งมอบ
+        const uid = ORDERS.find(o => o.id === id)?.uid;
+        await QQ.cancelOrder(id);
+        await refreshAfter(async () => {
+          await patchRow(ORDERS, "orders", id);
+          await patchUser(uid);
+          PRODUCTS = await QQ.fetchProducts();
+        });
       } else if (act === "clear-cust-info" && confirm(t("confirm_clear_customer_info"))) {
         // เติมเกมเสร็จแล้ว ไม่ควรเก็บรหัสผ่านลูกค้าไว้ในระบบต่อ
         await QQ.clearOrderCustomerInfo(id);

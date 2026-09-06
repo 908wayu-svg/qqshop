@@ -62,7 +62,7 @@ for (const cls of CLICKABLE) {
   if (drawn) ok("ปุ่ม ." + cls + " มีตัวรับคลิก", handlerFor("\\." + cls));
 }
 // ปุ่มที่ผูกด้วยแอตทริบิวต์ data-*
-for (const attr of ["data-add", "data-qty", "data-act", "data-slip", "data-cat", "data-open", "data-copy"]) {
+for (const attr of ["data-buy", "data-edit", "data-act", "data-slip", "data-cat", "data-open", "data-copy"]) {
   const drawn = new RegExp(attr + '="').test(allCode);
   // data-copy ผูกคลิกผ่านคลาส .copy ที่ ui.js (ตรวจไปแล้วด้านบน)
   const handled = handlerFor("\\[" + attr + "\\]") || (attr === "data-copy" && handlerFor("\\.copy"));

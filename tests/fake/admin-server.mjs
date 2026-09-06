@@ -104,10 +104,12 @@ function stockItemsOf(pid) {
       || a.path.localeCompare(b.path));
 }
 
+// อนุมัติออเดอร์แบบเดิม — ใช้ได้เฉพาะออเดอร์เก่าที่ยังไม่ได้หักเครดิต (ไม่มี paid)
 function approveOrder(admin, { orderId }) {
   if (!isId(orderId)) fail("BAD_REQUEST");
   const o = get("orders/" + orderId);
   if (!o) fail("NOT_FOUND");
+  if (o.paid === true) fail("NEW_FLOW_ORDER");
   if (o.status !== "pending") fail("ALREADY_HANDLED");
 
   const items = (o.items || []).map(i => ({ ...i }));
@@ -183,6 +185,7 @@ function rejectOrder(admin, { orderId, note = "" }) {
   if (!isId(orderId)) fail("BAD_REQUEST");
   const o = get("orders/" + orderId);
   if (!o) fail("NOT_FOUND");
+  if (o.paid === true) fail("NEW_FLOW_ORDER");
   if (o.status !== "pending") fail("ALREADY_HANDLED");
   patch("orders/" + orderId, {
     status: "rejected", note: String(note).slice(0, 300),
@@ -190,6 +193,77 @@ function rejectOrder(admin, { orderId, note = "" }) {
   });
   audit(admin, "order.reject", { orderId, targetUid: o.uid });
   return { ok: true };
+}
+
+// ===== ออเดอร์ระบบใหม่: 3 สถานะ + ยกเลิกคืนเครดิต =====
+// ตรรกะต้องตรงกับ adminStartOrder / adminCompleteOrder / adminCancelOrder ใน worker/src/index.js
+function startOrder(admin, { orderId }) {
+  if (!isId(orderId)) fail("BAD_REQUEST");
+  const o = get("orders/" + orderId);
+  if (!o) fail("NOT_FOUND");
+  if (o.paid !== true) fail("OLD_ORDER");
+  if (o.status !== "pending") fail("ALREADY_HANDLED");
+  patch("orders/" + orderId, { status: "processing", startedAt: now(), handledBy: admin.email || "" });
+  audit(admin, "order.start", { orderId, targetUid: o.uid });
+  return { status: "processing" };
+}
+
+function completeOrder(admin, { orderId }) {
+  if (!isId(orderId)) fail("BAD_REQUEST");
+  const o = get("orders/" + orderId);
+  if (!o) fail("NOT_FOUND");
+  if (o.paid !== true) fail("OLD_ORDER");
+  // กันกดข้ามขั้น ต้องผ่าน "เริ่มดำเนินการ" มาก่อนเสมอ
+  if (o.status !== "processing") fail("ALREADY_HANDLED");
+
+  const before = o.items || [];
+  const hadSecret = before.some(i => i.gameLogin || i.gamePassword);
+  const items = before.map(({ gameLogin, gamePassword, ...keep }) => keep);
+  patch("orders/" + orderId, {
+    items, status: "completed", completedAt: now(), claimTimerStartedAt: now(),
+    handledBy: admin.email || "", ...(hadSecret ? { customerInfoClearedAt: now() } : {}),
+  });
+  audit(admin, "order.complete", { orderId, targetUid: o.uid, clearedInfo: hadSecret });
+  return { status: "completed", clearedInfo: hadSecret };
+}
+
+const CANCELLABLE = ["pending", "processing", "completed"];
+
+function cancelOrder(admin, { orderId, note = "" }) {
+  if (!isId(orderId)) fail("BAD_REQUEST");
+  const o = get("orders/" + orderId);
+  if (!o) fail("NOT_FOUND");
+  if (o.paid !== true) fail("OLD_ORDER");
+  if (!CANCELLABLE.includes(o.status)) fail("ALREADY_HANDLED");
+
+  const refund = money2(o.total || 0);
+  if (!o.uid || !(refund > 0)) fail("BAD_REQUEST");
+  const u = get("users/" + o.uid);
+  if (!u) fail("MEMBER_NOT_FOUND");
+  const before = money2(u.credit || 0);
+  const after = money2(before + refund);
+
+  // คืนสต๊อกเฉพาะของที่ยังไม่ได้ส่งมอบ (ไอดีที่ลูกค้าเห็นรหัสไปแล้วเอากลับมาขายไม่ได้)
+  const restore = new Map();
+  for (const i of o.items || []) {
+    if (Array.isArray(i.delivered) && i.delivered.length) continue;
+    const qty = Math.floor(Number(i.qty));
+    if (!isId(String(i.id)) || !Number.isFinite(qty) || qty < 1) continue;
+    restore.set(String(i.id), (restore.get(String(i.id)) || 0) + qty);
+  }
+  for (const [pid, qty] of restore) {
+    const p = get("products/" + pid);
+    if (!p || p.stock === null || p.stock === undefined) continue;
+    patch("products/" + pid, { stock: Number(p.stock) + qty });
+  }
+
+  patch("users/" + o.uid, { credit: after });
+  patch("orders/" + orderId, {
+    status: "cancelled", note: String(note).slice(0, 300), refundAmount: refund,
+    cancelledAt: now(), handledBy: admin.email || "",
+  });
+  audit(admin, "order.cancel", { orderId, targetUid: o.uid, amount: refund, before, after });
+  return { refund, before, after, status: "cancelled" };
 }
 
 function clearOrderInfo(admin, { orderId }) {
@@ -243,6 +317,150 @@ function whoami(user) {
   return { uid: user.uid, claim, role, admin: claim && role === "admin" };
 }
 
+// ===== ฝั่งลูกค้า: สร้างออเดอร์ + แก้ข้อมูลไอดีเกม (แทน /order ของ Worker) =====
+// ตรรกะต้องตรงกับ createOrder / updateOrderInfo ใน worker/src/index.js
+// หัวใจคือ "หักเครดิต + จ่ายของ" เกิดขึ้นตั้งแต่ตอนลูกค้ากดสั่ง ไม่ใช่ตอนแอดมินอนุมัติ
+let orderSeq = 0;
+
+function createOrder(user, rawItems) {
+  if (!Array.isArray(rawItems) || !rawItems.length) fail("EMPTY_CART");
+  if (rawItems.length > 50) fail("TOO_MANY_ITEMS");
+
+  const want = new Map(), info = new Map();
+  for (const it of rawItems) {
+    const id = String(it?.id || "");
+    const qty = Math.floor(Number(it?.qty));
+    if (!isId(id)) fail("BAD_ITEM");
+    if (!Number.isFinite(qty) || qty < 1 || qty > 999) fail("BAD_QTY");
+    want.set(id, (want.get(id) || 0) + qty);
+    if (!info.has(id)) info.set(id, it);
+  }
+
+  let total = 0, allDigital = true;
+  const items = [];
+  for (const [id, qty] of want) {
+    const p = get("products/" + id);
+    if (!p) fail("PRODUCT_NOT_FOUND");
+    if (p.active === false) fail("PRODUCT_INACTIVE");
+    if (p.stock !== null && p.stock !== undefined && Number(p.stock) < qty) fail("OUT_OF_STOCK");
+    const price = money2(p.price);
+    if (!(price > 0)) fail("BAD_PRICE");
+    total = money2(total + price * qty);
+
+    const asked = {};
+    const raw = info.get(id) || {};
+    const clean = v => String(v ?? "").trim().slice(0, 120);
+    if (p.askUid === true) asked.gameUid = clean(raw.gameUid);
+    if (p.askLogin === true) {
+      asked.gameLogin = clean(raw.gameLogin);
+      asked.gamePassword = clean(raw.gamePassword);
+    }
+    if (Object.values(asked).some(v => !v)) fail("NEED_CUSTOMER_INFO");
+
+    if (p.digital !== true) allDigital = false;
+    items.push({ id, name: p.name || "", price, qty, ...asked });
+  }
+  if (!(total > 0)) fail("BAD_TOTAL");
+
+  const me = get("users/" + user.uid);
+  if (!me) fail("NO_PROFILE");
+  const before = money2(me.credit || 0);
+  if (!Number.isFinite(before) || before < total) fail("NOT_ENOUGH_CREDIT");
+
+  // จองไอดีในคลังของสินค้าดิจิทัล
+  const picked = {};
+  for (const [pid, qty] of want) {
+    const p = get("products/" + pid);
+    if (p.digital !== true) continue;
+    const avail = stockItemsOf(pid).filter(s => s.data.status === "available").slice(0, qty);
+    if (avail.length < qty) fail("OUT_OF_STOCK");
+    for (const s of avail) {
+      if (!String(s.data.login || "").trim() && !String(s.data.password || "").trim()) fail("ITEM_NOT_READY");
+    }
+    picked[pid] = avail;
+  }
+
+  // ---- ตรวจครบแล้วค่อยเขียน ----
+  const orderId = "ord" + (++orderSeq) + Math.random().toString(36).slice(2, 8);
+  for (const [pid, qty] of want) {
+    const p = get("products/" + pid);
+    if (p.stock === null || p.stock === undefined) continue;
+    const left = Number(p.stock) - qty;
+    if (left < 0) fail("OUT_OF_STOCK");
+    patch("products/" + pid, { stock: left });
+  }
+
+  const queue = Object.fromEntries(Object.entries(picked).map(([pid, arr]) => [pid, [...arr]]));
+  const finalItems = items.map(i => {
+    if (!queue[i.id]) return i;
+    const take = queue[i.id].splice(0, i.qty);
+    if (take.length < i.qty) fail("OUT_OF_STOCK");
+    return {
+      ...i,
+      delivered: take.map(s => ({
+        login: s.data.login || "", password: s.data.password || "", note: s.data.note || "",
+      })),
+    };
+  });
+  for (const arr of Object.values(picked)) {
+    for (const s of arr) patch(s.path, { status: "sold", orderId, uid: user.uid, soldAt: now() });
+  }
+
+  const after = money2(before - total);
+  patch("users/" + user.uid, { credit: after });
+  const at = now();
+  set("orders/" + orderId, {
+    uid: user.uid, customerName: me.name || "", customerEmail: me.email || "",
+    items: finalItems, total, status: allDigital ? "completed" : "pending",
+    kind: allDigital ? "digital" : "topup", paid: true, serverPriced: true,
+    createdAt: at, paidAt: at, creditBefore: before, creditAfter: after,
+    ...(allDigital ? { claimTimerStartedAt: at, completedAt: at } : {}),
+  });
+  return { orderId, total, kind: allDigital ? "digital" : "topup",
+    status: allDigital ? "completed" : "pending", credit: after };
+}
+
+function updateOrderInfo(user, { orderId, items: patchItems }) {
+  if (!isId(orderId)) fail("BAD_ITEM");
+  if (!Array.isArray(patchItems) || !patchItems.length || patchItems.length > 50) fail("BAD_ITEM");
+
+  const byIndex = new Map();
+  for (const p of patchItems) {
+    const idx = Math.floor(Number(p?.index));
+    if (!Number.isFinite(idx) || idx < 0 || idx > 999) fail("BAD_ITEM");
+    byIndex.set(idx, p);
+  }
+
+  const o = get("orders/" + orderId);
+  // ออเดอร์ของคนอื่นตอบเหมือนไม่มีอยู่ ไม่บอกใบ้ว่ามีจริงไหม
+  if (!o || o.uid !== user.uid) fail("ORDER_NOT_FOUND");
+  if (o.status !== "pending") fail("EDIT_LOCKED");
+
+  const clean = v => String(v ?? "").trim().slice(0, 120);
+  const edits = Array.isArray(o.infoEdits) ? [...o.infoEdits] : [];
+  const at = now();
+  let changed = 0;
+  const next = (o.items || []).map((it, idx) => {
+    const p = byIndex.get(idx);
+    if (!p) return it;
+    const out = { ...it };
+    for (const k of ["gameUid", "gameLogin", "gamePassword"]) {
+      if (!(k in it) || !(k in p)) continue;
+      const v = clean(p[k]);
+      if (!v) fail("NEED_CUSTOMER_INFO");
+      if (v === it[k]) continue;
+      edits.push({ at, index: idx, field: k, from: k === "gamePassword" ? "***" : String(it[k] ?? "") });
+      out[k] = v;
+      changed++;
+    }
+    return out;
+  });
+  if (!changed) return { ok: true, changed: 0 };
+  if (edits.length > 100) edits.splice(0, edits.length - 100);
+  patch("orders/" + orderId, { items: next, infoEdits: edits, infoEditedAt: at });
+  return { ok: true, changed };
+}
+
 // ---------- ตัวรับคำขอ ----------
 export const calls = [];          // เก็บไว้ให้เทสต์ตรวจว่ายิงไปที่ไหนบ้าง
 export let OFFLINE = false;       // จำลองเซิร์ฟเวอร์ล่ม
@@ -269,6 +487,9 @@ export function handleAdmin(path, body) {
         case "/admin/topup/reject": out = rejectTopup(admin, body); break;
         case "/admin/order/approve": out = approveOrder(admin, body); break;
         case "/admin/order/reject": out = rejectOrder(admin, body); break;
+        case "/admin/order/start": out = startOrder(admin, body); break;
+        case "/admin/order/complete": out = completeOrder(admin, body); break;
+        case "/admin/order/cancel": out = cancelOrder(admin, body); break;
         case "/admin/order/clear-info": out = clearOrderInfo(admin, body); break;
         case "/admin/role": out = setRole(admin, body); break;
         default: fail("NOT_FOUND");
@@ -283,7 +504,28 @@ export function handleAdmin(path, body) {
   }
 }
 
-// ต่อท้าย fetch เดิม — คำขอที่ไม่ใช่ /admin/ ส่งต่อให้ตัวเดิมจัดการ
+// เส้นทางฝั่งลูกค้า (/order, /order/edit-info) — ตรวจแค่ว่าล็อกอินจริง ไม่ต้องเป็นแอดมิน
+export function handleOrder(path, body) {
+  calls.push({ path, body });
+  if (OFFLINE) throw new Error("network");
+
+  const uid = String(body.idToken || "").replace(/^token:/, "");
+  if (!uid) return { status: 401, data: { ok: false, error: "UNAUTHORIZED" } };
+  const acc = state.user && state.user.uid === uid ? state.user : { uid, email: "" };
+  const user = { uid, email: acc.email || "" };
+
+  try {
+    const out = path === "/order"
+      ? createOrder(user, body.items)
+      : updateOrderInfo(user, body);
+    return { status: 200, data: { ok: true, ...out } };
+  } catch (e) {
+    if (!(e instanceof Fail)) throw e;
+    return { status: 400, data: { ok: false, error: e.message } };
+  }
+}
+
+// ต่อท้าย fetch เดิม — คำขอที่ไม่ใช่ของเรา ส่งต่อให้ตัวเดิมจัดการ
 export function installAdminServer() {
   const prev = globalThis.fetch;
   globalThis.fetch = async (url, opt = {}) => {
@@ -293,6 +535,13 @@ export function installAdminServer() {
       const path = u.slice(i);
       const body = opt.body ? JSON.parse(opt.body) : {};
       const r = handleAdmin(path, body);
+      return { ok: r.status < 400, status: r.status, json: async () => r.data };
+    }
+    const j = u.indexOf("/order");
+    if (j >= 0) {
+      const path = u.slice(j).replace(/\/+$/, "");
+      const body = opt.body ? JSON.parse(opt.body) : {};
+      const r = handleOrder(path, body);
       return { ok: r.status < 400, status: r.status, json: async () => r.data };
     }
     if (prev) return prev(url, opt);

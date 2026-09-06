@@ -14,40 +14,41 @@ const press = key => document.dispatchEvent(new window.KeyboardEvent("keydown", 
 const clickOn = el => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
 store.put("products/p1", { name: "ของทดสอบ", price: 100, stock: 5, active: true });
+globalThis.window.QQ = QQ;
 const app = runClassic("app.js");
 document.dispatchEvent(new window.Event("DOMContentLoaded"));
 await tick(8);
 
-section("เปิด/ปิดตะกร้า");
-app.openCart();
-ok("ตะกร้าเปิด", $("cart-overlay").classList.contains("open"));
+section("เปิด/ปิดหน้าต่างสั่งซื้อ");
+app.openBuy("p1");
+ok("หน้าต่างสั่งซื้อเปิด", $("buy-overlay").classList.contains("open"));
 await tick(2);
 ok("ล็อกไม่ให้หน้าหลังเลื่อน", document.body.style.overflow === "hidden", "ได้ " + document.body.style.overflow);
 
 press("Escape");
-ok("กด Esc แล้วปิด", !$("cart-overlay").classList.contains("open"));
+ok("กด Esc แล้วปิด", !$("buy-overlay").classList.contains("open"));
 ok("ปลดล็อกการเลื่อนแล้ว", document.body.style.overflow === "");
 
-app.openCart();
+app.openBuy("p1");
 await tick(2);
-clickOn($("cart-overlay"));
-ok("กดพื้นที่มืดแล้วปิด", !$("cart-overlay").classList.contains("open"));
+clickOn($("buy-overlay"));
+ok("กดพื้นที่มืดแล้วปิด", !$("buy-overlay").classList.contains("open"));
 
 section("กดในกล่องต้องไม่ปิด");
-app.openCart();
+app.openBuy("p1");
 await tick(2);
-clickOn($("cart-overlay").querySelector(".panel"));
-ok("กดในกล่องแล้วยังเปิดอยู่", $("cart-overlay").classList.contains("open"));
-clickOn($("cart-overlay").querySelector("h2"));
-ok("กดตัวหนังสือในกล่องแล้วยังเปิดอยู่", $("cart-overlay").classList.contains("open"));
+clickOn($("buy-overlay").querySelector(".panel"));
+ok("กดในกล่องแล้วยังเปิดอยู่", $("buy-overlay").classList.contains("open"));
+clickOn($("buy-overlay").querySelector("h2"));
+ok("กดตัวหนังสือในกล่องแล้วยังเปิดอยู่", $("buy-overlay").classList.contains("open"));
 
 section("ปุ่มกากบาทเดิมยังใช้ได้");
 // jsdom ไม่รัน onclick ที่เขียนใน HTML จึงเรียกฟังก์ชันเดียวกับที่ปุ่มเรียกโดยตรง
 ok("ปุ่มกากบาทเรียก closePanel ของหน้านั้น",
-  $("cart-overlay").querySelector(".btn-close").getAttribute("onclick") === "closePanel('cart-overlay')");
-window.closePanel("cart-overlay");
+  $("buy-overlay").querySelector(".btn-close").getAttribute("onclick") === "closePanel('buy-overlay')");
+window.closePanel("buy-overlay");
 await tick(3);
-ok("ปิดด้วยปุ่มกากบาทได้", !$("cart-overlay").classList.contains("open"));
+ok("ปิดด้วยปุ่มกากบาทได้", !$("buy-overlay").classList.contains("open"));
 ok("ปลดล็อกการเลื่อนแล้ว", document.body.style.overflow === "");
 
 section("กด Esc ตอนไม่มีกล่องเปิด");

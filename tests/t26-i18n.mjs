@@ -82,14 +82,14 @@ section("เบราว์เซอร์ที่ปิดการเก็�
   try { api.applyLang(); } catch (e) { crashed = e.message; }
   ok("เปิดหน้าเว็บได้โดยไม่ล่ม", crashed === null, String(crashed));
   ok("อ่านภาษาได้ (ถอยไปใช้ไทยเป็นค่าเริ่มต้น)", api.getLang() === "th", api.getLang());
-  ok("แปลข้อความได้ตามปกติ", api.t("cart") === I18N.th.cart, api.t("cart"));
+  ok("แปลข้อความได้ตามปกติ", api.t("buy_now") === I18N.th.buy_now, api.t("buy_now"));
   ok("จัดรูปแบบเงินได้ตามปกติ", api.money(100).includes("100"), api.money(100));
 
   let crashed2 = null;
   try { api.setLang("en"); } catch (e) { crashed2 = e.message; }
   ok("สลับภาษาได้ไม่ล่ม แม้บันทึกลงเครื่องไม่ได้", crashed2 === null, String(crashed2));
   ok("สลับแล้วภาษาเปลี่ยนจริงในหน้านี้", api.getLang() === "en", api.getLang());
-  ok("ข้อความเปลี่ยนตามภาษาที่สลับ", api.t("cart") === I18N.en.cart, api.t("cart"));
+  ok("ข้อความเปลี่ยนตามภาษาที่สลับ", api.t("buy_now") === I18N.en.buy_now, api.t("buy_now"));
 }
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);

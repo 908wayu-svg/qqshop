@@ -18,6 +18,7 @@ let pass = 0, fail = 0;
 const ok = (n, c, x = "") => { c ? (pass++, console.log("  ok  " + n)) : (fail++, console.log("  XX  " + n + (x ? "  -> " + x : ""))); };
 const section = s => console.log("\n== " + s + " ==");
 const has = re => re.test(mobile);
+const flatCss = css.replace(/\s*\n\s*/g, " ");
 
 buildSandbox(); makeDom("admin.html"); loadI18n();
 const { QQ } = await import("./sandbox/auth.mjs");
@@ -63,6 +64,7 @@ ok("ป้ายลอยซ้าย (ไม่ใช้ flex เพราะ <
 ok("ตารางไม่ต้องเลื่อนแนวนอนแล้ว", has(/\.table-wrap\{[^}]*overflow-x:visible/));
 ok("แถบแท็บหมวดหมู่เฟดขอบขวาบอกว่าเลื่อนต่อได้", has(/\.cat-tabs\{[^}]*mask-image/));
 ok("แถบแท็บหลังบ้านเฟดขอบขวาด้วย", has(/\.tabs-main\{[^}]*mask-image/));
+ok("แถบตัวกรองสถานะเฟดขอบขวาบอกว่าเลื่อนต่อได้", has(/\.range-filter\{[^}]*mask-image/));
 ok("การ์ดตัวเลขหลังบ้านย่อลงให้ได้ 2 ใบต่อแถว", has(/\.tiles\{[^}]*minmax\(150px/));
 ok("ปุ่มติดต่อย่อเป็นวงกลม", has(/\.contact-fab\{[^}]*border-radius:50%/));
 ok("เว้นที่ท้ายหน้าให้ปุ่มลอย", has(/has-contact-fab[^{]*\{[^}]*padding-bottom/));
@@ -72,6 +74,21 @@ ok("ช่องราคายืดหดได้ ไม่ดันจอ 32
 ok("ตัวเลือกการเรียงยืดหดได้", has(/\.filter-row select\{[^}]*min-width:0/));
 ok("กราฟหลังบ้านเรียงลงมาทีละใบ (กันล้นขอบจอ 320px)", has(/\.cards-2\{[^}]*grid-template-columns:1fr/));
 ok("รายการสินค้าหลังบ้านเหลือคอลัมน์เดียว", has(/\.product-admin-grid\{[^}]*grid-template-columns:1fr/));
+
+section("หน้าต่างสั่งซื้อบนมือถือ");
+// กล่องนี้คือจุดที่ลูกค้าเสียเงินจริง ถ้ากดปุ่มไม่โดนหรือจอเลื่อนซ้ายขวา = ขายไม่ได้
+ok("กล่องสั่งซื้อกว้างเต็มจอ ไม่ล็อกความกว้างตายตัว", has(/\.buy-panel\{[^}]*max-width:100%/));
+ok("ปุ่มเพิ่ม/ลดจำนวนกดโดนด้วยนิ้ว (44px)", has(/\.buy-qty-row \.qty button\{[^}]*width:44px/));
+ok("ช่องกรอกจำนวนสูงพอกด (44px)", has(/#buy-qty\{[^}]*height:44px/));
+ok("แถวจำนวนขึ้นบรรทัดใหม่ได้ ไม่ดันจอ", has(/\.buy-qty-row\{[^}]*flex-wrap:wrap/));
+ok("รูปสินค้าในกล่องย่อลงบนมือถือ", has(/\.bh-thumb\{[^}]*flex:0 0 56px/));
+
+section("กล่องสั่งซื้อ/แก้ข้อมูล ต้องไม่ถูกข้อความไทยยาวๆ ดันจนล้นจอ");
+ok("กล่องชื่อสินค้ายอมหดได้ (min-width:0)", /\.bh-body\{[^}]*min-width:0/.test(flatCss));
+ok("ชื่อสินค้ายาวๆ ตัดคำได้", /\.bh-body\{[^}]*overflow-wrap:anywhere/.test(flatCss));
+ok("ข้อความเงื่อนไขตัดคำได้", /\.buy-terms li\{[^}]*overflow-wrap:anywhere/.test(flatCss));
+ok("ประวัติการแก้ข้อมูลในหลังบ้านตัดคำได้", /\.ci-edit\{[^}]*overflow-wrap:anywhere/.test(flatCss));
+ok("ช่องติ๊กยอมรับเงื่อนไขใหญ่พอกด (20px)", /\.buy-accept input\{[^}]*width:20px/.test(flatCss));
 
 section("กันการ์ดถูกดันกว้างเกินจอ (ชื่อไทยยาวๆ ไม่มีที่ตัดคำ)");
 const flat = css.replace(/\s*\n\s*/g, " ");

@@ -52,10 +52,10 @@ export function makeDom(page) {
 // i18n.js เป็นสคริปต์ธรรมดา ต้องรันให้ตัวแปร t/money/getLang เป็น global
 export function loadI18n() {
   const src = fs.readFileSync(path.join(SRC, "i18n.js"), "utf8");
-  const fn = new Function(src + "\n;return { t, money, getLang, setLang, toggleLang, applyLang };");
+  const fn = new Function(src + "\n;return { t, tv, money, getLang, setLang, toggleLang, applyLang };");
   const api = fn();
   Object.assign(globalThis, api);
-  globalThis.window.t = api.t; globalThis.window.money = api.money;
+  globalThis.window.t = api.t; globalThis.window.tv = api.tv; globalThis.window.money = api.money;
   globalThis.window.getLang = api.getLang; globalThis.window.toggleLang = api.toggleLang;
   api.applyLang();
   loadImgHelper();
