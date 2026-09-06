@@ -383,6 +383,21 @@ function matchOrderSearch(o, q) {
     || (o.items || []).some(i => String(i.name || "").toLowerCase().includes(q));
 }
 
+// หน้าหลังบ้านโหลดออเดอร์มาแค่ 500 ใบล่าสุด และตารางวาดได้ทีละ 100 แถว
+// ทั้งสองเพดานนี้ต้องบอกให้แอดมินรู้ตอนค้นหา ไม่งั้นจะสรุปผิดว่า "ไม่มี" หรือ "มีแค่นี้"
+const ORDER_TABLE_MAX = 100;
+
+function renderSearchCount(found) {
+  const box = document.getElementById("order-search-count");
+  if (!ORDER_SEARCH) { box.classList.add("hidden"); box.textContent = ""; return; }
+  box.classList.remove("hidden");
+  box.textContent = !found
+    ? tv("search_none_loaded", { n: ORDERS.length })
+    : found > ORDER_TABLE_MAX
+      ? tv("search_capped", { n: found, shown: ORDER_TABLE_MAX })
+      : tv("search_count", { n: found });
+}
+
 function renderOrders() {
   // กำลังค้นหา = ข้ามตัวกรองสถานะไปเลย ลูกค้าแจ้งเลขที่มาแล้วต้องเจอ
   // ไม่ว่าออเดอร์นั้นจะยกเลิกไปแล้วหรือยังค้างอยู่
@@ -391,7 +406,10 @@ function renderOrders() {
     : ORDERS.filter(o => matchFilter(o.status, ORDER_FILTER));
   const el = document.getElementById("table-orders");
   document.getElementById("orders-filter").classList.toggle("dimmed", !!ORDER_SEARCH);
+  renderSearchCount(list.length);
   if (!list.length) {
+    // ค้นแล้วไม่เจอ ต้องบอกให้ชัดว่า "ไม่เจอในเท่าที่โหลดมา" ไม่ใช่ "ไม่มีออเดอร์นี้ในโลก"
+    // แอดมินที่เข้าใจผิดแล้วไปบอกลูกค้าว่าไม่เคยสั่ง = เรื่องใหญ่กว่าบั๊กหน้าจอ
     const msg = ORDER_SEARCH ? t("search_no_match") : t("no_data");
     el.innerHTML = `<tr class="empty-row"><td class="empty">${msg}</td></tr>`;
     return;
@@ -402,7 +420,7 @@ function renderOrders() {
       <th>${t("order_number")}</th><th>${t("date")}</th><th>${t("customer")}</th><th>${t("items")}</th>
       <th class="num">${t("amount")}</th><th>${t("status")}</th><th></th>
     </tr></thead>
-    <tbody>${list.slice(0, 100).map(o => {
+    <tbody>${list.slice(0, ORDER_TABLE_MAX).map(o => {
       const pc = priceCheck(o);
       return `
       <tr>
@@ -458,11 +476,23 @@ const orderNo = id => String(id || "").slice(0, 8).toUpperCase();
 
 // ===== ซ่อนรายการจากหน้าประวัติของลูกค้า =====
 // ไม่ใช่การลบ — เอกสารอยู่ครบ ยอดขายไม่เปลี่ยน หลังบ้านยังเห็นทุกอย่าง
+// ออเดอร์ที่คัดลอกไอดี/รหัสผ่านเข้าไปให้ลูกค้าแล้ว — ลูกค้าเปิดดูได้จากหน้าประวัติที่เดียว
+const hasDelivered = o => (o?.items || []).some(i => Array.isArray(i.delivered) && i.delivered.length);
+
 const hiddenBadge = x => x?.hiddenAt ? `<br><small class="muted">🙈 ${t("hidden_badge")}</small>` : "";
 
-const hideButton = (x, kind) => `<button class="btn-small" data-act="${
-  x.hiddenAt ? "unhide" : "hide"}-${kind}" data-id="${esc(x.id)}">${
-  t(x.hiddenAt ? "unhide_from_customer" : "hide_from_customer")}</button>`;
+// ปุ่มซ่อนโผล่เฉพาะรายการที่จบแล้ว — ของที่ลูกค้ายังรออยู่ต้องเห็นในหน้าตัวเองเสมอ
+// (ออเดอร์ pending ยังเป็นช่วงที่ลูกค้าแก้ไอดีเกมได้ด้วย ซ่อนไปแล้วจะแก้ไม่ได้เลย)
+// เซิร์ฟเวอร์กันไว้อีกชั้นด้วยรหัส STILL_OPEN แต่หน้าเว็บต้องไม่วาดปุ่มที่กดแล้วเด้ง error
+const hideButton = (x, kind) => {
+  if (x.hiddenAt) {
+    return `<button class="btn-small" data-act="unhide-${kind}" data-id="${esc(x.id)}">${
+      t("unhide_from_customer")}</button>`;
+  }
+  if (OPEN_STATES.includes(x.status)) return "";
+  return `<button class="btn-small" data-act="hide-${kind}" data-id="${esc(x.id)}">${
+    t("hide_from_customer")}</button>`;
+};
 
 // ===== ข้อมูลไอดีเกมที่ลูกค้ากรอกมา (ของเติมเกม) =====
 // โชว์ให้แอดมินเห็นในออเดอร์ จะได้เติมเข้าไอดีถูกคน
@@ -987,7 +1017,13 @@ const wireFilter = (id, set) => document.getElementById(id).addEventListener("cl
   document.querySelectorAll(`#${id} .range-btn`).forEach(b => b.classList.toggle("active", b === btn));
   set(btn.dataset.st);
 });
-wireFilter("orders-filter", v => { ORDER_FILTER = v; renderOrders(); });
+wireFilter("orders-filter", v => {
+  ORDER_FILTER = v;
+  // กำลังค้นหาอยู่แล้วมากดตัวกรอง = ตั้งใจเลิกค้นหา ไม่งั้นกดแล้วไม่มีอะไรเกิดขึ้น
+  // (การค้นหามองข้ามตัวกรองสถานะ) ดูเหมือนปุ่มเสีย
+  if (ORDER_SEARCH) clearOrderSearch();
+  renderOrders();
+});
 wireFilter("topups-filter", v => { TOPUP_FILTER = v; renderTopups(); });
 
 document.getElementById("member-search").addEventListener("input", renderMembers);
@@ -999,9 +1035,15 @@ orderSearchBox.addEventListener("input", () => {
   document.getElementById("order-search-clear").classList.toggle("hidden", !ORDER_SEARCH);
   renderOrders();
 });
-document.getElementById("order-search-clear").addEventListener("click", () => {
+function clearOrderSearch() {
   orderSearchBox.value = "";
-  orderSearchBox.dispatchEvent(new Event("input"));
+  ORDER_SEARCH = "";
+  document.getElementById("order-search-clear").classList.add("hidden");
+}
+
+document.getElementById("order-search-clear").addEventListener("click", () => {
+  clearOrderSearch();
+  renderOrders();
   orderSearchBox.focus();
 });
 
@@ -1194,7 +1236,12 @@ document.getElementById("dash").addEventListener("click", async e => {
       } else if (act === "hide-order" || act === "unhide-order") {
         // ซ่อน/เลิกซ่อนออเดอร์จากหน้าประวัติของลูกค้า — ไม่ลบข้อมูล ไม่ขยับเครดิต
         const hidden = act === "hide-order";
-        if (!confirm(t(hidden ? "confirm_hide" : "confirm_unhide"))) return;
+        // ออเดอร์ที่ส่งมอบไอดี/รหัสผ่านไปแล้ว ซ่อนไป = ลูกค้าเปิดดูของที่ซื้อไม่ได้อีก
+        // ต้องเตือนให้ชัดกว่าปกติ ไม่ใช่ถามเหมือนรายการทั่วไป
+        const key = hidden
+          ? (hasDelivered(ORDERS.find(o => o.id === id)) ? "confirm_hide_delivered" : "confirm_hide")
+          : "confirm_unhide";
+        if (!confirm(t(key))) return;
         await QQ.setOrderHidden(id, hidden);
         await refreshAfter(() => patchRow(ORDERS, "orders", id));
       } else if (act === "hide-topup" || act === "unhide-topup") {

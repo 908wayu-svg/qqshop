@@ -338,6 +338,8 @@ const ADMIN_ERRORS = new Set([
   "NO_PROFILE", "BUSY",
   // ออเดอร์เก่า (ก่อนระบบหักเครดิตทันที) กับออเดอร์ใหม่ ใช้ปุ่มคนละชุด
   "OLD_ORDER", "NEW_FLOW_ORDER",
+  // ซ่อนรายการที่ยังไม่จบไม่ได้ (ลูกค้าต้องเห็นของที่ยังรออยู่)
+  "STILL_OPEN",
 ]);
 
 // ---------- สร้างออเดอร์: หักเครดิต + จ่ายของ ในชุดเดียว ----------
@@ -1203,6 +1205,13 @@ async function adminSetHidden(token, admin, col, body) {
   const got = await batchGet(token, [`documents/${col}/${id}`]);
   const d = got[id];
   if (!d) throw new Error("NOT_FOUND");
+
+  // รายการที่ยังไม่จบ ห้ามซ่อน — ลูกค้าต้องเห็นออเดอร์ที่กำลังรอของ/รอเติมเงินของตัวเองเสมอ
+  // (ออเดอร์ pending ยังเป็นช่วงที่ลูกค้าแก้ไอดีเกมได้ด้วย ซ่อนไปแล้วจะแก้ไม่ได้เลย)
+  // เลิกซ่อนทำได้ตลอด ไม่ต้องเช็ค
+  if (hidden && ["pending", "processing"].includes(str(d.status))) {
+    throw new Error("STILL_OPEN");
+  }
 
   await commit(token, [
     {

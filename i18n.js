@@ -305,7 +305,11 @@ const I18N = {
 
     // ค้นหาออเดอร์ (แอดมิน)
     search_orders: "ค้นเลขที่คำสั่งซื้อ / ชื่อ / อีเมล",
-    search_hint_order_no: "ใส่เลขที่คำสั่งซื้อที่ลูกค้าแจ้งมาได้เลย (เช่น A1B2C3D4) — ตอนค้นหาจะมองข้ามตัวกรองสถานะ",
+    search_hint_order_no: "ใส่เลขที่คำสั่งซื้อที่ลูกค้าแจ้งมาได้เลย (เช่น 3F9A2B7C) — ตอนค้นหาจะมองข้ามตัวกรองสถานะ",
+    search_count: "เจอ {n} รายการ",
+    search_capped: "เจอ {n} รายการ · แสดง {shown} แรก",
+    search_none_loaded: "ไม่พบใน {n} รายการล่าสุดที่โหลดมา — ถ้าเป็นออเดอร์เก่ากว่านั้น ให้ค้นด้วยอีเมลลูกค้าแทน",
+    a_STILL_OPEN: "ซ่อนรายการที่ยังไม่จบไม่ได้ — ลูกค้าต้องเห็นของที่ยังรออยู่ (ทำให้เสร็จหรือยกเลิกก่อน)",
     search_no_match: "ไม่พบรายการที่ตรงกับที่ค้น",
 
     // ประวัติของสมาชิกรายคน
@@ -321,13 +325,14 @@ const I18N = {
     hide_from_customer: "ซ่อนจากลูกค้า",
     unhide_from_customer: "เลิกซ่อน",
     hidden_badge: "ซ่อนจากลูกค้าแล้ว",
+    confirm_hide_delivered: "⚠ ออเดอร์นี้มีไอดี/รหัสผ่านที่ลูกค้าซื้อไปแล้ว\n\nซ่อนแล้วลูกค้าจะเปิดดูรหัสของตัวเองไม่ได้อีก แน่ใจไหม?",
     confirm_hide: "ซ่อนรายการนี้จากหน้าประวัติของลูกค้า?\n\nข้อมูลไม่ถูกลบ ยอดขายไม่เปลี่ยน และคุณยังเห็นในหลังบ้านตามเดิม",
     confirm_unhide: "ให้รายการนี้กลับไปแสดงในหน้าประวัติของลูกค้า?",
 
     // บันทึกการกระทำของแอดมิน
     tab_logs: "บันทึกแอดมิน",
     logs_title: "บันทึกการกระทำของแอดมิน",
-    logs_hint: "เขียนโดยเซิร์ฟเวอร์เท่านั้น แก้และลบไม่ได้ — ใช้ตรวจย้อนหลังว่าใครทำอะไรกับเครดิต สิทธิ์ และออเดอร์",
+    logs_hint: "เขียนโดยเซิร์ฟเวอร์เท่านั้น แก้และลบไม่ได้ — ใช้ตรวจย้อนหลังว่าใครทำอะไรกับเครดิต สิทธิ์ และออเดอร์ (แสดง 300 รายการล่าสุด)",
     logs_reload: "โหลดใหม่",
     log_action: "การกระทำ",
     log_by: "โดย",
@@ -640,7 +645,11 @@ const I18N = {
     note: "Note", note_optional: "Note (optional)",
 
     search_orders: "Search order number / name / email",
-    search_hint_order_no: "Paste the order number the customer gave you (e.g. A1B2C3D4) — searching ignores the status filter",
+    search_hint_order_no: "Paste the order number the customer gave you (e.g. 3F9A2B7C) — searching ignores the status filter",
+    search_count: "{n} found",
+    search_capped: "{n} found · showing the first {shown}",
+    search_none_loaded: "Not in the {n} most recent records loaded here — if the order is older than that, search by the customer’s email instead",
+    a_STILL_OPEN: "You can not hide a record that is still open — the customer needs to see what they are waiting for (finish or cancel it first)",
     search_no_match: "Nothing matched your search",
 
     member_history: "History",
@@ -654,12 +663,13 @@ const I18N = {
     hide_from_customer: "Hide from customer",
     unhide_from_customer: "Unhide",
     hidden_badge: "Hidden from customer",
+    confirm_hide_delivered: "⚠ This order contains the account details the customer bought.\n\nHiding it means they can no longer open their own credentials. Are you sure?",
     confirm_hide: "Hide this record from the customer’s history page?\n\nNothing is deleted, sales figures do not change, and you still see it here.",
     confirm_unhide: "Show this record on the customer’s history page again?",
 
     tab_logs: "Admin log",
     logs_title: "Admin action log",
-    logs_hint: "Written by the server only — it cannot be edited or deleted. Use it to check who touched credit, roles and orders.",
+    logs_hint: "Written by the server only — it cannot be edited or deleted. Use it to check who touched credit, roles and orders (latest 300 shown).",
     logs_reload: "Reload",
     log_action: "Action",
     log_by: "By",

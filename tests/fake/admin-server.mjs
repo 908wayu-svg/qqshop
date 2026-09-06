@@ -285,6 +285,8 @@ function setHidden(admin, col, body) {
   if (typeof hidden !== "boolean") fail("BAD_REQUEST");
   const d = get(col + "/" + id);
   if (!d) fail("NOT_FOUND");
+  // รายการที่ยังไม่จบห้ามซ่อน — ลูกค้าต้องเห็นของที่ยังรออยู่ (เลิกซ่อนทำได้ตลอด)
+  if (hidden && ["pending", "processing"].includes(d.status)) fail("STILL_OPEN");
   patch(col + "/" + id, { hiddenAt: hidden ? now() : null });
   audit(admin, (col === "orders" ? "order" : "topup") + ".hide",
     { [col === "orders" ? "orderId" : "topupId"]: id, targetUid: d.uid, hidden });

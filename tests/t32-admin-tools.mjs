@@ -16,6 +16,10 @@ const section = s => console.log("\n== " + s + " ==");
 const $ = id => document.getElementById(id);
 const click = el => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 const rows = id => $(id).querySelectorAll("tbody tr");
+// เก็บข้อความที่ confirm() ถาม เพื่อตรวจว่าเตือนแรงพอกับสิ่งที่กำลังจะเกิด
+let lastConfirm = "";
+globalThis.confirm = (msg) => { lastConfirm = String(msg ?? ""); return globalThis.__confirm; };
+window.confirm = globalThis.confirm;
 const TS = n => new fs2.Timestamp(Date.now() - n * 1000);
 
 await QQ.registerWithEmail("908wayu@gmail.com", "adminpass", "เจ้าของร้าน", "");
@@ -92,11 +96,31 @@ type("ไม่มีจริง");
 ok("ไม่เจอ ต้องบอกว่าไม่พบ (ไม่ใช่ 'ยังไม่มีข้อมูล')",
   $("table-orders").textContent.includes("ไม่พบ"), $("table-orders").textContent.trim());
 
+section("บอกจำนวนที่เจอ / เตือนว่าโหลดมาแค่บางส่วน");
+type("somchai@x.com");
+ok("บอกจำนวนที่เจอ", $("order-search-count").textContent.includes("2"),
+  $("order-search-count").textContent);
+type("ไม่มีจริง");
+// แอดมินที่อ่านว่า "ไม่พบ" เฉยๆ แล้วไปบอกลูกค้าว่าไม่เคยสั่ง = เรื่องใหญ่กว่าบั๊กหน้าจอ
+ok("ไม่เจอ ต้องบอกว่าไม่เจอ 'ในเท่าที่โหลดมา'",
+  $("order-search-count").textContent.includes("ที่โหลดมา"), $("order-search-count").textContent);
+type("");
+ok("เลิกค้นหาแล้วบรรทัดนับหายไป", $("order-search-count").classList.contains("hidden"));
+
+type("ไม่มีจริง");
 ok("ปุ่มล้างการค้นหาโผล่ตอนมีคำค้น", !$("order-search-clear").classList.contains("hidden"));
 click($("order-search-clear"));
 ok("ล้างแล้วช่องว่าง", search.value === "");
 ok("ล้างแล้วกลับไปใช้ตัวกรองสถานะเดิม", rows("table-orders").length === 1);
 ok("ปุ่มล้างซ่อนกลับ", $("order-search-clear").classList.contains("hidden"));
+
+// กดตัวกรองระหว่างค้นหาแล้วไม่มีอะไรเกิดขึ้น = ดูเหมือนปุ่มเสีย ต้องเลิกค้นหาให้เลย
+type("somchai@x.com");
+click(document.querySelector('#orders-filter [data-st="cancelled"]'));
+ok("กดตัวกรองระหว่างค้นหา = ล้างการค้นหาให้เอง", search.value === "");
+ok("แล้วตัวกรองที่กดทำงานจริง", rows("table-orders").length === 1
+  && $("table-orders").textContent.includes("ยกเลิก"), String(rows("table-orders").length));
+click(document.querySelector('#orders-filter [data-st="pending"]'));
 
 // =====================================================================
 section("ประวัติของสมาชิกรายคน");
@@ -141,6 +165,9 @@ globalThis.__confirm = true;
 calls.length = 0;
 click(hideBtn);
 await tick(10);
+// ออเดอร์ใบนี้ส่งไอดี/รหัสผ่านให้ลูกค้าไปแล้ว ซ่อนไป = ลูกค้าเปิดดูของที่ซื้อไม่ได้อีก
+ok("เตือนแรงเป็นพิเศษเมื่อออเดอร์มีรหัสที่ลูกค้าซื้อไปแล้ว",
+  lastConfirm.includes("เปิดดูรหัสของตัวเองไม่ได้อีก"), lastConfirm.slice(0, 60));
 ok("ยิงไปที่เส้นทางซ่อนของเซิร์ฟเวอร์", calls.some(c => c.path === "/admin/order/hide"),
   JSON.stringify(calls.map(c => c.path)));
 ok("เซิร์ฟเวอร์ตั้ง hiddenAt ให้จริง", !!store.raw("orders/" + OID).hiddenAt);
@@ -161,21 +188,58 @@ ok("ยอดขายไม่ขยับตลอดทั้งกระบ�
 
 // ---------- เติมเงิน ----------
 click(document.querySelector('#tabs [data-tab="topups"]'));
-const hideTopup = document.querySelector('#table-topups [data-act="hide-topup"][data-id="tp222"]');
-ok("มีปุ่มซ่อนในแถวเติมเงินด้วย", !!hideTopup);
+click(document.querySelector('#topups-filter [data-st="all"]'));
+const hideTopup = document.querySelector('#table-topups [data-act="hide-topup"][data-id="tp111"]');
+ok("มีปุ่มซ่อนในแถวเติมเงินที่อนุมัติแล้ว", !!hideTopup);
 click(hideTopup);
 await tick(10);
-ok("ซ่อนรายการเติมเงินได้", !!store.raw("topups/tp222").hiddenAt);
-ok("ยอดเงินของรายการเติมไม่ถูกแตะ", store.raw("topups/tp222").amount === 100);
+ok("ซ่อนรายการเติมเงินได้", !!store.raw("topups/tp111").hiddenAt);
+ok("ยอดเงินของรายการเติมไม่ถูกแตะ", store.raw("topups/tp111").amount === 500);
 
 // ---------- กดยกเลิกตอนถามยืนยัน ต้องไม่เกิดอะไรขึ้น ----------
 globalThis.__confirm = false;
 calls.length = 0;
-click(document.querySelector('#table-topups [data-act="unhide-topup"][data-id="tp222"]'));
+click(document.querySelector('#table-topups [data-act="unhide-topup"][data-id="tp111"]'));
 await tick(6);
 ok("กดยกเลิกตอนยืนยัน = ไม่ยิงเซิร์ฟเวอร์", !calls.some(c => c.path === "/admin/topup/hide"));
-ok("ค่ายังเป็นซ่อนอยู่เหมือนเดิม", !!store.raw("topups/tp222").hiddenAt);
+ok("ค่ายังเป็นซ่อนอยู่เหมือนเดิม", !!store.raw("topups/tp111").hiddenAt);
 globalThis.__confirm = true;
+
+// =====================================================================
+section("ห้ามซ่อนรายการที่ลูกค้ายังรออยู่");
+// ลูกค้าต้องเห็นออเดอร์/คำขอเติมเงินที่ยังไม่จบของตัวเองเสมอ
+// (ออเดอร์ pending ยังเป็นช่วงที่ลูกค้าแก้ไอดีเกมได้ด้วย ซ่อนไปแล้วจะแก้ไม่ได้เลย)
+ok("รายการเติมเงินที่ยังรออนุมัติ ไม่มีปุ่มซ่อน",
+  !document.querySelector('#table-topups [data-act="hide-topup"][data-id="tp222"]'));
+
+click(document.querySelector('#tabs [data-tab="orders"]'));
+click(document.querySelector('#orders-filter [data-st="all"]'));
+ok("ออเดอร์ที่ยังรอดำเนินการ ไม่มีปุ่มซ่อน",
+  !document.querySelector('#table-orders [data-act="hide-order"][data-id="zz9988776655"]'));
+ok("ออเดอร์ที่ยกเลิกแล้ว ยังซ่อนได้",
+  !!document.querySelector('#table-orders [data-act="hide-order"][data-id="old111222333"]'));
+// ใบที่ไม่มีรหัสส่งมอบ ใช้คำถามธรรมดา ไม่ต้องขู่เกินจำเป็น
+globalThis.__confirm = false;
+click(document.querySelector('#table-orders [data-act="hide-order"][data-id="old111222333"]'));
+await tick(4);
+ok("ออเดอร์ที่ไม่มีรหัสส่งมอบ ใช้คำถามธรรมดา",
+  !lastConfirm.includes("เปิดดูรหัสของตัวเองไม่ได้อีก") && lastConfirm.includes("ซ่อนรายการนี้"),
+  lastConfirm.slice(0, 50));
+globalThis.__confirm = true;
+
+// เซิร์ฟเวอร์ต้องกันอีกชั้น ไม่ใช่พึ่งแค่หน้าเว็บไม่วาดปุ่ม
+let openErr = "";
+try { await QQ.setOrderHidden("zz9988776655", true); } catch (e) { openErr = e.adminCode || ""; }
+ok("เซิร์ฟเวอร์ปฏิเสธการซ่อนออเดอร์ที่ยังไม่จบ", openErr === "STILL_OPEN", openErr);
+ok("ออเดอร์นั้นไม่ถูกซ่อนจริง", !store.raw("orders/zz9988776655").hiddenAt);
+
+let openErr2 = "";
+try { await QQ.setTopupHidden("tp222", true); } catch (e) { openErr2 = e.adminCode || ""; }
+ok("เซิร์ฟเวอร์ปฏิเสธการซ่อนคำขอเติมเงินที่ยังรออยู่", openErr2 === "STILL_OPEN", openErr2);
+
+// เลิกซ่อนต้องทำได้เสมอ ไม่ว่าสถานะไหน (กันติดกับดักซ่อนแล้วเอาคืนไม่ได้)
+await QQ.setTopupHidden("tp111", false);
+ok("เลิกซ่อนได้ตามปกติ", store.raw("topups/tp111").hiddenAt === null);
 
 // =====================================================================
 section("แท็บบันทึกการกระทำของแอดมิน");

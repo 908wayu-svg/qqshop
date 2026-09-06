@@ -482,6 +482,8 @@ label.check input{width:auto;accent-color:var(--accent)}
 .search-row .btn-small{flex:0 0 auto}
 /* กำลังค้นหาอยู่ = ตัวกรองสถานะถูกมองข้าม บอกด้วยการหรี่ลงให้เห็นชัด */
 .range-filter.dimmed{opacity:.45}
+/* บรรทัดบอกจำนวนที่ค้นเจอ (และเตือนว่าโหลดมาแค่บางส่วน) */
+.search-count{margin:0 0 10px;font-weight:600;color:var(--text-2)}
 .order-no{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;
   letter-spacing:.04em;background:var(--field);border:1px solid var(--border);
   border-radius:8px;padding:2px 7px;white-space:nowrap}
