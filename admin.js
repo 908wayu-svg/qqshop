@@ -431,6 +431,12 @@ function renderSearchCount(found) {
 }
 
 
+// เขียนทับข้อความในบรรทัดนับ — หน้าเวอร์ชันเก่าในแคชอาจยังไม่มีบรรทัดนี้
+const setCountText = txt => {
+  const box = document.getElementById("order-search-count");
+  if (box) box.textContent = txt;
+};
+
 async function deepSearchOrders() {
   const q = ORDER_SEARCH;
   const btn = document.getElementById("order-search-deep");
@@ -441,12 +447,11 @@ async function deepSearchOrders() {
     DEEP_HITS = hits.map(o => ({ ...o, _date: toDate(o.createdAt) }));
     renderOrders();
     // renderSearchCount วาดข้อความปกติไปแล้ว ทับด้วยผลของการค้นลึก
-    document.getElementById("order-search-count").textContent =
-      hits.length ? tv("search_deep_found", { n: hits.length }) : t("search_deep_none");
+    setCountText(hits.length ? tv("search_deep_found", { n: hits.length }) : t("search_deep_none"));
   } catch (e) {
     // ค้นไม่สำเร็จต้องบอก ไม่ใช่เงียบแล้วให้เข้าใจว่า "ไม่มีออเดอร์นี้"
     console.warn("ค้นออเดอร์ในฐานข้อมูลไม่สำเร็จ", e);
-    document.getElementById("order-search-count").textContent = t("search_deep_failed");
+    setCountText(t("search_deep_failed"));
     btn.disabled = false;
     btn.textContent = t("search_deep");
   }

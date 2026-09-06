@@ -93,5 +93,47 @@ document.querySelector('#tabs [data-tab="members"]')
 await tick(6);
 ok("สลับแท็บได้ตามปกติ", !$("page-members").classList.contains("hidden"));
 
+// =====================================================================
+// หน้าของลูกค้าก็เจอเรื่องเดียวกัน — และเจ็บกว่า เพราะเป็นหน้าที่ลูกค้าใช้จริง
+// (หน้าหลังบ้านมีแค่เจ้าของร้านเปิด แต่หน้าประวัติ/เติมเงินมีลูกค้าทุกคน)
+section("หน้าประวัติการซื้อเวอร์ชันเก่า เจอสคริปต์ใหม่");
+{
+  const stripP = html => html.replace(/<p class="hint hidden" id="history-note"><\/p>\s*/, "");
+  buildSandbox();
+  makeDom("purchases.html", stripP);
+  loadI18n();
+  const mod = await import("./sandbox/auth.mjs?p=1").catch(() => null);
+  ok("จำลองหน้าเก่าได้ (ไม่มีที่บอกเรื่องประวัติไม่ครบ)", !document.getElementById("history-note"));
+
+  // ตรวจที่โค้ดโดยตรง: ทุกที่ที่ไปหา element ใหม่ ต้องเช็คก่อนใช้
+  const src = (await import("fs")).readFileSync("../purchases.js", "utf8");
+  const block = src.slice(src.indexOf('getElementById("history-note")'));
+  ok("purchases.js เช็คก่อนใช้ history-note", /if \(note\)/.test(block.slice(0, 200)),
+    block.slice(0, 120));
+
+  const wsrc = (await import("fs")).readFileSync("../wallet.js", "utf8");
+  const wblock = wsrc.slice(wsrc.indexOf('getElementById("topup-note")'));
+  ok("wallet.js เช็คก่อนใช้ topup-note", /if \(note\)/.test(wblock.slice(0, 200)),
+    wblock.slice(0, 120));
+}
+
+section("ไล่ทุกไฟล์: element ที่เพิ่มใหม่ต้องไม่ถูกเรียกใช้แบบไม่เช็คก่อน");
+{
+  const fsx = await import("fs");
+  const NEW = ["history-note", "topup-note", "order-search", "order-search-clear",
+    "order-search-count", "order-search-deep", "log-search", "log-count",
+    "cap-warning", "logs-cap", "mh-msg", "member-overlay", "btn-reload-logs"];
+  const bad = [];
+  for (const f of ["admin.js", "purchases.js", "wallet.js"]) {
+    const code = fsx.readFileSync("../" + f, "utf8");
+    for (const id of NEW) {
+      // รูปแบบที่อันตราย: getElementById("x").อะไรสักอย่าง  (ไม่มี ?. คั่น)
+      const re = new RegExp('getElementById\\("' + id + '"\\)\\s*\\.', "g");
+      if (re.test(code)) bad.push(f + ": " + id);
+    }
+  }
+  ok("ไม่มีที่ไหนเรียกใช้ element ใหม่แบบไม่เช็คก่อน", bad.length === 0, bad.join(", "));
+}
+
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
