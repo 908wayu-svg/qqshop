@@ -200,15 +200,29 @@ async function submitTopup() {
 }
 
 // ---------- ประวัติ ----------
+// ดึงประวัติเติมเงินมาได้สูงสุดเท่านี้ต่อครั้ง (เดิมใช้ค่าเริ่มต้น 50 แบบเงียบๆ)
+const TOPUP_MAX = 100;
 async function renderHistory() {
   const tt = document.getElementById("table-topups");
   let topups;
   // รายการที่แอดมินซ่อนไว้ไม่ต้องโชว์ให้ลูกค้า (เอกสารยังอยู่ครบ ร้านตรวจย้อนหลังได้)
-  try { topups = (await QQ.fetchMyTopups()).filter(x => !x.hiddenAt); }
+  // ดึงมาได้สูงสุด TOPUP_MAX ต่อครั้ง — ถ้าเต็มพอดีต้องบอก ไม่งั้นลูกค้าคิดว่ารายการเก่าหายไป
+  let capped = false;
+  try {
+    const all = await QQ.fetchMyTopups(TOPUP_MAX);
+    capped = all.length >= TOPUP_MAX;
+    topups = all.filter(x => !x.hiddenAt);
+  }
   catch (e) {
     console.warn("โหลดประวัติเติมเงินไม่ได้", e);
     tt.innerHTML = `<tr class="empty-row"><td class="empty">${t("load_failed")}</td></tr>`;
     return;
+  }
+
+  const note = document.getElementById("topup-note");
+  if (note) {
+    note.textContent = capped ? tv("topup_history_capped", { n: TOPUP_MAX }) : "";
+    note.classList.toggle("hidden", !capped);
   }
 
   tt.innerHTML = !topups.length

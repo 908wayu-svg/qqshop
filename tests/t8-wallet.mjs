@@ -125,6 +125,33 @@ ok("สถานะ 'กำลังดำเนินการ' แปลได
 ok("แสดงหมายเหตุตอนถูกปฏิเสธ", html.includes("สลิปซ้ำ"));
 ok("แสดงช่องทาง 'แอดมินเพิ่มให้'", html.includes("แอดมินเพิ่มให้"));
 
+section("บอกลูกค้าเมื่อประวัติเติมเงินยาวเกินกว่าที่ดึงมาได้ครั้งเดียว");
+// เดิมดึงมา 50 รายการด้วยค่าเริ่มต้นแบบเงียบๆ ลูกค้าที่เติมบ่อยจะหารายการเก่าไม่เจอ
+// แล้วเข้าใจว่าเงินที่เคยเติมหายไปจากระบบ
+{
+  ok("ยังไม่ถึงเพดาน = ไม่มีข้อความบอก", $("topup-note").classList.contains("hidden"),
+    $("topup-note").textContent);
+
+  for (let n = 0; n < 100; n++) {
+    store.put("topups/cap" + String(n).padStart(4, "0"), {
+      uid: UID, amount: 10, method: "bank", status: "approved", hasSlip: true,
+      createdAt: new fs2.Timestamp(Date.now() - 10000 - n),
+    });
+  }
+  document.dispatchEvent(new window.CustomEvent("langchange"));
+  await tick(10);
+  ok("ชนเพดานแล้วบอกลูกค้า", !$("topup-note").classList.contains("hidden"),
+    "ยังซ่อนอยู่: " + $("topup-note").textContent);
+  ok("บอกจำนวนที่แสดงอยู่", $("topup-note").textContent.includes("100"),
+    $("topup-note").textContent);
+
+  for (let n = 0; n < 100; n++) store.state.docs.delete("topups/cap" + String(n).padStart(4, "0"));
+  document.dispatchEvent(new window.CustomEvent("langchange"));
+  await tick(10);
+  ok("ต่ำกว่าเพดานแล้วข้อความหายไป", $("topup-note").classList.contains("hidden"),
+    $("topup-note").textContent);
+}
+
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
 

@@ -2,6 +2,10 @@
 import { QQ } from "./auth.js";
 
 let ORDERS = [], PRODUCTS = [], FILTER = "all";
+// ดึงประวัติมาได้สูงสุดเท่านี้ต่อครั้ง — ถ้าได้มาเต็มพอดี แปลว่ายังมีของเก่ากว่านั้นอีก
+// ต้องบอกลูกค้า ไม่งั้นเขาจะคิดว่ารายการเก่าหายไปจากระบบ และ "ยอดซื้อสะสม" ก็จะดูต่ำกว่าจริง
+const HISTORY_MAX = 200;
+let CAPPED = false;
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -86,8 +90,13 @@ function render() {
   // ยอดซื้อสะสมนับเฉพาะที่ซื้อสำเร็จจริง (ที่หักเครดิตแล้วและไม่ได้ยกเลิก)
   const done = ORDERS.filter(o => DONE_STATES.includes(o.status));
   document.getElementById("kpi-spent").textContent =
-    money(done.reduce((s, o) => s + Number(o.total || 0), 0));
+    money(done.reduce((s, o) => s + Number(o.total || 0), 0))
+    + (CAPPED ? " " + tv("spent_capped", { n: HISTORY_MAX }) : "");
   document.getElementById("kpi-count").textContent = done.length.toLocaleString();
+
+  const note = document.getElementById("history-note");
+  note.textContent = CAPPED ? tv("history_capped", { n: HISTORY_MAX }) : "";
+  note.classList.toggle("hidden", !CAPPED);
 
   if (!list.length) {
     box.innerHTML = `<div class="card empty-box">
@@ -191,8 +200,8 @@ async function saveEdit() {
   try {
     await QQ.updateOrderInfo(EDITING, items);
     // ดึงออเดอร์ใบนั้นกลับมาใหม่ ให้หน้าจอตรงกับของจริงเสมอ
-    const fresh = await QQ.fetchMyOrders(200).catch(() => null);
-    if (fresh) ORDERS = visible(fresh);
+    const fresh = await QQ.fetchMyOrders(HISTORY_MAX).catch(() => null);
+    if (fresh) { CAPPED = fresh.length >= HISTORY_MAX; ORDERS = visible(fresh); }
     render();
     window.closePanel("edit-overlay");
   } catch (e) {
@@ -200,8 +209,8 @@ async function saveEdit() {
     setMsg(t(key) === key ? QQ.friendlyError(e) : t(key));
     // แอดมินเพิ่งกดเริ่มดำเนินการ = ปุ่มแก้ไขต้องหายไปทันที ไม่ใช่ให้กดซ้ำแล้วพังซ้ำ
     if (e.orderCode === "EDIT_LOCKED") {
-      const fresh = await QQ.fetchMyOrders(200).catch(() => null);
-      if (fresh) { ORDERS = visible(fresh); render(); }
+      const fresh = await QQ.fetchMyOrders(HISTORY_MAX).catch(() => null);
+      if (fresh) { CAPPED = fresh.length >= HISTORY_MAX; ORDERS = visible(fresh); render(); }
     }
   } finally {
     btn.disabled = false;
@@ -285,9 +294,10 @@ document.addEventListener("authchange", () => {
   // รูปสินค้าดึงมาเสริม ถ้าดึงไม่ได้ก็ยังแสดงประวัติได้ตามปกติ
   try {
     const [orders, products] = await Promise.all([
-      QQ.fetchMyOrders(200),
+      QQ.fetchMyOrders(HISTORY_MAX),
       QQ.fetchProducts().catch(() => []),
     ]);
+    CAPPED = orders.length >= HISTORY_MAX;
     ORDERS = visible(orders);
     PRODUCTS = products;
     render();

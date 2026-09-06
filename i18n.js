@@ -318,6 +318,9 @@ const I18N = {
     search_no_match: "ไม่พบรายการที่ตรงกับที่ค้น",
 
     // ประวัติของสมาชิกรายคน
+    history_capped: "แสดง {n} รายการล่าสุด — ถ้าหารายการเก่ากว่านี้ไม่เจอ ทักแอดมินพร้อมเลขที่คำสั่งซื้อได้เลย",
+    topup_history_capped: "แสดง {n} รายการล่าสุด",
+    spent_capped: "(นับจาก {n} รายการล่าสุด)",
     data_capped: "⚠ ร้านมีข้อมูลมากกว่าที่หน้านี้โหลดได้ ({what}) — ตัวเลขข้างล่างนับเฉพาะ {n} รายการล่าสุด จึงต่ำกว่าความจริง",
     cap_orders: "ออเดอร์",
     cap_topups: "การเติมเงิน",
@@ -671,6 +674,9 @@ const I18N = {
     a_STILL_OPEN: "You can not hide a record that is still open — the customer needs to see what they are waiting for (finish or cancel it first)",
     search_no_match: "Nothing matched your search",
 
+    history_capped: "Showing the latest {n} — if you cannot find an older one, message the admin with the order number",
+    topup_history_capped: "Showing the latest {n}",
+    spent_capped: "(counted from the latest {n})",
     data_capped: "⚠ The shop has more data than this page can load ({what}) — the figures below only count the latest {n}, so they are too low",
     cap_orders: "orders",
     cap_topups: "top-ups",
