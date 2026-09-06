@@ -809,6 +809,18 @@ section("ซ่อน/เลิกซ่อนรายการในประ�
   r = await call("/admin/order/hide", { idToken: "token:" + A, orderId: "oDone", hidden: "yes" });
   ok("hidden ต้องเป็น true/false เท่านั้น", r.body.error === "BAD_REQUEST", JSON.stringify(r.body));
 
+  // ยกเลิก + คืนเครดิต ต้องเลิกซ่อนให้เองเสมอ
+  // ไม่งั้นเงินโผล่ในกระเป๋าลูกค้าโดยไม่มีออเดอร์ใบไหนอธิบายที่มาได้เลย
+  DOCS.set("orders/oHidden", F({ uid: "cHide", total: 100, status: "completed", paid: true }));
+  DOCS.set("users/cHide", F({ email: "c@x.com", role: "member", credit: 0 }));
+  r = await call("/admin/order/hide", { idToken: "token:" + A, orderId: "oHidden", hidden: true });
+  ok("ซ่อนไว้ก่อน", !!DOCS.get("orders/oHidden").hiddenAt);
+  r = await call("/admin/order/cancel", { idToken: "token:" + A, orderId: "oHidden" });
+  ok("ยกเลิกแล้วคืนเครดิตจริง", r.body.ok === true && r.body.refund === 100, JSON.stringify(r.body));
+  ok("ยกเลิกแล้วเลิกซ่อนให้เอง (ลูกค้าต้องเห็นที่มาของเงินที่คืน)",
+    DOCS.get("orders/oHidden").hiddenAt?.nullValue === null,
+    JSON.stringify(DOCS.get("orders/oHidden").hiddenAt));
+
   // มีคนลบออเดอร์ทิ้งหลังเซิร์ฟเวอร์อ่านค่าไปแล้ว
   // คำสั่ง update ของ Firestore จะ "สร้างให้" ถ้าไม่กันไว้ = ได้ซากเอกสารที่มีแต่ hiddenAt
   DOCS.set("orders/oRace", F({ uid: "cHide", total: 100, status: "completed", paid: true }));

@@ -261,6 +261,8 @@ function cancelOrder(admin, { orderId, note = "" }) {
   patch("orders/" + orderId, {
     status: "cancelled", note: String(note).slice(0, 300), refundAmount: refund,
     cancelledAt: now(), handledBy: admin.email || "",
+    // ยกเลิกแล้วต้องเลิกซ่อนเสมอ ลูกค้าต้องเห็นที่มาของเครดิตที่คืนให้
+    hiddenAt: null,
   });
   audit(admin, "order.cancel", { orderId, targetUid: o.uid, amount: refund, before, after });
   return { refund, before, after, status: "cancelled" };

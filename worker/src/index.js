@@ -1143,9 +1143,12 @@ async function adminCancelOrder(token, admin, { orderId, note = "" }) {
           refundAmount: refund,
           cancelledAt: new Date(),
           handledBy: admin.email || "",
+          // ยกเลิกแล้วต้องเลิกซ่อนเสมอ — ลูกค้าได้เครดิตคืนแล้วต้องเห็นว่ามาจากออเดอร์ใบไหน
+          // ถ้ายังซ่อนไว้ เงินจะโผล่ในกระเป๋าโดยไม่มีอะไรอธิบาย แล้วกลายเป็นเรื่องกันทีหลัง
+          hiddenAt: null,
         }),
       },
-      updateMask: { fieldPaths: ["status", "note", "refundAmount", "cancelledAt", "handledBy"] },
+      updateMask: { fieldPaths: ["status", "note", "refundAmount", "cancelledAt", "handledBy", "hiddenAt"] },
     });
     writes.push(auditWrite(admin, "order.cancel",
       { orderId, targetUid: uid, amount: refund, before, after }));
