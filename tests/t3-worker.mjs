@@ -103,6 +103,16 @@ globalThis.fetch = async (url, opt = {}) => {
       FAIL_COMMIT_PATH = null;
       return J({ error: { message: "boom", status: "UNAVAILABLE" } });
     }
+    // Firestore commit เป็น all-or-nothing — ตรวจเงื่อนไขของทุกคำสั่งให้ครบก่อนเขียนจริง
+    for (const w of body.writes) {
+      const k = w.delete ? short(w.delete)
+        : w.transform ? short(w.transform.document)
+        : short(w.update.name);
+      const pre = w.currentDocument;
+      if (pre?.exists === false && DOCS.has(k)) return J({ error: { message: "exists", status: "FAILED_PRECONDITION" } });
+      if (pre?.exists === true && !DOCS.has(k)) return J({ error: { message: "missing", status: "FAILED_PRECONDITION" } });
+      if (pre?.updateTime && times.get(k) !== pre.updateTime) return J({ error: { message: "stale", status: "FAILED_PRECONDITION" } });
+    }
     const results = [];
     for (const w of body.writes) {
       if (w.delete) { DOCS.delete(short(w.delete)); results.push({}); continue; }
@@ -117,15 +127,7 @@ globalThis.fetch = async (url, opt = {}) => {
         DOCS.set(k, cur); results.push({});
         continue;
       }
-      const key = short(w.update.name);
-      const pre = w.currentDocument;
-      if (pre?.exists === false && DOCS.has(key)) return J({ error: { message: "exists", status: "FAILED_PRECONDITION" } });
-      // Firestore ปฏิเสธเมื่อสั่ง "ต้องมีอยู่แล้ว" แต่เอกสารถูกลบไปก่อน
-      // (ถ้าไม่มีเงื่อนไขนี้ คำสั่ง update จะสร้างเอกสารใหม่ให้เงียบๆ)
-      if (pre?.exists === true && !DOCS.has(key)) return J({ error: { message: "missing", status: "FAILED_PRECONDITION" } });
-      if (pre?.updateTime && times.get(key) !== pre.updateTime) {
-        return J({ error: { message: "stale", status: "FAILED_PRECONDITION" } });
-      }
+      const key = short(w.update.name);   // เงื่อนไขตรวจครบไปแล้วด้านบน
       const mask = w.updateMask?.fieldPaths;
       const cur = mask ? (DOCS.get(key) || {}) : {};
       DOCS.set(key, { ...cur, ...w.update.fields });

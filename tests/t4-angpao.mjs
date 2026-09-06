@@ -40,6 +40,17 @@ globalThis.fetch = async (url, opt = {}) => {
   if (url.includes(":commit")) {
     if (FAIL_NEXT_COMMITS > 0) { FAIL_NEXT_COMMITS--; return J({ error: { message: "boom", status: "UNAVAILABLE" } }); }
     if (FAIL_CLOSE && body.writes.some(w => w.transform)) { FAIL_CLOSE = false; return J({ error: { message: "boom", status: "UNAVAILABLE" } }); }
+    // Firestore commit เป็น all-or-nothing — ต้องตรวจเงื่อนไขของทุกคำสั่งให้ครบก่อน
+    // ถ้าปล่อยให้เขียนไปครึ่งทางแล้วค่อยฟ้อง เทสจะเห็นสถานะที่เป็นไปไม่ได้จริง
+    for (const w of body.writes) {
+      const k = w.delete ? short(w.delete)
+        : w.transform ? short(w.transform.document)
+        : short(w.update.name);
+      const pre = w.currentDocument;
+      if (pre?.exists === false && DOCS.has(k)) return J({ error: { message: "exists", status: "FAILED_PRECONDITION" } });
+      if (pre?.exists === true && !DOCS.has(k)) return J({ error: { message: "missing", status: "FAILED_PRECONDITION" } });
+      if (pre?.updateTime && times.get(k) !== pre.updateTime) return J({ error: { message: "stale", status: "FAILED_PRECONDITION" } });
+    }
     const results = [];
     for (const w of body.writes) {
       if (w.delete) { DOCS.delete(short(w.delete)); times.delete(short(w.delete)); results.push({}); continue; }
@@ -50,9 +61,7 @@ globalThis.fetch = async (url, opt = {}) => {
         }
         DOCS.set(k, cur); results.push({}); continue;
       }
-      const key = short(w.update.name), pre = w.currentDocument;
-      if (pre?.exists === false && DOCS.has(key)) return J({ error: { message: "exists", status: "FAILED_PRECONDITION" } });
-      if (pre?.updateTime && times.get(key) !== pre.updateTime) return J({ error: { message: "stale", status: "FAILED_PRECONDITION" } });
+      const key = short(w.update.name);   // เงื่อนไขตรวจครบไปแล้วด้านบน
       const cur = w.updateMask?.fieldPaths ? (DOCS.get(key) || {}) : {};
       DOCS.set(key, { ...cur, ...w.update.fields });
       const ut = "t" + (seq++); times.set(key, ut); results.push({ updateTime: ut });
@@ -228,5 +237,31 @@ section("ฝั่งเบราว์เซอร์กับเซิร์�
     client.angpaoRedeemUrl("abcdefghij1234567890")
       === "https://gift.truemoney.com/campaign/?v=abcdefghij1234567890");
 }
+section("สมาชิกถูกลบระหว่างที่บอทกำลังกดรับซอง");
+// การกดรับซองใช้เวลาหลายวินาที (ต้องรอทรูมันนี่ตอบ) เอกสารสมาชิกถูกลบระหว่างนั้นได้
+// คำสั่งบวกเครดิตของ Firestore จะ "สร้างเอกสารให้" ถ้าไม่มี
+// = ได้สมาชิกผีที่มีแต่ยอดเครดิต ไม่มีชื่อ ไม่มีอีเมล ไม่มีสิทธิ์ โผล่ในหลังบ้านแบบว่างเปล่า
+{
+  const UID = "uGhost";
+  DOCS.set("users/" + UID, F({ email: "g@x.com", name: "ผี", role: "member", credit: 0 }));
+  TM = { status: { code: "SUCCESS" }, data: { my_ticket: { amount_baht: 77 } } };
+
+  // ลบเอกสารสมาชิกทิ้งตอนบอทกำลังคุยกับทรูมันนี่อยู่พอดี
+  ON_REDEEM = () => { DOCS.delete("users/" + UID); };
+
+  const r = await send(LINK("ghostcode01"), UID);
+  ok("ไม่สร้างสมาชิกผีขึ้นมาใหม่", !DOCS.has("users/" + UID),
+    JSON.stringify(DOCS.get("users/" + UID)));
+  ok("ไม่ตอบว่าเติมเครดิตสำเร็จ", r.body.ok !== true, JSON.stringify(r.body));
+
+  // เงินเข้าร้านไปแล้ว ห้ามทิ้ง — ต้องพักไว้ให้แอดมินจัดการพร้อมยอดจริง
+  const tp = DOCS.get("topups/angpao_ghostcode01");
+  ok("พักรายการไว้ให้แอดมินตรวจ", tp?.status?.stringValue === "pending",
+    JSON.stringify(tp?.status));
+  ok("บันทึกยอดจริงไว้ด้วย ไม่ใช่ 0", numOf(tp?.amount) === 77, JSON.stringify(tp?.amount));
+  ok("บอกสาเหตุไว้ในหมายเหตุ", String(tp?.note?.stringValue || "").includes("เติมเครดิตอัตโนมัติไม่สำเร็จ"),
+    tp?.note?.stringValue);
+}
+
 console.log("\nสรุป(รวมท้าย): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
