@@ -344,6 +344,44 @@ ok("กดโหลดใหม่แล้วเห็นบันทึกท�
 ok("บันทึกปรับเครดิตบอกยอดก่อน/หลัง", $("table-logs").textContent.includes("250")
   && $("table-logs").textContent.includes("300"));
 
+// ---------- ค้นในบันทึก ----------
+const logSearch = $("log-search");
+const typeLog = v => { logSearch.value = v; logSearch.dispatchEvent(new window.Event("input", { bubbles: true })); };
+const logRows = () => [...rows("table-logs")].filter(r => !r.classList.contains("empty-row"));
+
+const allLogs = logRows().length;
+typeLog("สมชาย");
+ok("ค้นในบันทึกด้วยชื่อลูกค้าได้", logRows().length > 0 && logRows().length < allLogs,
+  logRows().length + " / " + allLogs);
+ok("บอกว่าแสดงกี่จากทั้งหมด", $("log-count").textContent.includes(String(allLogs)),
+  $("log-count").textContent);
+ok("ทุกแถวที่เหลือเกี่ยวกับคนที่ค้น", logRows().every(r => r.textContent.includes("สมชาย")));
+
+typeLog("ปรับเครดิต");
+ok("ค้นด้วยชื่อการกระทำได้", logRows().length > 0
+  && logRows().every(r => r.textContent.includes("ปรับเครดิต")), String(logRows().length));
+
+typeLog("ไม่มีคำนี้แน่นอน");
+ok("ไม่เจอ บอกว่าไม่พบ", $("table-logs").textContent.includes("ไม่พบ"), $("table-logs").textContent.trim());
+
+typeLog("");
+ok("ล้างคำค้นแล้วกลับมาครบ", logRows().length === allLogs, logRows().length + " / " + allLogs);
+ok("ล้างแล้วไม่โชว์ตัวนับ", $("log-count").textContent === "");
+
+// ---------- บันทึกต้องอ่านรู้เรื่องแม้สมาชิกถูกลบไปแล้ว ----------
+// ปรับเครดิตให้คนที่ไม่ได้อยู่ในรายชื่อที่หน้านี้โหลดมา แล้วดูว่าบันทึกโชว์อะไร
+store.put("users/cGhost", { uid: "cGhost", email: "ghost@x.com", name: "ผี", role: "member", credit: 10 });
+await QQ.setRole("cGhost", "admin");        // บันทึก role.grant มีทั้ง targetUid และ targetEmail
+store.state.docs.delete("users/cGhost");    // แล้วสมาชิกคนนั้นถูกลบทิ้ง
+click($("btn-reload-logs"));
+await tick(14);
+typeLog("ghost@x.com");
+ok("สมาชิกที่ถูกลบแล้ว บันทึกยังบอกได้ว่าเป็นใคร (ใช้อีเมลที่บันทึกไว้)",
+  logRows().length > 0, $("table-logs").textContent.slice(0, 80));
+ok("ไม่โชว์เป็นรหัสดิบเฉยๆ", !logRows()[0]?.textContent.includes("cGhost"),
+  logRows()[0]?.textContent);
+typeLog("");
+
 // ---------- สมาชิกธรรมดาต้องอ่านบันทึกไม่ได้ ----------
 section("สิทธิ์: สมาชิกธรรมดาอ่านบันทึกแอดมินไม่ได้");
 await QQ.logout();

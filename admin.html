@@ -177,6 +177,12 @@ try {
         <h3 data-i18n="logs_title">บันทึกการกระทำของแอดมิน</h3>
         <button class="btn-small" id="btn-reload-logs" data-i18n="logs_reload">โหลดใหม่</button>
       </div>
+      <div class="search-row">
+        <label class="sr-only" for="log-search" data-i18n="logs_search">ค้นในบันทึก (ชื่อ / อีเมล / การกระทำ)</label>
+        <input class="search" id="log-search" data-i18n-placeholder="logs_search"
+               placeholder="ค้นในบันทึก (ชื่อ / อีเมล / การกระทำ)" autocomplete="off" spellcheck="false">
+        <span class="hint" id="log-count"></span>
+      </div>
       <p class="hint" data-i18n="logs_hint">เขียนโดยเซิร์ฟเวอร์เท่านั้น แก้และลบไม่ได้ — ใช้ตรวจย้อนหลังว่าใครทำอะไรกับเครดิต สิทธิ์ และออเดอร์</p>
       <div class="table-wrap"><table id="table-logs"></table></div>
     </div>

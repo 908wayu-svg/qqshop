@@ -7,6 +7,7 @@ let RANGE = 30;
 let ORDER_FILTER = "pending", TOPUP_FILTER = "pending";
 let ORDER_SEARCH = "";        // คำค้นในตารางออเดอร์ (ค้นอยู่ = มองข้ามตัวกรองสถานะ)
 let DEEP_HITS = [];           // ออเดอร์ที่ค้นเจอจากฐานข้อมูลทั้งหมด (นอกเหนือจาก 500 ใบที่โหลดมา)
+let LOG_SEARCH = "";          // คำค้นในแท็บบันทึกแอดมิน (กรองเฉพาะที่โหลดมาแล้ว ไม่ยิงฐานข้อมูลซ้ำ)
 let LOGS = null;              // บันทึกแอดมิน — null = ยังไม่เคยโหลด (โหลดตอนเปิดแท็บครั้งแรก)
 let EDITING_PRODUCT = null, PRODUCT_IMAGE = null, CREDIT_TARGET = null, IMAGE_CHANGED = false;
 let STOCK_ITEMS = [];
@@ -927,9 +928,12 @@ function openMemberHistory(u) {
 // ---------- บันทึกการกระทำของแอดมิน ----------
 // เอกสารใน adminLogs เขียนได้จากเซิร์ฟเวอร์เท่านั้น แก้/ลบไม่ได้เลย (ดู firestore.rules)
 // โหลดตอนเปิดแท็บครั้งแรกเท่านั้น — ร้านที่ใช้มานานจะมีหลายร้อยใบ ไม่ควรโหลดทุกครั้งที่เปิดหน้า
-const userLabel = uid => {
+// บันทึกมีไว้ตรวจย้อนหลัง — ต้องอ่านรู้เรื่องแม้สมาชิกคนนั้นถูกลบไปแล้ว
+// หรือไม่ได้อยู่ใน 500 คนที่หน้านี้โหลดมา จึงถอยไปใช้อีเมลที่บันทึกไว้ตอนนั้นก่อนค่อยยอมโชว์รหัสดิบ
+const userLabel = (uid, fallbackEmail) => {
   const u = USERS.find(x => x.id === String(uid));
-  return u ? (u.name || u.email || String(uid)) : String(uid || "—");
+  if (u) return u.name || u.email || String(uid);
+  return String(fallbackEmail || uid || "—");
 };
 
 // t() คืนชื่อคีย์กลับมาถ้าไม่มีคำแปล — การกระทำแบบใหม่ที่ยังไม่ได้แปลจะโผล่เป็น "act_xxx"
@@ -942,7 +946,7 @@ function actionLabel(action) {
 
 function logDetail(l) {
   const bits = [];
-  if (l.targetUid) bits.push(`${t("customer")}: ${userLabel(l.targetUid)}`);
+  if (l.targetUid) bits.push(`${t("customer")}: ${userLabel(l.targetUid, l.targetEmail)}`);
   else if (l.targetEmail) bits.push(String(l.targetEmail));
   if (l.orderId) bits.push(`${t("order_number")} ${orderNo(l.orderId)}`);
   if (l.topupId) bits.push(`${t("tab_topups")} ${orderNo(l.topupId)}`);
@@ -959,15 +963,34 @@ function logDetail(l) {
   return esc(bits.join(" · "));
 }
 
+// ค้นจากสิ่งที่แอดมิน "มองเห็น" ในแถวนั้นจริงๆ ไม่ใช่ชื่อฟิลด์ในฐานข้อมูล
+// (พิมพ์ชื่อลูกค้า หรือคำว่า "ปรับเครดิต" แล้วต้องเจอ)
+const logText = l => [
+  actionLabel(l.action), l.byEmail, l.byUid,
+  logDetail(l), l.targetEmail, l.orderId, l.topupId,
+].filter(Boolean).join(" ").toLowerCase();
+
 function renderLogs() {
   const el = document.getElementById("table-logs");
+  const countBox = document.getElementById("log-count");
   if (!LOGS) return;
-  if (!LOGS.length) { el.innerHTML = `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`; return; }
+  if (!LOGS.length) {
+    countBox.textContent = "";
+    el.innerHTML = `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`;
+    return;
+  }
+
+  const rows = LOG_SEARCH ? LOGS.filter(l => logText(l).includes(LOG_SEARCH)) : LOGS;
+  countBox.textContent = LOG_SEARCH ? tv("logs_count", { n: rows.length, all: LOGS.length }) : "";
+  if (!rows.length) {
+    el.innerHTML = `<tr class="empty-row"><td class="empty">${t("search_no_match")}</td></tr>`;
+    return;
+  }
   el.innerHTML = `
     <thead><tr>
       <th>${t("date")}</th><th>${t("log_action")}</th><th>${t("log_by")}</th><th>${t("log_detail")}</th>
     </tr></thead>
-    <tbody>${LOGS.map(l => `
+    <tbody>${rows.map(l => `
       <tr>
         <td data-label="${t("date")}">${fmtDateTime(l._date)}</td>
         <td data-label="${t("log_action")}">${esc(actionLabel(l.action))}</td>
@@ -1103,6 +1126,12 @@ document.getElementById("order-search-clear").addEventListener("click", () => {
   clearOrderSearch();
   renderOrders();
   orderSearchBox.focus();
+});
+
+const logSearchBox = document.getElementById("log-search");
+logSearchBox.addEventListener("input", () => {
+  LOG_SEARCH = logSearchBox.value.trim().toLowerCase();
+  renderLogs();
 });
 
 document.getElementById("order-search-deep").addEventListener("click", deepSearchOrders);
