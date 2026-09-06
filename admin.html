@@ -119,12 +119,13 @@ try {
         </div>
       </div>
       <div class="search-row">
+        <label class="sr-only" for="order-search" data-i18n="search_orders">ค้นเลขที่คำสั่งซื้อ / ชื่อ / อีเมล</label>
         <input class="search" id="order-search" data-i18n-placeholder="search_orders"
                placeholder="ค้นเลขที่คำสั่งซื้อ / ชื่อ / อีเมล" autocomplete="off" spellcheck="false">
         <button class="btn-small hidden" id="order-search-clear" data-i18n="clear_search">ล้างการค้นหา</button>
       </div>
       <p class="hint" data-i18n="search_hint_order_no">ใส่เลขที่คำสั่งซื้อที่ลูกค้าแจ้งมาได้เลย (เช่น 3F9A2B7C) — ตอนค้นหาจะมองข้ามตัวกรองสถานะ</p>
-      <p class="hint search-count hidden" id="order-search-count"></p>
+      <p class="hint search-count hidden" id="order-search-count" role="status" aria-live="polite"></p>
       <button class="btn-small hidden" id="order-search-deep" data-i18n="search_deep">ค้นทั้งฐานข้อมูลด้วยเลขที่นี้</button>
       <div class="table-wrap"><table id="table-orders"></table></div>
     </div>
@@ -162,6 +163,7 @@ try {
     <div class="card">
       <div class="toolbar">
         <h3 data-i18n="members_list">รายชื่อสมาชิก</h3>
+        <label class="sr-only" for="member-search" data-i18n="search">ค้นหา</label>
         <input class="search" id="member-search" data-i18n-placeholder="search" placeholder="ค้นหา">
       </div>
       <div class="table-wrap"><table id="table-members"></table></div>

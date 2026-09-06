@@ -97,6 +97,29 @@ section("ทุกค่าใน data-act ต้องมีคนรับไ�
   ok("ไม่มีโค้ดรับปุ่มที่ไม่มีอยู่แล้ว", deadArms.length === 0, deadArms.join(", "));
 }
 
+section("คลาสที่หน้าเว็บใช้ ต้องมีสไตล์รองรับจริง");
+// คลาสกลุ่มนี้ถ้าสไตล์หาย หน้าเว็บจะไม่พัง แต่จะ "ดูผิด" แบบเงียบๆ
+// เช่น .sr-only ที่ไม่มีสไตล์ = ป้ายที่ตั้งใจให้เฉพาะโปรแกรมอ่านหน้าจอได้ยิน โผล่มาบนจอจริง
+{
+  const css = fs.readFileSync(path.join(SRC, "style.css"), "utf8");
+  const htmlAll = htmls.map(h => fs.readFileSync(path.join(SRC, h), "utf8")).join("\n");
+  for (const cls of ["sr-only", "search-row", "search-count", "panel-wide", "order-no"]) {
+    const used = htmlAll.includes('class="' + cls + '"')
+      || new RegExp('class="[^"]*\\b' + cls + '\\b').test(htmlAll)
+      || allCode.includes('class="' + cls + '"')
+      || new RegExp('class="[^"]*\\b' + cls + '\\b').test(allCode);
+    if (used) ok("มีสไตล์ของ ." + cls, new RegExp("\\." + cls + "[{,: ]").test(css));
+  }
+}
+
+section("ข้อความที่เปลี่ยนเองต้องประกาศให้โปรแกรมอ่านหน้าจอรู้");
+// ผลการค้นหาเปลี่ยนหลังผู้ใช้พิมพ์ ถ้าไม่ประกาศ คนที่ใช้โปรแกรมอ่านหน้าจอจะไม่รู้เลยว่าเจอกี่รายการ
+{
+  const admin = fs.readFileSync(path.join(SRC, "admin.html"), "utf8");
+  const tag = admin.match(/<[^>]*id="order-search-count"[^>]*>/)?.[0] || "";
+  ok("บรรทัดบอกผลการค้นหาประกาศตัวเอง (aria-live)", /aria-live=/.test(tag), tag.slice(0, 80));
+}
+
 section("ป้ายกำกับต้องผูกกับช่องกรอก (โปรแกรมอ่านหน้าจอ)");
 // ถ้าป้ายไม่ได้ผูกกับช่อง คนที่ใช้โปรแกรมอ่านหน้าจอจะได้ยินแค่ "ช่องว่าง"
 // ไม่รู้ว่าต้องกรอกอะไร — หน้าเข้าสู่ระบบกับหน้าเติมเงินสำคัญที่สุด

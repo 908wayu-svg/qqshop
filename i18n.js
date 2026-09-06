@@ -318,6 +318,7 @@ const I18N = {
     search_no_match: "ไม่พบรายการที่ตรงกับที่ค้น",
 
     // ประวัติของสมาชิกรายคน
+    credit_unknown: "ไม่ทราบ (ยังไม่ได้โหลดข้อมูลสมาชิกคนนี้)",
     member_history: "ประวัติ",
     member_history_title: "ประวัติของสมาชิก",
     member_orders: "ออเดอร์",
@@ -662,6 +663,7 @@ const I18N = {
     a_STILL_OPEN: "You can not hide a record that is still open — the customer needs to see what they are waiting for (finish or cancel it first)",
     search_no_match: "Nothing matched your search",
 
+    credit_unknown: "unknown (this member is not loaded on this page)",
     member_history: "History",
     member_history_title: "Member history",
     member_orders: "Orders",

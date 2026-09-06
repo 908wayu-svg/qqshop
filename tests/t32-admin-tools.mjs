@@ -130,8 +130,9 @@ section("ค้นออเดอร์เก่าที่หน้านี�
 // ถ้าแค่บอกว่า "ไม่พบ" แอดมินจะไปบอกลูกค้าว่าไม่เคยสั่ง ทั้งที่มีอยู่จริงในฐานข้อมูล
 // จำลองด้วยการยัดออเดอร์เข้าฐานข้อมูลโดยไม่สั่งให้หน้าโหลดใหม่
 const OLD_ID = "ff77ee66dd55cc44";
+// เจ้าของออเดอร์เก่าใบนี้ ไม่ได้อยู่ในรายชื่อสมาชิกที่หน้านี้โหลดมา (เหมือนของจริงที่โหลดมาแค่ 500 คน)
 store.put("orders/" + OLD_ID, {
-  uid: "c1", customerName: "สมชาย ใจดี", customerEmail: "somchai@x.com", total: 900,
+  uid: "cGone", customerName: "ลูกค้าเก่า", customerEmail: "gone@x.com", total: 900,
   status: "completed", paid: true, createdAt: TS(99999),
   items: [{ id: "pA", name: "ไอดีเกม A", price: 900, qty: 1 }],
 });
@@ -147,6 +148,11 @@ ok("ค้นทั้งฐานข้อมูลแล้วเจอ", rows
 ok("โชว์เลขที่ที่ถูกต้อง", $("table-orders").innerHTML.includes(OLD_SHOWN));
 ok("บอกว่าเจอจากในฐานข้อมูล", $("order-search-count").textContent.includes("ในฐานข้อมูล"),
   $("order-search-count").textContent);
+// ถ้าโชว์ ฿0 แอดมินจะอ่านว่า "ลูกค้าไม่มีเครดิต" ทั้งที่แค่ยังไม่ได้โหลดข้อมูลคนนี้มา
+ok("เครดิตของลูกค้าที่ยังไม่ได้โหลด ต้องบอกว่าไม่ทราบ ไม่ใช่โชว์ 0",
+  $("table-orders").textContent.includes("ไม่ทราบ")
+  && !/เครดิต: ฿?0(?!d)/.test($("table-orders").textContent),
+  $("table-orders").querySelector(".credit-note")?.textContent);
 
 // ค้นเลขที่ที่ไม่มีจริง — ต้องบอกให้ชัดว่าค้นทั้งฐานข้อมูลแล้วไม่มีจริงๆ
 type("aaaa1111bbbb");

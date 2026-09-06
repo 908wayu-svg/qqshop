@@ -472,7 +472,7 @@ function renderOrders() {
           : "—"}</td>
         <td data-label="${t("date")}">${fmtDateTime(o._date)}</td>
         <td data-label="${t("customer")}">${esc(o.customerName || "—")}<br><small>${esc(o.customerEmail || "")}</small>
-            <br><small class="credit-note">${t("credit")}: ${money(creditOf(o.uid))}</small></td>
+            <br><small class="credit-note">${t("credit")}: ${creditCell(o.uid)}</small></td>
         <td data-label="${t("items")}"><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small>
             ${customerInfoBlock(o)}</td>
         <td class="num" data-label="${t("amount")}">${money(o.total)}${priceWarnLabel(pc)}</td>
@@ -510,7 +510,14 @@ function orderActions(o) {
   return "";                                     // ยกเลิกไปแล้ว ไม่เหลืออะไรให้กด
 }
 
-const creditOf = uid => Number(USERS.find(u => u.id === uid)?.credit || 0);
+// หน้านี้โหลดรายชื่อสมาชิกมาแค่ 500 คน — ถ้าหาไม่เจอ ต้องบอกว่า "ไม่ทราบ"
+// ห้ามแสดงเป็น ฿0 เพราะแอดมินจะอ่านว่า "ลูกค้าคนนี้ไม่มีเครดิต" ทั้งที่อาจมีเต็มกระเป๋า
+// (เห็นชัดที่สุดตอนกดค้นออเดอร์เก่าจากฐานข้อมูล เจ้าของออเดอร์นั้นมักไม่ได้อยู่ในรายชื่อที่โหลดมา)
+const creditCell = uid => {
+  const u = USERS.find(x => x.id === uid);
+  return u ? money(u.credit) : t("credit_unknown");
+};
+
 
 // เลขที่คำสั่งซื้อที่ลูกค้าเห็นในหน้าประวัติ — ต้องตรงกับ purchases.js เป๊ะ
 // ไม่งั้นลูกค้าแจ้งเลขมาแล้วแอดมินหาไม่เจอ
