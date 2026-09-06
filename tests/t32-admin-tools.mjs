@@ -16,6 +16,8 @@ const section = s => console.log("\n== " + s + " ==");
 const $ = id => document.getElementById(id);
 const click = el => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 const rows = id => $(id).querySelectorAll("tbody tr");
+// แถว "ไม่พบ/ยังไม่มีข้อมูล" ก็เป็น <tr> เหมือนกัน ต้องไม่นับรวมตอนเช็คว่าเจอกี่รายการ
+const dataRows = id => [...rows(id)].filter(r => !r.classList.contains("empty-row"));
 // เก็บข้อความที่ confirm() ถาม เพื่อตรวจว่าเตือนแรงพอกับสิ่งที่กำลังจะเกิด
 let lastConfirm = "";
 globalThis.confirm = (msg) => { lastConfirm = String(msg ?? ""); return globalThis.__confirm; };
@@ -120,6 +122,53 @@ click(document.querySelector('#orders-filter [data-st="cancelled"]'));
 ok("กดตัวกรองระหว่างค้นหา = ล้างการค้นหาให้เอง", search.value === "");
 ok("แล้วตัวกรองที่กดทำงานจริง", rows("table-orders").length === 1
   && $("table-orders").textContent.includes("ยกเลิก"), String(rows("table-orders").length));
+click(document.querySelector('#orders-filter [data-st="pending"]'));
+
+// =====================================================================
+section("ค้นออเดอร์เก่าที่หน้านี้ยังไม่ได้โหลดมา");
+// หลังบ้านโหลดแค่ 500 ใบล่าสุด ออเดอร์ที่เก่ากว่านั้นหาในหน้าไม่เจอ
+// ถ้าแค่บอกว่า "ไม่พบ" แอดมินจะไปบอกลูกค้าว่าไม่เคยสั่ง ทั้งที่มีอยู่จริงในฐานข้อมูล
+// จำลองด้วยการยัดออเดอร์เข้าฐานข้อมูลโดยไม่สั่งให้หน้าโหลดใหม่
+const OLD_ID = "ff77ee66dd55cc44";
+store.put("orders/" + OLD_ID, {
+  uid: "c1", customerName: "สมชาย ใจดี", customerEmail: "somchai@x.com", total: 900,
+  status: "completed", paid: true, createdAt: TS(99999),
+  items: [{ id: "pA", name: "ไอดีเกม A", price: 900, qty: 1 }],
+});
+
+const OLD_SHOWN = OLD_ID.slice(0, 8).toUpperCase();
+type(OLD_SHOWN);
+ok("หาในหน้าไม่เจอ (ยังไม่ได้โหลดมา)", dataRows("table-orders").length === 0);
+ok("มีปุ่มให้ค้นทั้งฐานข้อมูล", !$("order-search-deep").classList.contains("hidden"));
+
+click($("order-search-deep"));
+await tick(14);
+ok("ค้นทั้งฐานข้อมูลแล้วเจอ", rows("table-orders").length === 1, String(rows("table-orders").length));
+ok("โชว์เลขที่ที่ถูกต้อง", $("table-orders").innerHTML.includes(OLD_SHOWN));
+ok("บอกว่าเจอจากในฐานข้อมูล", $("order-search-count").textContent.includes("ในฐานข้อมูล"),
+  $("order-search-count").textContent);
+
+// ค้นเลขที่ที่ไม่มีจริง — ต้องบอกให้ชัดว่าค้นทั้งฐานข้อมูลแล้วไม่มีจริงๆ
+type("aaaa1111bbbb");
+ok("เลขที่ที่ไม่มีในหน้า ก็มีปุ่มค้นให้", !$("order-search-deep").classList.contains("hidden"));
+click($("order-search-deep"));
+await tick(14);
+ok("ค้นแล้วไม่มีจริง บอกให้ชัด", $("order-search-count").textContent.includes("ไม่มีออเดอร์เลขที่นี้จริงๆ"),
+  $("order-search-count").textContent);
+
+// ชื่อคน/อีเมล ค้นแบบนี้ไม่ได้ ต้องไม่โชว์ปุ่มให้กดเล่น
+type("ไม่มีชื่อนี้");
+ok("คำค้นที่ไม่ใช่เลขที่ ไม่โชว์ปุ่มค้นฐานข้อมูล", $("order-search-deep").classList.contains("hidden"));
+
+// เปลี่ยนคำค้นแล้ว ผลค้นลึกของคำเดิมต้องไม่ค้างอยู่ — และต้องค้นซ้ำได้
+type(OLD_SHOWN);
+ok("กลับมาค้นเลขเดิม ผลเก่าไม่ค้าง", dataRows("table-orders").length === 0);
+ok("และยังกดค้นฐานข้อมูลซ้ำได้ (ไม่ใช่ปุ่มหายไปเฉยๆ)",
+  !$("order-search-deep").classList.contains("hidden"));
+click($("order-search-deep"));
+await tick(14);
+ok("ค้นซ้ำแล้วเจอเหมือนเดิม", dataRows("table-orders").length === 1);
+type("");
 click(document.querySelector('#orders-filter [data-st="pending"]'));
 
 // =====================================================================

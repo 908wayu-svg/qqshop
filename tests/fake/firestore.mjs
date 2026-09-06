@@ -38,6 +38,9 @@ export function doc(dbOrRef, ...segs) {
   return { __doc: true, __path: path, id: segs[segs.length - 1] };
 }
 
+// ตัวแทน documentId() ของ Firestore — ใช้เทียบกับ "รหัสเอกสาร" แทนฟิลด์ในเอกสาร
+export const DOC_ID = { __documentId: true };
+export const documentId = () => DOC_ID;
 export const where = (f, op, v) => ({ k: "where", f, op, v });
 export const orderBy = (f, dir = "asc") => ({ k: "order", f, dir });
 export const limit = n => ({ k: "limit", n });
@@ -104,11 +107,14 @@ export async function getDocs(q) {
 
   for (const w of wheres) {
     rows = rows.filter(r => {
-      const v = val(r.d, w.f);
+      // เทียบกับรหัสเอกสาร ไม่ใช่ฟิลด์ในเอกสาร (Firestore เรียงตามรหัสแบบตัวอักษร)
+      const v = w.f === DOC_ID ? r.id : val(r.d, w.f);
       if (w.op === "==") return v === w.v;
       if (w.op === "!=") return v !== w.v;
       if (w.op === ">=") return cmp(v, w.v) >= 0;
       if (w.op === "<=") return cmp(v, w.v) <= 0;
+      if (w.op === "<") return cmp(v, w.v) < 0;
+      if (w.op === ">") return cmp(v, w.v) > 0;
       throw new Error("op ไม่รองรับ: " + w.op);
     });
   }

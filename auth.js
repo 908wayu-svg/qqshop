@@ -9,6 +9,7 @@ import {
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection,
   serverTimestamp, query, orderBy, where, getDocs, limit, onSnapshot, writeBatch, deleteField,
+  documentId,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig, isConfigured } from "./firebase-config.js";
 import { SHOP, CATEGORIES } from "./shop-config.js";
@@ -425,6 +426,24 @@ export const QQ = {
   async fetchOrders(max = 500) {
     return rows(await getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(max))));
   },
+  // ค้นออเดอร์จากฐานข้อมูลทั้งหมดด้วย "เลขที่คำสั่งซื้อ" ที่ลูกค้าแจ้งมา (แอดมินเท่านั้น)
+  //
+  // หลังบ้านโหลดมาแค่ 500 ใบล่าสุด ออเดอร์ที่เก่ากว่านั้นจะหาในหน้าไม่เจอ
+  // เลขที่ที่ลูกค้าเห็น = 8 ตัวแรกของรหัสออเดอร์แบบตัวใหญ่ และรหัสออเดอร์ที่เซิร์ฟเวอร์สร้าง
+  // เป็นเลขฐานสิบหกตัวเล็กล้วน (crypto.randomUUID) พอแปลงกลับเป็นตัวเล็กจึงเป็น "ส่วนหน้าของรหัส" พอดี
+  // → ใช้ค้นแบบช่วงบนรหัสเอกสารได้ ไม่ต้องเพิ่มฟิลด์ใหม่และไม่ต้องสร้าง index
+  async findOrdersByCode(code, max = 20) {
+    const p = String(code || "").trim().replace(/^#/, "").toLowerCase();
+    // สั้นเกินไปจะกวาดมาทั้งฐานข้อมูล · อักขระอื่นไม่มีทางเป็นรหัสออเดอร์อยู่แล้ว
+    if (!/^[a-z0-9]{4,40}$/.test(p)) return [];
+    return rows(await getDocs(query(
+      collection(db, "orders"),
+      where(documentId(), ">=", p),
+      where(documentId(), "<", p + "\uf8ff"),
+      limit(max),
+    )));
+  },
+
   // ต้องกรองด้วย where ให้ Firestore ตั้งแต่ต้น ไม่งั้นกฎความปลอดภัยจะปฏิเสธทั้งคำสั่ง
   async fetchMyOrders(max = 50) {
     return sortByCreatedDesc(rows(await myQuery("orders", max)));

@@ -6,6 +6,7 @@ let ORDERS = [], USERS = [], TOPUPS = [], PRODUCTS = [], SETTINGS = {};
 let RANGE = 30;
 let ORDER_FILTER = "pending", TOPUP_FILTER = "pending";
 let ORDER_SEARCH = "";        // คำค้นในตารางออเดอร์ (ค้นอยู่ = มองข้ามตัวกรองสถานะ)
+let DEEP_HITS = [];           // ออเดอร์ที่ค้นเจอจากฐานข้อมูลทั้งหมด (นอกเหนือจาก 500 ใบที่โหลดมา)
 let LOGS = null;              // บันทึกแอดมิน — null = ยังไม่เคยโหลด (โหลดตอนเปิดแท็บครั้งแรก)
 let EDITING_PRODUCT = null, PRODUCT_IMAGE = null, CREDIT_TARGET = null, IMAGE_CHANGED = false;
 let STOCK_ITEMS = [];
@@ -387,22 +388,63 @@ function matchOrderSearch(o, q) {
 // ทั้งสองเพดานนี้ต้องบอกให้แอดมินรู้ตอนค้นหา ไม่งั้นจะสรุปผิดว่า "ไม่มี" หรือ "มีแค่นี้"
 const ORDER_TABLE_MAX = 100;
 
+// คำค้นที่มีหน้าตาเหมือนเลขที่คำสั่งซื้อ (ตัวเลข+ตัวอักษรล้วน ยาวพอ)
+// เท่านั้นที่ค้นทั้งฐานข้อมูลได้ — ชื่อคนหรืออีเมลค้นแบบนั้นไม่ได้
+const looksLikeOrderNo = q => /^[a-z0-9]{4,40}$/.test(q);
+
 function renderSearchCount(found) {
   const box = document.getElementById("order-search-count");
-  if (!ORDER_SEARCH) { box.classList.add("hidden"); box.textContent = ""; return; }
+  const deep = document.getElementById("order-search-deep");
+  if (!ORDER_SEARCH) {
+    box.classList.add("hidden"); box.textContent = "";
+    deep.classList.add("hidden");
+    return;
+  }
   box.classList.remove("hidden");
   box.textContent = !found
     ? tv("search_none_loaded", { n: ORDERS.length })
     : found > ORDER_TABLE_MAX
       ? tv("search_capped", { n: found, shown: ORDER_TABLE_MAX })
       : tv("search_count", { n: found });
+
+  // ไม่เจอในหน้า + คำค้นเป็นเลขที่คำสั่งซื้อ = เสนอให้ค้นทั้งฐานข้อมูล
+  // (ไม่ค้นให้อัตโนมัติ เพราะจะยิงฐานข้อมูลทุกครั้งที่พิมพ์ทีละตัวอักษร)
+  const canDeep = !found && looksLikeOrderNo(ORDER_SEARCH);
+  deep.classList.toggle("hidden", !canDeep);
+  deep.disabled = false;
+  deep.textContent = t("search_deep");
+}
+
+
+async function deepSearchOrders() {
+  const q = ORDER_SEARCH;
+  const btn = document.getElementById("order-search-deep");
+  btn.disabled = true;
+  btn.textContent = t("search_deep_running");
+  try {
+    const hits = await QQ.findOrdersByCode(q);
+    DEEP_HITS = hits.map(o => ({ ...o, _date: toDate(o.createdAt) }));
+    renderOrders();
+    // renderSearchCount วาดข้อความปกติไปแล้ว ทับด้วยผลของการค้นลึก
+    document.getElementById("order-search-count").textContent =
+      hits.length ? tv("search_deep_found", { n: hits.length }) : t("search_deep_none");
+  } catch (e) {
+    // ค้นไม่สำเร็จต้องบอก ไม่ใช่เงียบแล้วให้เข้าใจว่า "ไม่มีออเดอร์นี้"
+    console.warn("ค้นออเดอร์ในฐานข้อมูลไม่สำเร็จ", e);
+    document.getElementById("order-search-count").textContent = t("search_deep_failed");
+    btn.disabled = false;
+    btn.textContent = t("search_deep");
+  }
 }
 
 function renderOrders() {
   // กำลังค้นหา = ข้ามตัวกรองสถานะไปเลย ลูกค้าแจ้งเลขที่มาแล้วต้องเจอ
   // ไม่ว่าออเดอร์นั้นจะยกเลิกไปแล้วหรือยังค้างอยู่
+  // ผลที่ค้นเจอจากฐานข้อมูลทั้งหมด เอามาต่อท้ายผลที่หาจากในหน้า (ไม่ให้ซ้ำกัน)
+  const inPage = ORDERS.filter(o => matchOrderSearch(o, ORDER_SEARCH));
+  const extra = DEEP_HITS.filter(o => !ORDERS.some(x => x.id === o.id));
   const list = ORDER_SEARCH
-    ? ORDERS.filter(o => matchOrderSearch(o, ORDER_SEARCH))
+    ? [...inPage, ...extra]
     : ORDERS.filter(o => matchFilter(o.status, ORDER_FILTER));
   const el = document.getElementById("table-orders");
   document.getElementById("orders-filter").classList.toggle("dimmed", !!ORDER_SEARCH);
@@ -1032,12 +1074,14 @@ document.getElementById("member-search").addEventListener("input", renderMembers
 const orderSearchBox = document.getElementById("order-search");
 orderSearchBox.addEventListener("input", () => {
   ORDER_SEARCH = normSearch(orderSearchBox.value);
+  DEEP_HITS = [];   // เปลี่ยนคำค้นแล้ว ผลค้นลึกของคำเดิมใช้ไม่ได้
   document.getElementById("order-search-clear").classList.toggle("hidden", !ORDER_SEARCH);
   renderOrders();
 });
 function clearOrderSearch() {
   orderSearchBox.value = "";
   ORDER_SEARCH = "";
+  DEEP_HITS = [];
   document.getElementById("order-search-clear").classList.add("hidden");
 }
 
@@ -1047,6 +1091,7 @@ document.getElementById("order-search-clear").addEventListener("click", () => {
   orderSearchBox.focus();
 });
 
+document.getElementById("order-search-deep").addEventListener("click", deepSearchOrders);
 document.getElementById("btn-reload-logs").addEventListener("click", () => loadLogs(true));
 document.getElementById("btn-add-product").addEventListener("click", () => openProductModal(null));
 document.getElementById("p-save").addEventListener("click", saveProduct);
