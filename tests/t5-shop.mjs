@@ -143,6 +143,17 @@ ok("ขึ้นข้อความเครดิตไม่พอ", $("buy-
 ok("ซ่อนบรรทัดเครดิตคงเหลือหลังซื้อ (ติดลบไม่มีความหมาย)",
   $("buy-after-row").classList.contains("hidden"));
 
+// เครดิตเข้าระหว่างที่กล่องเปิดค้างอยู่ (เพิ่งเติมเงินอีกแท็บ / แอดมินเพิ่งปรับให้)
+// กล่องต้องอัปเดตเอง ไม่ใช่ค้างที่ "เครดิตไม่พอ" จนลูกค้าคิดว่าเว็บพัง
+store.state.docs.set("users/" + QQ.user.uid, { ...store.raw("users/" + QQ.user.uid), credit: 5000 });
+fs2.notifyAll(); await tick(6);
+ok("เครดิตเข้าระหว่างเปิดกล่อง แล้วกล่องอัปเดตเอง",
+  $("buy-credit").textContent.includes("5,000"), $("buy-credit").textContent);
+ok("ปุ่มยืนยันกลับมากดได้เอง ไม่ต้องปิดแล้วเปิดใหม่", $("buy-confirm").disabled === false);
+ok("ข้อความเครดิตไม่พอหายไป", !$("buy-msg").textContent.includes("เครดิตไม่พอ"),
+  $("buy-msg").textContent);
+window.closePanel("buy-overlay");
+
 section("เซิร์ฟเวอร์ปฏิเสธหลังกดยืนยัน (ของหมดพอดี)");
 {
   store.state.docs.set("users/" + QQ.user.uid, { ...store.raw("users/" + QQ.user.uid), credit: 5000 });
