@@ -268,6 +268,21 @@ await allowed(() => fs2.getDoc(fs2.doc(db, "adminLogs", "log1")), "แอดม�
 await allowed(() => fs2.getDocs(fs2.query(fs2.collection(db, "adminLogs"),
   fs2.orderBy("at", "desc"), fs2.limit(50))), "แอดมินไล่อ่านบันทึกทั้งลิสต์ได้");
 
+section("ทุกป้ายในกราฟหลังบ้านต้องผ่านตัวหนีอักขระ");
+// กราฟแท่งใช้ชื่อสินค้าเป็นป้าย (แอดมินเป็นคนตั้ง) กราฟเส้นใช้วันที่
+// วันนี้ยังไม่มีค่าจากลูกค้าไหลเข้ามา แต่ต้องหนีอักขระไว้ก่อนเสมอ
+// ไม่งั้นวันหน้าถ้ามีใครเปลี่ยนที่มาของป้าย จะกลายเป็นช่องยัดสคริปต์แบบไม่มีใครทันสังเกต
+{
+  const fsm = await import("fs");
+  const pathm = await import("path");
+  const { SRC: ROOT2 } = await import("./harness.mjs");
+  const src = fsm.readFileSync(pathm.join(ROOT2, "admin.js"), "utf8");
+  const raw = [...src.matchAll(/${d.label}/g)];
+  ok("ไม่มีป้ายกราฟที่ใส่ตรงๆ โดยไม่หนีอักขระ", raw.length === 0, "เหลือ " + raw.length + " จุด");
+  ok("กราฟแท่งหนีอักขระป้าย", /esc\(label\)/.test(src));
+  ok("กราฟเส้นหนีอักขระป้าย", /esc\(d\.label\)/.test(src));
+}
+
 section("สคริปต์จากเว็บนอกต้องตรึงเวอร์ชัน + ตรวจลายเซ็นไฟล์");
 {
   // เว็บนี้รับเงินจริง ถ้า CDN ถูกแฮกแล้วสลับไฟล์สคริปต์

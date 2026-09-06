@@ -260,7 +260,7 @@ function lineChart(box, data, { color, format }) {
   const area = `${path} L${x(data.length - 1).toFixed(1)},${P.t + ih} L${x(0).toFixed(1)},${P.t + ih} Z`;
   const step = Math.max(1, Math.ceil(data.length / 6));
   const xLabels = data.map((d, i) => (i % step === 0 || i === data.length - 1)
-    ? `<text class="axis" x="${x(i)}" y="${H - 8}" text-anchor="middle">${d.label}</text>` : "").join("");
+    ? `<text class="axis" x="${x(i)}" y="${H - 8}" text-anchor="middle">${esc(d.label)}</text>` : "").join("");
   const dots = data.map((d, i) =>
     `<circle class="dot" cx="${x(i).toFixed(1)}" cy="${y(d.value).toFixed(1)}" r="4"/>`).join("");
 
@@ -292,7 +292,9 @@ function lineChart(box, data, { color, format }) {
     const d = data[i];
     cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i));
     cross.style.display = "";
-    tip.innerHTML = `<b>${d.label}</b><br>${format(d.value)}`;
+    // ตอนนี้ป้ายของกราฟเส้นเป็นวันที่ล้วน แต่หนีอักขระไว้ก่อนเสมอ
+    // ถ้าวันหน้ามีใครเอาชื่อสินค้า/ชื่อลูกค้ามาเป็นป้าย จะได้ไม่กลายเป็นช่องยัดสคริปต์เงียบๆ
+    tip.innerHTML = `<b>${esc(d.label)}</b><br>${format(d.value)}`;
     tip.style.display = "block";
     tip.style.left = Math.min(Math.max((x(i) / W) * r.width, 40), r.width - 40) + "px";
     tip.style.top = ((y(d.value) / H) * r.height - 12) + "px";
