@@ -70,6 +70,27 @@ for (const page of pages) {
 ok("ตรวจครบทุกหน้า (" + pages.length + " หน้า)", pages.length >= 6, String(pages.length));
 ok("ไม่มี data-i18n ที่ไม่มีคำแปล", missingUsed.length === 0, missingUsed.slice(0, 5).join(" · "));
 
+section("ทุกคีย์ที่ JS เรียกใช้ ต้องมีคำแปลจริงทั้งสองภาษา");
+// คีย์ที่พิมพ์ผิดจะไม่พัง แต่จะโชว์ชื่อคีย์ดิบให้ผู้ใช้เห็น (t คืนคีย์กลับมาถ้าไม่เจอ)
+// เป็นบั๊กที่ตาคนมองข้ามง่ายที่สุด เพราะหน้าเว็บยังทำงานได้ปกติ
+// ตรวจเฉพาะที่เขียนคีย์ตรงๆ — ที่ประกอบชื่อคีย์จากตัวแปร (เช่น t("st_" + status)) ตรวจแบบนี้ไม่ได้
+{
+  const jsFiles = fs.readdirSync(SRC).filter(f => f.endsWith(".js") && f !== "i18n.js");
+  const missing = [];
+  for (const f of jsFiles) {
+    const code = fs.readFileSync(path.join(SRC, f), "utf8");
+    for (const m of code.matchAll(/\btv?\("([a-zA-Z0-9_.]+)"\s*[),]/g)) {
+      const key = m[1];
+      // คีย์ที่ถอยไปใช้เมื่อไม่มีคำแปล (ตั้งใจให้ไม่มีอยู่จริงก็ได้) ข้ามไป
+      if (!key) continue;
+      if (!(key in I18N.th) || !(key in I18N.en)) {
+        missing.push(f + ": " + key + (key in I18N.th ? " (ขาดอังกฤษ)" : key in I18N.en ? " (ขาดไทย)" : " (ไม่มีทั้งคู่)"));
+      }
+    }
+  }
+  ok("ไม่มีคีย์ที่เรียกใช้แล้วไม่มีคำแปล", missing.length === 0, missing.slice(0, 6).join(" | "));
+}
+
 section("เบราว์เซอร์ที่ปิดการเก็บข้อมูลเว็บ (โหมดส่วนตัว/บล็อกคุกกี้)");
 {
   // เครื่องเหล่านี้จะ "โยนข้อผิดพลาด" ตอนแตะ localStorage ไม่ใช่แค่คืนค่าว่าง

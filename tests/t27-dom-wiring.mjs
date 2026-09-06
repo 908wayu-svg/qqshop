@@ -69,6 +69,34 @@ for (const attr of ["data-buy", "data-edit", "data-act", "data-slip", "data-cat"
   if (drawn) ok("ปุ่มที่ใช้ " + attr + " มีตัวรับคลิก", handled);
 }
 
+section("ทุกค่าใน data-act ต้องมีคนรับไปทำงานจริง");
+// ตัวรับคลิกเป็นก้อน if/else ยาวๆ เทียบ act === "ชื่อ"
+// ถ้าพิมพ์ชื่อไม่ตรงกันสักตัว ปุ่มนั้นจะกดแล้วเงียบสนิท ไม่มี error ให้เห็น
+{
+  const drawn = new Set();
+  for (const m of allCode.matchAll(/data-act="([a-z-]+)"/g)) drawn.add(m[1]);
+  // บางปุ่มประกอบชื่อจากตัวแปร (เช่น "hide-" ต่อด้วยชนิดของรายการ)
+  // ดึงชื่อเต็มไม่ได้ จึงเก็บส่วนหน้าไว้เทียบแบบ "ขึ้นต้นด้วย" แทน
+  const prefixes = [...allCode.matchAll(/data-act="([a-z-]+)-\${/g)].map(m => m[1]);
+
+  const handled = new Set();
+  for (const m of allCode.matchAll(/act === "([a-z-]+)"/g)) handled.add(m[1]);
+
+  const orphans = [...drawn].filter(v => !handled.has(v)
+    && !prefixes.some(pre => v.startsWith(pre + "-")));
+  ok("ไม่มีปุ่ม data-act ที่ไม่มีใครรับ", orphans.length === 0, orphans.join(", "));
+
+  // ทางกลับกัน: โค้ดที่รอรับชื่อซึ่งไม่มีใครวาดแล้ว = โค้ดตาย ลบทิ้งได้
+  // บางปุ่มวาดผ่านตัวช่วย (เช่น btn("approve-order", ...)) จึงไม่โผล่เป็น data-act ตรงๆ
+  // ถือว่า "ยังมีคนวาด" ถ้าชื่อนั้นถูกเขียนเป็นสตริงที่อื่นในโค้ดด้วย ไม่ใช่แค่ในตัวรับคลิก
+  const usedElsewhere = v =>
+    allCode.split(JSON.stringify(v)).length - 1 > 1;
+  const deadArms = [...handled].filter(v => !drawn.has(v)
+    && !prefixes.some(pre => v.startsWith(pre + "-"))
+    && !usedElsewhere(v));
+  ok("ไม่มีโค้ดรับปุ่มที่ไม่มีอยู่แล้ว", deadArms.length === 0, deadArms.join(", "));
+}
+
 section("ป้ายกำกับต้องผูกกับช่องกรอก (โปรแกรมอ่านหน้าจอ)");
 // ถ้าป้ายไม่ได้ผูกกับช่อง คนที่ใช้โปรแกรมอ่านหน้าจอจะได้ยินแค่ "ช่องว่าง"
 // ไม่รู้ว่าต้องกรอกอะไร — หน้าเข้าสู่ระบบกับหน้าเติมเงินสำคัญที่สุด

@@ -1221,6 +1221,10 @@ async function adminSetHidden(token, admin, col, body) {
         fields: fsFields({ hiddenAt: hidden ? new Date() : null }),
       },
       updateMask: { fieldPaths: ["hiddenAt"] },
+      // ต้องมีเอกสารอยู่จริงตอนเขียน — คำสั่ง update ของ Firestore "สร้างให้" ถ้าไม่มี
+      // ถ้ามีใครลบเอกสารทิ้งหลังเราอ่านไปแล้ว จะได้ซากเอกสารที่มีแต่ฟิลด์ hiddenAt โผล่ในฐานข้อมูล
+      // (งานนี้ไม่ได้ใช้ transaction เพราะไม่มีการอ่าน-คำนวณ-เขียนที่ต้องล็อก แค่กันเคสนี้ก็พอ)
+      currentDocument: { exists: true },
     },
     auditWrite(admin, (col === "orders" ? "order" : "topup") + ".hide",
       { [col === "orders" ? "orderId" : "topupId"]: id, targetUid: str(d.uid), hidden }),
@@ -1249,6 +1253,9 @@ async function adminSetRole(token, env, admin, { uid, makeAdmin }) {
         {
           update: { name: docPath("users", uid), fields: fsFields({ role: "admin" }) },
           updateMask: { fieldPaths: ["role"] },
+          // เอกสารสมาชิกถูกลบระหว่างทางได้ ถ้าไม่กันไว้จะได้เอกสารซากที่มีแต่ role: admin
+          // = บัญชีที่ไม่มีข้อมูลอะไรเลยแต่เป็นแอดมิน
+          currentDocument: { exists: true },
         },
         auditWrite(admin, "role.grant", { targetUid: uid, targetEmail: str(target.email) }),
       ]);
@@ -1264,6 +1271,7 @@ async function adminSetRole(token, env, admin, { uid, makeAdmin }) {
       {
         update: { name: docPath("users", uid), fields: fsFields({ role: "member" }) },
         updateMask: { fieldPaths: ["role"] },
+        currentDocument: { exists: true },
       },
       auditWrite(admin, "role.revoke", { targetUid: uid, targetEmail: str(target.email) }),
     ]);

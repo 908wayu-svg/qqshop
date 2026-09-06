@@ -33,6 +33,9 @@ let FAIL_COMMIT = 0;
 // เพราะระหว่างทางมีคำสั่งเขียนของตัวนับ rate limit แทรกอยู่ด้วย)
 let FAIL_COMMIT_PATH = null;
 const failCommitFor = p => { FAIL_COMMIT_PATH = p; };
+// จำลองการแข่งกัน: มีคนลบเอกสารทิ้งทันทีหลังเซิร์ฟเวอร์อ่านค่าไปแล้ว
+let DELETE_AFTER_READ = null;
+const deleteAfterRead = p => { DELETE_AFTER_READ = p; };
 
 globalThis.fetch = async (url, opt = {}) => {
   url = String(url);
@@ -83,10 +86,16 @@ globalThis.fetch = async (url, opt = {}) => {
     return J(rows.map(([k, v]) => ({ document: { name: P + k, fields: v } })));
   }
   if (url.includes(":batchGet")) {
-    return J(body.documents.map(d => {
+    const out = J(body.documents.map(d => {
       const key = short(d);
       return DOCS.has(key) ? { found: { name: P + key, fields: DOCS.get(key) } } : { missing: P + key };
     }));
+    // จำลอง "มีคนลบเอกสารทิ้งทันทีหลังเราอ่านไปแล้ว" — โค้ดที่ไม่กันไว้จะเขียนซากเอกสารกลับเข้าไป
+    if (DELETE_AFTER_READ && body.documents.some(d => short(d) === DELETE_AFTER_READ)) {
+      DOCS.delete(DELETE_AFTER_READ);
+      DELETE_AFTER_READ = null;
+    }
+    return out;
   }
   if (url.includes(":commit")) {
     if (FAIL_COMMIT > 0) { FAIL_COMMIT--; return J({ error: { message: "boom", status: "UNAVAILABLE" } }); }
@@ -111,6 +120,9 @@ globalThis.fetch = async (url, opt = {}) => {
       const key = short(w.update.name);
       const pre = w.currentDocument;
       if (pre?.exists === false && DOCS.has(key)) return J({ error: { message: "exists", status: "FAILED_PRECONDITION" } });
+      // Firestore ปฏิเสธเมื่อสั่ง "ต้องมีอยู่แล้ว" แต่เอกสารถูกลบไปก่อน
+      // (ถ้าไม่มีเงื่อนไขนี้ คำสั่ง update จะสร้างเอกสารใหม่ให้เงียบๆ)
+      if (pre?.exists === true && !DOCS.has(key)) return J({ error: { message: "missing", status: "FAILED_PRECONDITION" } });
       if (pre?.updateTime && times.get(key) !== pre.updateTime) {
         return J({ error: { message: "stale", status: "FAILED_PRECONDITION" } });
       }
@@ -761,6 +773,57 @@ section("ลูกค้าแก้ข้อมูลไอดีเกมข�
     (await call("/order/edit-info", { idToken: "token:" + CU, orderId: OID,
       items: [{ index: 0, gameLogin: "too_late" }] })).body.error === "EDIT_LOCKED");
   ok("ค่ายังเป็นค่าล่าสุดก่อนล็อก", strOf(itemsOf().gameLogin) === "still_ok");
+}
+
+section("ซ่อน/เลิกซ่อนรายการในประวัติของลูกค้า");
+{
+  const A = "adminHide";
+  CLAIMS.set(A, { admin: true });
+  DOCS.set("users/" + A, F({ email: "admin@x.com", role: "admin", credit: 0 }));
+  DOCS.set("users/cHide", F({ email: "c@x.com", role: "member", credit: 0 }));
+  DOCS.set("orders/oDone", F({ uid: "cHide", total: 100, status: "completed", paid: true }));
+  DOCS.set("orders/oOpen", F({ uid: "cHide", total: 100, status: "pending", paid: true }));
+  DOCS.set("topups/tpDone", F({ uid: "cHide", amount: 50, status: "approved" }));
+
+  let r = await call("/admin/order/hide", { idToken: "token:" + A, orderId: "oDone", hidden: true });
+  ok("ซ่อนออเดอร์ที่จบแล้วได้", r.body.ok === true, JSON.stringify(r.body));
+  ok("ตั้ง hiddenAt ให้จริง", !!DOCS.get("orders/oDone").hiddenAt);
+  ok("ไม่ไปแตะฟิลด์อื่น (ยอดเงิน/สถานะยังอยู่)",
+    DOCS.get("orders/oDone").total?.integerValue === "100"
+    && DOCS.get("orders/oDone").status?.stringValue === "completed");
+
+  r = await call("/admin/order/hide", { idToken: "token:" + A, orderId: "oDone", hidden: false });
+  ok("เลิกซ่อนได้", r.body.ok === true && DOCS.get("orders/oDone").hiddenAt?.nullValue === null);
+
+  r = await call("/admin/order/hide", { idToken: "token:" + A, orderId: "oOpen", hidden: true });
+  ok("ซ่อนออเดอร์ที่ลูกค้ายังรออยู่ไม่ได้", r.body.error === "STILL_OPEN", JSON.stringify(r.body));
+  ok("ออเดอร์นั้นไม่ถูกแตะเลย", DOCS.get("orders/oOpen").hiddenAt === undefined);
+
+  r = await call("/admin/topup/hide", { idToken: "token:" + A, topupId: "tpDone", hidden: true });
+  ok("ซ่อนรายการเติมเงินที่อนุมัติแล้วได้", r.body.ok === true && !!DOCS.get("topups/tpDone").hiddenAt);
+
+  r = await call("/admin/order/hide", { idToken: "token:" + A, orderId: "ไม่มีจริง", hidden: true });
+  ok("รหัสผิดรูปแบบ = BAD_REQUEST", r.body.error === "BAD_REQUEST", JSON.stringify(r.body));
+  r = await call("/admin/order/hide", { idToken: "token:" + A, orderId: "oNope", hidden: true });
+  ok("ไม่มีออเดอร์นั้น = NOT_FOUND", r.body.error === "NOT_FOUND", JSON.stringify(r.body));
+  r = await call("/admin/order/hide", { idToken: "token:" + A, orderId: "oDone", hidden: "yes" });
+  ok("hidden ต้องเป็น true/false เท่านั้น", r.body.error === "BAD_REQUEST", JSON.stringify(r.body));
+
+  // มีคนลบออเดอร์ทิ้งหลังเซิร์ฟเวอร์อ่านค่าไปแล้ว
+  // คำสั่ง update ของ Firestore จะ "สร้างให้" ถ้าไม่กันไว้ = ได้ซากเอกสารที่มีแต่ hiddenAt
+  DOCS.set("orders/oRace", F({ uid: "cHide", total: 100, status: "completed", paid: true }));
+  deleteAfterRead("orders/oRace");
+  r = await call("/admin/order/hide", { idToken: "token:" + A, orderId: "oRace", hidden: true });
+  ok("ออเดอร์ที่ถูกลบระหว่างทาง ไม่ฟื้นกลับมาเป็นซาก", !DOCS.has("orders/oRace"),
+    JSON.stringify(DOCS.get("orders/oRace")));
+  ok("และตอบว่าไม่สำเร็จ ไม่ใช่บอกว่าซ่อนแล้ว", r.body.ok !== true, JSON.stringify(r.body));
+
+  // เอกสารสมาชิกก็เหมือนกัน — ถ้าฟื้นกลับมาจะได้บัญชีเปล่าที่เป็นแอดมิน
+  DOCS.set("users/uRace", F({ email: "r@x.com", role: "member", credit: 0 }));
+  deleteAfterRead("users/uRace");
+  r = await call("/admin/role", { idToken: "token:" + A, uid: "uRace", makeAdmin: true });
+  ok("สมาชิกที่ถูกลบระหว่างตั้งสิทธิ์ ไม่ฟื้นกลับมาเป็นแอดมินเปล่าๆ", !DOCS.has("users/uRace"),
+    JSON.stringify(DOCS.get("users/uRace")));
 }
 
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
