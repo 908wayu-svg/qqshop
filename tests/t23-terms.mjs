@@ -106,6 +106,44 @@ section("เนื้อหาภาษาอังกฤษต้องคร�
     block("th").querySelectorAll(".card").length + " vs " + block("en").querySelectorAll(".card").length);
 }
 
+section("ข้อย่อยในแต่ละหัวข้อ ต้องมีเท่ากันทั้งสองภาษา");
+// หน้านี้เป็นเงื่อนไขที่ผูกพันกับลูกค้าจริง ถ้าฝั่งไทยมีข้อหนึ่งแต่ฝั่งอังกฤษไม่มี
+// ลูกค้าที่อ่านคนละภาษาจะเข้าใจเงื่อนไขไม่ตรงกัน แล้วกลายเป็นเรื่องกันตอนขอคืนเงิน
+// (นับจำนวนการ์ดเท่ากันอย่างเดียวไม่พอ ต้องดูข้อย่อยในแต่ละการ์ดด้วย)
+{
+  const thCards = [...block("th").querySelectorAll(".card")];
+  const enCards = [...block("en").querySelectorAll(".card")];
+  const mismatch = [];
+  thCards.forEach((c, i) => {
+    const nTh = c.querySelectorAll("li").length;
+    const nEn = enCards[i]?.querySelectorAll("li").length ?? -1;
+    if (nTh !== nEn) {
+      mismatch.push((c.querySelector("h2, h3")?.textContent || ("การ์ดที่ " + (i + 1))).trim()
+        + " (ไทย " + nTh + " / อังกฤษ " + nEn + ")");
+    }
+  });
+  ok("ทุกหัวข้อมีข้อย่อยเท่ากันทั้งสองภาษา", mismatch.length === 0, mismatch.join(" · "));
+
+  // ตัวเลขที่ปรากฏในเงื่อนไข (นาที/วัน/บาท) ต้องตรงกันทั้งสองภาษาด้วย
+  // ยกเว้นปี: ฝั่งไทยใช้ พ.ศ. ฝั่งอังกฤษใช้ ค.ศ. ซึ่งต่างกัน 543 อยู่แล้วโดยตั้งใจ
+  const nums = t => [...t.matchAll(/\d+(?:[.,]\d+)?/g)].map(m => m[0]).sort();
+  const thN = nums(textOf("th"));
+  const enN = nums(textOf("en"));
+  const isYearPair = (x, other) => other.some(y =>
+    Number(x) - Number(y) === 543 || Number(y) - Number(x) === 543);
+  const onlyTh = thN.filter(x => !enN.includes(x) && !isYearPair(x, enN));
+  const onlyEn = enN.filter(x => !thN.includes(x) && !isYearPair(x, thN));
+  ok("ตัวเลขในเงื่อนไขตรงกันทั้งสองภาษา", onlyTh.length === 0 && onlyEn.length === 0,
+    "เฉพาะไทย: " + onlyTh.join(",") + " · เฉพาะอังกฤษ: " + onlyEn.join(","));
+
+  // และปีต้องเป็นคู่ พ.ศ./ค.ศ. ที่ตรงกันจริงๆ ไม่ใช่ลืมอัปเดตฝั่งใดฝั่งหนึ่ง
+  const yTh = thN.filter(x => Number(x) > 2400 && Number(x) < 2700);
+  const yEn = enN.filter(x => Number(x) > 1900 && Number(x) < 2200);
+  ok("ปีที่แก้ไขล่าสุดตรงกันทั้งสองภาษา (พ.ศ. = ค.ศ. + 543)",
+    yTh.length > 0 && yEn.length > 0 && yTh.every(x => isYearPair(x, yEn)),
+    "ไทย: " + yTh.join(",") + " · อังกฤษ: " + yEn.join(","));
+}
+
 section("ปุ่มติดต่อแอดมินดึงลิงก์จาก shop-config");
 for (const id of ["policy-contact-th", "policy-contact-en"]) {
   const a = $(id);
