@@ -293,6 +293,9 @@ const hideTopup = document.querySelector('#table-topups [data-act="hide-topup"][
 ok("มีปุ่มซ่อนในแถวเติมเงินที่อนุมัติแล้ว", !!hideTopup);
 click(hideTopup);
 await tick(10);
+// เติมเงินที่อนุมัติแล้ว = เครดิตเข้ากระเป๋าไปแล้ว รายการนี้คือที่มาชิ้นเดียวที่ลูกค้ามี
+ok("เตือนว่ารายการนี้อธิบายที่มาของเครดิต", lastConfirm.includes("หาที่มาไม่เจอ"),
+  lastConfirm.slice(0, 60));
 ok("ซ่อนรายการเติมเงินได้", !!store.raw("topups/tp111").hiddenAt);
 ok("ยอดเงินของรายการเติมไม่ถูกแตะ", store.raw("topups/tp111").amount === 500);
 
@@ -322,8 +325,11 @@ ok("ออเดอร์ที่ยกเลิกแล้ว ยังซ่
 globalThis.__confirm = false;
 click(document.querySelector('#table-orders [data-act="hide-order"][data-id="old111222333"]'));
 await tick(4);
-ok("ออเดอร์ที่ไม่มีรหัสส่งมอบ ใช้คำถามธรรมดา",
-  !lastConfirm.includes("เปิดดูรหัสของตัวเองไม่ได้อีก") && lastConfirm.includes("ซ่อนรายการนี้"),
+// ออเดอร์ที่ยกเลิกแล้ว เครดิตถูกคืนไปแล้ว จึงไม่ต้องเตือนเรื่องเงินหาย ใช้คำถามธรรมดา
+ok("ออเดอร์ที่ยกเลิกแล้ว ใช้คำถามธรรมดา",
+  !lastConfirm.includes("เปิดดูรหัสของตัวเองไม่ได้อีก")
+  && !lastConfirm.includes("หาที่มาไม่เจอ")
+  && lastConfirm.includes("ซ่อนรายการนี้"),
   lastConfirm.slice(0, 50));
 globalThis.__confirm = true;
 

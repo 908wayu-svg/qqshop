@@ -542,6 +542,11 @@ const orderNo = id => String(id || "").slice(0, 8).toUpperCase();
 // ออเดอร์ที่คัดลอกไอดี/รหัสผ่านเข้าไปให้ลูกค้าแล้ว — ลูกค้าเปิดดูได้จากหน้าประวัติที่เดียว
 const hasDelivered = o => (o?.items || []).some(i => Array.isArray(i.delivered) && i.delivered.length);
 
+// รายการที่ "ขยับเครดิตจริง" — ซ่อนไปแล้วลูกค้าจะเห็นยอดเปลี่ยนโดยหาที่มาไม่เจอ
+// ออเดอร์ที่สำเร็จ = หักเครดิตไป · เติมเงินที่อนุมัติแล้ว = เครดิตเข้า (รวมที่แอดมินปรับให้เองด้วย)
+// ยกเลิกแล้วไม่นับ เพราะเครดิตถูกคืนไปแล้ว (และเซิร์ฟเวอร์เลิกซ่อนให้เองอยู่แล้ว)
+const movedMoney = x => DONE_STATES.includes(x?.status);
+
 const hiddenBadge = x => x?.hiddenAt ? `<br><small class="muted">🙈 ${t("hidden_badge")}</small>` : "";
 
 // ปุ่มซ่อนโผล่เฉพาะรายการที่จบแล้ว — ของที่ลูกค้ายังรออยู่ต้องเห็นในหน้าตัวเองเสมอ
@@ -1363,15 +1368,22 @@ document.getElementById("dash").addEventListener("click", async e => {
         const hidden = act === "hide-order";
         // ออเดอร์ที่ส่งมอบไอดี/รหัสผ่านไปแล้ว ซ่อนไป = ลูกค้าเปิดดูของที่ซื้อไม่ได้อีก
         // ต้องเตือนให้ชัดกว่าปกติ ไม่ใช่ถามเหมือนรายการทั่วไป
-        const key = hidden
-          ? (hasDelivered(ORDERS.find(o => o.id === id)) ? "confirm_hide_delivered" : "confirm_hide")
-          : "confirm_unhide";
+        const row = ORDERS.find(o => o.id === id) || DEEP_HITS.find(o => o.id === id);
+        const key = !hidden ? "confirm_unhide"
+          : hasDelivered(row) ? "confirm_hide_delivered"
+          : movedMoney(row) ? "confirm_hide_money"
+          : "confirm_hide";
         if (!confirm(t(key))) return;
         await QQ.setOrderHidden(id, hidden);
         await refreshAfter(() => patchRow(orderListOf(id), "orders", id));
       } else if (act === "hide-topup" || act === "unhide-topup") {
         const hidden = act === "hide-topup";
-        if (!confirm(t(hidden ? "confirm_hide" : "confirm_unhide"))) return;
+        // เติมเงินที่อนุมัติแล้ว = เครดิตเข้ากระเป๋าไปแล้ว รายการนี้คือที่มาชิ้นเดียวที่ลูกค้ามี
+        const tp = TOPUPS.find(x => x.id === id);
+        const key = !hidden ? "confirm_unhide"
+          : movedMoney(tp) ? "confirm_hide_money"
+          : "confirm_hide";
+        if (!confirm(t(key))) return;
         await QQ.setTopupHidden(id, hidden);
         await refreshAfter(() => patchRow(TOPUPS, "topups", id));
       } else if (act === "member-history") {
