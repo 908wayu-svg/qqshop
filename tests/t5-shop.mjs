@@ -169,6 +169,35 @@ section("เซิร์ฟเวอร์ปฏิเสธหลังกด�
   ok("ปุ่มยืนยันกลับมากดได้", $("buy-confirm").disabled === false);
 }
 
+section("สินค้าหมดระหว่างที่กล่องสั่งซื้อเปิดค้างอยู่");
+// เกิดจริงเมื่อคนอื่นซื้อตัดหน้าไปพอดี แล้วหน้าร้านดึงสินค้ามาใหม่ (เกิดหลังกดยืนยันไม่ผ่าน)
+// จำนวนต้องไม่ถูกบีบลงเป็น 0 ไม่งั้นยอดรวมกลายเป็น ฿0 คำเตือนหาย และปุ่มยืนยันกลับมากดได้
+{
+  store.put("products/pStock", { name: "ของชิ้นสุดท้าย", price: 250, stock: 1, active: true });
+  await app.loadProducts();
+  app.openBuy("pStock");
+  await tick2();
+  ok("เปิดกล่องได้ตอนยังมีของ", $("buy-qty").value === "1");
+
+  // คนอื่นซื้อไปพอดี
+  store.put("products/pStock", { ...store.raw("products/pStock"), stock: 0 });
+  await app.loadProducts();
+  await tick2();
+
+  clickEl($("buy-plus"));
+  ok("กดเพิ่มจำนวนแล้วไม่กลายเป็น 0", $("buy-qty").value === "1", $("buy-qty").value);
+  clickEl($("buy-minus"));
+  ok("กดลดจำนวนแล้วก็ยังไม่เป็น 0", $("buy-qty").value === "1", $("buy-qty").value);
+  ok("ยอดรวมไม่กลายเป็น ฿0", !/^฿?0(\.00)?$/.test($("buy-total").textContent.trim()),
+    $("buy-total").textContent);
+  ok("ยังเตือนว่าของไม่พอ", $("buy-msg").textContent.includes("ไม่พอ"), $("buy-msg").textContent);
+  ok("ปุ่มยืนยันกดไม่ได้", $("buy-confirm").disabled === true);
+
+  window.closePanel("buy-overlay");
+  store.state.docs.delete("products/pStock");
+  await app.loadProducts();
+}
+
 section("สั่งซื้อสินค้าสต๊อกไม่จำกัด (ของเติมเกม)");
 {
   await app.loadProducts();

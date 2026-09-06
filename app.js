@@ -231,7 +231,11 @@ function setQty(n) {
   const p = findProduct(BUY?.id);
   if (!p) return;
   const max = maxQtyOf(p);
-  const v = Math.min(max, Math.max(1, Math.floor(Number(n) || 1)));
+  // ต้องบีบให้ "ไม่ต่ำกว่า 1" เป็นขั้นสุดท้ายเสมอ
+  // ถ้าเอา min ไว้ท้าย พอสินค้าหมดระหว่างที่กล่องเปิดค้างอยู่ (max = 0) จำนวนจะกลายเป็น 0
+  // แล้วยอดรวมเป็น ฿0 · คำเตือน "ของไม่พอ" หายไป (เพราะ 0 ไม่ได้มากกว่า 0) · ปุ่มยืนยันกลับมากดได้
+  // เกิดได้จริงตอนคนอื่นซื้อตัดหน้าไปพอดี แล้วลูกค้ากดปุ่มเพิ่ม/ลดจำนวนต่อ
+  const v = Math.max(1, Math.min(max, Math.floor(Number(n) || 1)));
   BUY.qty = v;
   document.getElementById("buy-qty").value = String(v);
   syncBuy();
