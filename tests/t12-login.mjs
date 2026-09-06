@@ -14,7 +14,9 @@ const $ = id => document.getElementById(id);
 
 // สคริปต์ในหน้า login เป็นสคริปต์ธรรมดาฝังในไฟล์ HTML
 const html = fs.readFileSync(SRC + "/login.html", "utf8");
-const inline = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/)[1];
+// เอาเฉพาะสคริปต์ก้อนสุดท้ายก่อน </body> (หน้านี้มีสคริปต์ตั้งโหมดมืดอยู่ใน <head> ด้วย)
+// เงื่อนไข (?!<\/script>) กันไม่ให้จับข้ามก้อนไปรวมกับ HTML ที่คั่นอยู่ตรงกลาง
+const inline = html.match(/<script>((?:(?!<\/script>)[\s\S])*)<\/script>\s*<\/body>/)[1];
 // jsdom เปลี่ยนหน้าไม่ได้ จึงดักเฉพาะบรรทัดที่พาไปหน้าถัดไป (ที่เหลือเป็นโค้ดจริงทั้งหมด)
 const patched = inline.replace(
   `location.href = NEXT_ALLOWED.includes(next) ? next : "index.html";`,
