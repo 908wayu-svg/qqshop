@@ -75,6 +75,14 @@ export async function getDocs(q) {
     if (!own) throw new PermissionError(col, "list");
   }
 
+  // จำลอง "ยังไม่มี composite index" — คำสั่งที่มีทั้ง where และ orderBy จะถูกปฏิเสธ
+  // (เกิดจริงตอน index เพิ่ง deploy ยังสร้างไม่เสร็จ) โค้ดต้องถอย orderBy ออกแล้วเรียงเอง
+  if (state.failOrderedQueries && wheres.length && orders.length) {
+    const e = new Error("The query requires an index.");
+    e.code = "failed-precondition";
+    throw e;
+  }
+
   let rows = [...state.docs.entries()]
     .filter(([p]) => p.startsWith(col + "/") && p.slice(col.length + 1).indexOf("/") === -1)
     .map(([p, d]) => ({ path: p, id: p.split("/").pop(), d }));
@@ -101,7 +109,23 @@ export async function getDocs(q) {
   return { docs, size: docs.length, empty: !docs.length, forEach: f => docs.forEach(f) };
 }
 
+// Firestore ตัวจริงปฏิเสธค่า undefined (ต่างจาก null ที่เก็บได้)
+// ถ้าตัวจำลองรับไว้เฉยๆ โค้ดที่เผลอส่ง undefined จะผ่านเทสแต่พังตอนใช้งานจริง
+function assertNoUndefined(data, path = "") {
+  if (data === undefined) throw Object.assign(
+    new Error("Unsupported field value: undefined (" + (path || "ทั้งเอกสาร") + ")"),
+    { code: "invalid-argument" });
+  if (data === null || typeof data !== "object") return;
+  if (data instanceof Timestamp || data instanceof Date || typeof data === "symbol") return;
+  if (Array.isArray(data)) return data.forEach((v, i) => assertNoUndefined(v, path + "[" + i + "]"));
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v === "symbol") continue;          // serverTimestamp() / deleteField()
+    assertNoUndefined(v, path ? path + "." + k : k);
+  }
+}
+
 function write(op, ref, data, { merge = false } = {}) {
+  if (op !== "delete") assertNoUndefined(data);
   const before = state.docs.get(ref.__path);
   let after;
   if (op === "delete") after = undefined;

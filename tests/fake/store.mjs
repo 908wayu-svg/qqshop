@@ -14,11 +14,15 @@ export const state = {
   claims: new Map(),        // uid -> custom claims (เช่น { admin: true })
   clock: Date.now(),
   reads: 0, writes: 0, denied: [], failReads: false,
+  // จำลอง "ยังไม่มี composite index" — Firestore จะปฏิเสธคำสั่งที่มีทั้ง where และ orderBy
+  // เกิดจริงตอน deploy index ใหม่ๆ (ยังสร้างไม่เสร็จ) หรือมีคนเผลอลบ index ทิ้ง
+  failOrderedQueries: false,
 };
 
 export const reset = () => {
   state.docs = new Map(); state.user = null; state.claims = new Map();
   state.reads = 0; state.writes = 0; state.denied = []; state.failReads = false;
+  state.failOrderedQueries = false;
 };
 
 // ตั้ง custom claim ให้บัญชีหนึ่ง (แทนการเรียก /admin/role ที่เซิร์ฟเวอร์จริง)

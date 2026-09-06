@@ -163,29 +163,30 @@
       <div id="p-image-preview" class="img-preview"></div>
       <div>
         <input type="file" id="p-image" accept="image/*">
-        <input type="text" id="p-emoji" maxlength="4" placeholder="🛍️" class="emoji-input">
+        <input type="text" id="p-emoji" maxlength="4" placeholder="🛍️" class="emoji-input"
+               data-i18n-title="product_emoji" title="ไอคอนแทนรูป (ใส่อีโมจิ)">
       </div>
     </div>
 
-    <label data-i18n="product_name">ชื่อสินค้า</label>
+    <label for="p-name" data-i18n="product_name">ชื่อสินค้า</label>
     <input type="text" id="p-name">
-    <label data-i18n="product_name_en">ชื่อสินค้า (อังกฤษ)</label>
+    <label for="p-name-en" data-i18n="product_name_en">ชื่อสินค้า (อังกฤษ)</label>
     <input type="text" id="p-name-en">
-    <label data-i18n="product_desc">คำอธิบาย</label>
+    <label for="p-desc" data-i18n="product_desc">คำอธิบาย</label>
     <input type="text" id="p-desc">
-    <label data-i18n="product_desc_en">คำอธิบาย (อังกฤษ)</label>
+    <label for="p-desc-en" data-i18n="product_desc_en">คำอธิบาย (อังกฤษ)</label>
     <input type="text" id="p-desc-en">
 
-    <label data-i18n="product_category">หมวดหมู่</label>
+    <label for="p-category" data-i18n="product_category">หมวดหมู่</label>
     <select id="p-category"></select>
 
     <div class="two-col">
       <div>
-        <label data-i18n="price">ราคา</label>
+        <label for="p-price" data-i18n="price">ราคา</label>
         <input type="number" id="p-price" min="0" step="1">
       </div>
       <div id="p-stock-box">
-        <label data-i18n="stock">สต๊อก</label>
+        <label for="p-stock" data-i18n="stock">สต๊อก</label>
         <input type="number" id="p-stock" min="0" step="1">
       </div>
     </div>
@@ -224,7 +225,7 @@
     <button class="btn-close" onclick="closePanel('credit-overlay')">×</button>
     <h2 data-i18n="adjust_credit">ปรับเครดิต</h2>
     <p class="hint" id="credit-target"></p>
-    <label data-i18n="credit_amount">จำนวนเครดิต</label>
+    <label for="c-amount" data-i18n="credit_amount">จำนวนเครดิต</label>
     <div class="amount-row">
       <button type="button" class="btn-small" data-amt="-100">−100</button>
       <button type="button" class="btn-small" data-amt="-10">−10</button>
@@ -234,7 +235,7 @@
     </div>
     <div class="hint" data-i18n="adjust_credit_hint">ใส่จำนวนบวกเพื่อเพิ่ม ใส่จำนวนติดลบเพื่อหักคืน เช่น -50</div>
     <div class="hint" id="c-preview"></div>
-    <label data-i18n="note_optional">หมายเหตุ (ไม่บังคับ)</label>
+    <label for="c-note" data-i18n="note_optional">หมายเหตุ (ไม่บังคับ)</label>
     <input type="text" id="c-note">
     <div id="c-msg" class="msg"></div>
     <button class="btn-primary" id="c-save" data-i18n="save">บันทึก</button>

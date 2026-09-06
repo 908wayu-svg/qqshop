@@ -77,5 +77,31 @@ click(openable[0]);
 await tick(2);
 ok("ไม่มีสคริปต์ถูกฝังในกล่องรหัส", window.__pwned === undefined && !$("cred-list").querySelector("script"));
 
+section("ตอนที่ Firestore ยังไม่มี index (เพิ่ง deploy / โดนลบ)");
+{
+  // คำสั่งที่มีทั้ง where และ orderBy จะถูกปฏิเสธจนกว่า index จะสร้างเสร็จ
+  // ประวัติของลูกค้าต้องยังเปิดดูได้ ไม่ใช่ขึ้นหน้าว่าง — auth.js มีทางสำรองไว้แล้ว
+  // แต่ก่อนหน้านี้ไม่เคยมีเทสยืนยันว่าทางสำรองนั้นทำงานจริง
+  store.state.failOrderedQueries = true;
+  let crashed = null, orders = [];
+  try { orders = await QQ.fetchMyOrders(); } catch (e) { crashed = e.code || e.message; }
+  store.state.failOrderedQueries = false;
+
+  ok("ยังดึงประวัติได้ ไม่ล่ม", crashed === null, String(crashed));
+  ok("ได้ครบทุกรายการของตัวเอง", orders.length === 4, "ได้ " + orders.length);
+  ok("ยังเรียงใหม่ไปเก่าถูกต้อง (เรียงเองในเครื่อง)",
+    orders[0].id === "o4" && orders[orders.length - 1].id === "o1", orders.map(o => o.id).join(","));
+  ok("ไม่มีของคนอื่นหลุดมา", orders.every(o => o.uid === UID));
+
+  // ฝั่งเติมเงินก็ต้องรอดเหมือนกัน
+  store.put("topups/tp1", { uid: UID, amount: 100, method: "bank", hasSlip: true,
+    status: "approved", createdAt: TS(3) });
+  store.state.failOrderedQueries = true;
+  let tCrashed = null, tops = [];
+  try { tops = await QQ.fetchMyTopups(); } catch (e) { tCrashed = e.code || e.message; }
+  store.state.failOrderedQueries = false;
+  ok("ประวัติเติมเงินก็ยังดูได้", tCrashed === null && tops.length === 1, String(tCrashed));
+}
+
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;

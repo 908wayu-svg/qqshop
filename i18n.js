@@ -249,7 +249,7 @@ const I18N = {
     customer_info_cleared: "ลบรหัสผ่านลูกค้าแล้ว",
 
     // จัดการสมาชิก
-    add_credit: "เพิ่มเครดิต", add_credit_to: "เพิ่มเครดิตให้", credit_amount: "จำนวนเครดิต",
+    add_credit: "เพิ่มเครดิต", add_credit_to: "เพิ่มเครดิตให้", credit_amount: "จำนวนเครดิต", product_emoji: "ไอคอนแทนรูป (ใส่อีโมจิ)",
     make_admin: "ตั้งเป็นแอดมิน", remove_admin: "ถอดสิทธิ์แอดมิน", cannot_demote_self: "ถอดสิทธิ์แอดมินของตัวเองไม่ได้",
     role_granted: "ตั้งเป็นแอดมินแล้ว (เจ้าตัวรีเฟรชหน้าเว็บแล้วใช้ได้ทันที)",
     role_revoked: "ถอดสิทธิ์แอดมินแล้ว มีผลทันที",
@@ -494,7 +494,7 @@ const I18N = {
     confirm_clear_customer_info: "Delete the customer's username and password from this order?\n\nUse this once the top-up is done, so passwords are not kept in the system (the game ID / UID stays as a record).",
     customer_info_cleared: "Customer password deleted",
 
-    add_credit: "Add credit", add_credit_to: "Add credit to", credit_amount: "Credit amount",
+    add_credit: "Add credit", add_credit_to: "Add credit to", credit_amount: "Credit amount", product_emoji: "Icon instead of a photo (emoji)",
     make_admin: "Make admin", remove_admin: "Remove admin", cannot_demote_self: "You can not remove your own admin rights",
     role_granted: "Admin rights granted — they take effect as soon as that person reloads",
     role_revoked: "Admin rights removed — effective immediately",

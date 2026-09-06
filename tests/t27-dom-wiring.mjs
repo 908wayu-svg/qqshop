@@ -69,5 +69,26 @@ for (const attr of ["data-add", "data-qty", "data-act", "data-slip", "data-cat",
   if (drawn) ok("ปุ่มที่ใช้ " + attr + " มีตัวรับคลิก", handled);
 }
 
+section("ป้ายกำกับต้องผูกกับช่องกรอก (โปรแกรมอ่านหน้าจอ)");
+// ถ้าป้ายไม่ได้ผูกกับช่อง คนที่ใช้โปรแกรมอ่านหน้าจอจะได้ยินแค่ "ช่องว่าง"
+// ไม่รู้ว่าต้องกรอกอะไร — หน้าเข้าสู่ระบบกับหน้าเติมเงินสำคัญที่สุด
+for (const h of htmls) {
+  const src = fs.readFileSync(path.join(SRC, h), "utf8");
+  const orphan = [];
+  // อ่านทั้งแท็ก (แอตทริบิวต์อาจอยู่คนละบรรทัด) แล้วดูว่ามีอะไรบอกชื่อช่องบ้าง
+  for (const m of src.matchAll(/<(?:input|select|textarea)\b[^>]*>/g)) {
+    const tag = m[0];
+    const idm = tag.match(/\bid="([^"]+)"/);
+    if (!idm) continue;
+    if (/type="(hidden|checkbox|radio|file)"/.test(tag)) continue;
+    const id = idm[1];
+    const hasLabel = src.includes(`for="${id}"`);
+    // placeholder/title/aria-label ก็อ่านออกเสียงได้ (ป้ายจริงดีที่สุด แต่พอใช้ได้)
+    const selfDescribed = /aria-label=|data-i18n-placeholder=|data-i18n-title=/.test(tag);
+    if (!hasLabel && !selfDescribed) orphan.push(id);
+  }
+  ok(h + " ช่องกรอกมีป้ายผูกครบ", orphan.length === 0, orphan.join(", "));
+}
+
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
