@@ -409,6 +409,7 @@ const looksLikeOrderNo = q => /^[a-z0-9]{4,40}$/.test(q);
 function renderSearchCount(found) {
   const box = document.getElementById("order-search-count");
   const deep = document.getElementById("order-search-deep");
+  if (!box || !deep) return;   // หน้าเวอร์ชันเก่าในแคช
   if (!ORDER_SEARCH) {
     box.classList.add("hidden"); box.textContent = "";
     deep.classList.add("hidden");
@@ -955,7 +956,9 @@ async function openMemberHistory(u) {
          <td data-label="${t("status")}">${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}${hiddenBadge(x)}</td>
        </tr>`).join("")}</tbody>`;
 
-  document.getElementById("member-overlay").classList.add("open");
+  const panel = document.getElementById("member-overlay");
+  if (!panel) { alert(t("please_refresh")); return; }   // หน้าเวอร์ชันเก่าในแคช
+  panel.classList.add("open");
 }
 
 // ---------- บันทึกการกระทำของแอดมิน ----------
@@ -1005,7 +1008,7 @@ const logText = l => [
 
 function renderLogs() {
   const el = document.getElementById("table-logs");
-  const countBox = document.getElementById("log-count");
+  const countBox = document.getElementById("log-count") || { textContent: "" };
   if (!LOGS) return;
   if (!LOGS.length) {
     countBox.textContent = "";
@@ -1052,6 +1055,8 @@ async function loadLogs(force = false) {
 
 function setMsg(id, text, kind = "error") {
   const el = document.getElementById(id);
+  // หน้าเวอร์ชันเก่าที่ค้างในแคชอาจยังไม่มีกล่องนี้ — ข้ามไป ห้ามพังทั้งหน้า
+  if (!el) return;
   el.textContent = text;
   el.className = "msg" + (text ? " show " + kind : "");
 }
@@ -1150,34 +1155,34 @@ wireFilter("topups-filter", v => { TOPUP_FILTER = v; renderTopups(); });
 document.getElementById("member-search").addEventListener("input", renderMembers);
 
 // ค้นหาออเดอร์ด้วยเลขที่คำสั่งซื้อที่ลูกค้าแจ้งมา (หรือชื่อ/อีเมล/ชื่อสินค้า)
-const orderSearchBox = document.getElementById("order-search");
+const orderSearchBox = document.getElementById("order-search") || document.createElement("input");
 orderSearchBox.addEventListener("input", () => {
   ORDER_SEARCH = normSearch(orderSearchBox.value);
   DEEP_HITS = [];   // เปลี่ยนคำค้นแล้ว ผลค้นลึกของคำเดิมใช้ไม่ได้
-  document.getElementById("order-search-clear").classList.toggle("hidden", !ORDER_SEARCH);
+  document.getElementById("order-search-clear")?.classList.toggle("hidden", !ORDER_SEARCH);
   renderOrders();
 });
 function clearOrderSearch() {
   orderSearchBox.value = "";
   ORDER_SEARCH = "";
   DEEP_HITS = [];
-  document.getElementById("order-search-clear").classList.add("hidden");
+  document.getElementById("order-search-clear")?.classList.add("hidden");
 }
 
-document.getElementById("order-search-clear").addEventListener("click", () => {
+document.getElementById("order-search-clear")?.addEventListener("click", () => {
   clearOrderSearch();
   renderOrders();
   orderSearchBox.focus();
 });
 
-const logSearchBox = document.getElementById("log-search");
+const logSearchBox = document.getElementById("log-search") || document.createElement("input");
 logSearchBox.addEventListener("input", () => {
   LOG_SEARCH = logSearchBox.value.trim().toLowerCase();
   renderLogs();
 });
 
-document.getElementById("order-search-deep").addEventListener("click", deepSearchOrders);
-document.getElementById("btn-reload-logs").addEventListener("click", () => loadLogs(true));
+document.getElementById("order-search-deep")?.addEventListener("click", deepSearchOrders);
+document.getElementById("btn-reload-logs")?.addEventListener("click", () => loadLogs(true));
 document.getElementById("btn-add-product").addEventListener("click", () => openProductModal(null));
 document.getElementById("p-save").addEventListener("click", saveProduct);
 

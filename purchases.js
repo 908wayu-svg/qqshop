@@ -94,9 +94,13 @@ function render() {
     + (CAPPED ? " " + tv("spent_capped", { n: HISTORY_MAX }) : "");
   document.getElementById("kpi-count").textContent = done.length.toLocaleString();
 
+  // หน้าเว็บเวอร์ชันเก่าที่ค้างในแคชอาจยังไม่มีที่สำหรับข้อความนี้ — ข้ามไปเฉยๆ
+  // ห้ามปล่อยให้พัง เพราะจะทำให้ทั้งหน้าประวัติว่างเปล่า
   const note = document.getElementById("history-note");
-  note.textContent = CAPPED ? tv("history_capped", { n: HISTORY_MAX }) : "";
-  note.classList.toggle("hidden", !CAPPED);
+  if (note) {
+    note.textContent = CAPPED ? tv("history_capped", { n: HISTORY_MAX }) : "";
+    note.classList.toggle("hidden", !CAPPED);
+  }
 
   if (!list.length) {
     box.innerHTML = `<div class="card empty-box">

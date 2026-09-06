@@ -31,8 +31,11 @@ export function buildSandbox() {
   return SANDBOX;
 }
 
-export function makeDom(page) {
-  const html = fs.readFileSync(path.join(SRC, page), "utf8");
+// transform: ใช้ดัดแปลง HTML ก่อนสร้างหน้าจำลอง
+// (เช่น จำลอง "หน้าเวอร์ชันเก่าที่ค้างในแคชของเบราว์เซอร์" มาเจอสคริปต์เวอร์ชันใหม่)
+export function makeDom(page, transform) {
+  let html = fs.readFileSync(path.join(SRC, page), "utf8");
+  if (transform) html = transform(html);
   const dom = new JSDOM(html, { url: "https://908wayu-svg.github.io/qqshop/" + page, pretendToBeVisual: true });
   const w = dom.window;
   for (const k of ["window", "document", "CustomEvent", "Event", "localStorage",
