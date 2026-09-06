@@ -1,0 +1,16 @@
+# ===== ให้ทุกเครื่องได้ไฟล์หน้าตาเหมือนกัน =====
+# Windows ตั้งค่า core.autocrlf=true มาโดยปริยาย พอ clone ไฟล์ข้อความจะกลายเป็น CRLF
+# ทำให้ diff เละทั้งไฟล์เวลาแก้นิดเดียว และเทส t31-cross-os.mjs (ที่ห้าม CRLF) จะฟ้องผิดๆ
+# บรรทัดล่างนี้บังคับให้ checkout เป็น LF ทุกเครื่อง ไม่ว่าใครตั้งค่าอะไรไว้
+* text=auto eol=lf
+
+# ไฟล์ที่ห้ามแตะเด็ดขาด (ถ้า git เผลอแปลงบรรทัด รูปจะเสีย)
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.jfif binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.woff  binary
+*.woff2 binary
