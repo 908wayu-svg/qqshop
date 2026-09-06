@@ -7,6 +7,10 @@ let RANGE = 30;
 let ORDER_FILTER = "pending", TOPUP_FILTER = "pending";
 let ORDER_SEARCH = "";        // คำค้นในตารางออเดอร์ (ค้นอยู่ = มองข้ามตัวกรองสถานะ)
 let DEEP_HITS = [];           // ออเดอร์ที่ค้นเจอจากฐานข้อมูลทั้งหมด (นอกเหนือจาก 500 ใบที่โหลดมา)
+// เพดานที่หน้านี้ดึงมาต่อคอลเลกชัน — ถ้าดึงมาได้เต็มเพดานพอดี แปลว่ายังมีของเก่ากว่านั้นอีก
+// และตัวเลขทุกใบในหน้าภาพรวมจะต่ำกว่าความจริงโดยไม่มีใครรู้ ต้องบอกให้เห็น
+const DATA_CAP = 500;
+let CAPPED = [];              // คอลเลกชันที่ดึงมาชนเพดาน
 let LOG_SEARCH = "";          // คำค้นในแท็บบันทึกแอดมิน (กรองเฉพาะที่โหลดมาแล้ว ไม่ยิงฐานข้อมูลซ้ำ)
 let LOGS = null;              // บันทึกแอดมิน — null = ยังไม่เคยโหลด (โหลดตอนเปิดแท็บครั้งแรก)
 let EDITING_PRODUCT = null, PRODUCT_IMAGE = null, CREDIT_TARGET = null, IMAGE_CHANGED = false;
@@ -325,6 +329,12 @@ function salesResetAt() {
 }
 
 function renderOverview() {
+  // ตัวเลขที่ต่ำกว่าความจริงโดยไม่บอก อันตรายกว่าไม่โชว์ตัวเลขเลย —
+  // ยอดขาย ยอดสมาชิก และเครดิตคงเหลือรวม คิดจากเท่าที่หน้านี้ดึงมาได้เท่านั้น
+  setMsg("cap-warning", CAPPED.length
+    ? tv("data_capped", { what: CAPPED.map(k => t(k)).join(" · "), n: fmtNum(DATA_CAP) })
+    : "", "warn");
+
   const reset = salesResetAt();
   const start = reset && reset > rangeStart() ? reset : rangeStart();
   const inRange = arr => arr.filter(x => x._date && x._date >= start);
@@ -1038,11 +1048,17 @@ function setMsg(id, text, kind = "error") {
 // ---------- โหลดข้อมูล ----------
 async function reloadAll() {
   const [orders, users, topups, products, settings] = await Promise.all([
-    QQ.fetchOrders(), QQ.fetchUsers(), QQ.fetchTopups(), QQ.fetchProducts(), QQ.fetchSettings(),
+    QQ.fetchOrders(DATA_CAP), QQ.fetchUsers(DATA_CAP), QQ.fetchTopups(DATA_CAP),
+    QQ.fetchProducts(), QQ.fetchSettings(),
   ]);
   ORDERS = orders.map(o => ({ ...o, _date: toDate(o.createdAt) }));
   USERS = users.map(u => ({ ...u, _date: toDate(u.createdAt) }));
   TOPUPS = topups.map(x => ({ ...x, _date: toDate(x.createdAt) }));
+  CAPPED = [
+    orders.length >= DATA_CAP ? "cap_orders" : null,
+    topups.length >= DATA_CAP ? "cap_topups" : null,
+    users.length >= DATA_CAP ? "cap_members" : null,
+  ].filter(Boolean);
   PRODUCTS = products;
   SETTINGS = settings;
   renderAll();

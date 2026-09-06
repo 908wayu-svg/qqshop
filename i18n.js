@@ -318,6 +318,10 @@ const I18N = {
     search_no_match: "ไม่พบรายการที่ตรงกับที่ค้น",
 
     // ประวัติของสมาชิกรายคน
+    data_capped: "⚠ ร้านมีข้อมูลมากกว่าที่หน้านี้โหลดได้ ({what}) — ตัวเลขข้างล่างนับเฉพาะ {n} รายการล่าสุด จึงต่ำกว่าความจริง",
+    cap_orders: "ออเดอร์",
+    cap_topups: "การเติมเงิน",
+    cap_members: "สมาชิก",
     credit_unknown: "ไม่ทราบ (ยังไม่ได้โหลดข้อมูลสมาชิกคนนี้)",
     log_cleared_info: "ลบรหัสผ่านลูกค้าให้อัตโนมัติแล้ว",
     member_history: "ประวัติ",
@@ -667,6 +671,10 @@ const I18N = {
     a_STILL_OPEN: "You can not hide a record that is still open — the customer needs to see what they are waiting for (finish or cancel it first)",
     search_no_match: "Nothing matched your search",
 
+    data_capped: "⚠ The shop has more data than this page can load ({what}) — the figures below only count the latest {n}, so they are too low",
+    cap_orders: "orders",
+    cap_topups: "top-ups",
+    cap_members: "members",
     credit_unknown: "unknown (this member is not loaded on this page)",
     log_cleared_info: "customer password auto-deleted",
     member_history: "History",

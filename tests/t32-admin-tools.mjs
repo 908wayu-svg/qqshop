@@ -409,6 +409,36 @@ ok("ไม่โชว์เป็นรหัสดิบเฉยๆ", !logRow
   logRows()[0]?.textContent);
 typeLog("");
 
+// =====================================================================
+section("เตือนเมื่อข้อมูลมากเกินกว่าที่หน้านี้โหลดได้");
+// ยอดขาย ยอดสมาชิก และเครดิตคงเหลือรวม คิดจากเท่าที่หน้าดึงมาได้เท่านั้น
+// พอร้านโตเกินเพดาน ตัวเลขจะต่ำกว่าความจริงเงียบๆ ทั้งที่หน้าตายังดูปกติ
+ok("ข้อมูลยังไม่ถึงเพดาน = ไม่มีคำเตือน", !$("cap-warning").classList.contains("show"),
+  $("cap-warning").textContent);
+
+// ยัดออเดอร์ให้ชนเพดาน 500 พอดี
+for (let n = 0; n < 500; n++) {
+  store.put("orders/bulk" + String(n).padStart(4, "0"), {
+    uid: "c1", customerName: "สมชาย ใจดี", customerEmail: "somchai@x.com", total: 1,
+    status: "completed", paid: true, createdAt: TS(1000 + n),
+    items: [{ id: "pA", name: "ไอดีเกม A", price: 1, qty: 1 }],
+  });
+}
+await reload();
+ok("ชนเพดานแล้วต้องขึ้นคำเตือน", $("cap-warning").classList.contains("show"),
+  $("cap-warning").textContent);
+ok("คำเตือนบอกว่าคือข้อมูลประเภทไหน", $("cap-warning").textContent.includes("ออเดอร์"),
+  $("cap-warning").textContent);
+ok("คำเตือนบอกตัวเลขเพดาน", $("cap-warning").textContent.includes("500"),
+  $("cap-warning").textContent);
+ok("ไม่เตือนประเภทที่ยังไม่ชนเพดาน", !$("cap-warning").textContent.includes("สมาชิก"),
+  $("cap-warning").textContent);
+
+// เก็บกวาดให้เทสข้ออื่นทำงานต่อได้เหมือนเดิม
+for (let n = 0; n < 500; n++) store.state.docs.delete("orders/bulk" + String(n).padStart(4, "0"));
+await reload();
+ok("ลบของทดสอบแล้วคำเตือนหายไป", !$("cap-warning").classList.contains("show"));
+
 // ---------- สมาชิกธรรมดาต้องอ่านบันทึกไม่ได้ ----------
 section("สิทธิ์: สมาชิกธรรมดาอ่านบันทึกแอดมินไม่ได้");
 await QQ.logout();
