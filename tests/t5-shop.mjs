@@ -199,6 +199,14 @@ section("สินค้าหมดระหว่างที่กล่อ�
   ok("กดเพิ่มจำนวนแล้วไม่กลายเป็น 0", $("buy-qty").value === "1", $("buy-qty").value);
   clickEl($("buy-minus"));
   ok("กดลดจำนวนแล้วก็ยังไม่เป็น 0", $("buy-qty").value === "1", $("buy-qty").value);
+  // ช่องพิมพ์จำนวนเป็นโค้ดคนละก้อนกับปุ่มเพิ่ม/ลด ต้องตรวจแยก
+  // (เคยแก้แค่ปุ่ม แล้วช่องพิมพ์ยังผิดอยู่)
+  typeIn($("buy-qty"), "5");
+  ok("พิมพ์จำนวนเองก็ไม่กลายเป็น 0", $("buy-total").textContent.includes("250"),
+    $("buy-total").textContent);
+  ok("ยังเตือนว่าของไม่พอหลังพิมพ์เอง", $("buy-msg").textContent.includes("ไม่พอ"),
+    $("buy-msg").textContent);
+  ok("ปุ่มยืนยันยังกดไม่ได้หลังพิมพ์เอง", $("buy-confirm").disabled === true);
   ok("ยอดรวมไม่กลายเป็น ฿0", !/^฿?0(\.00)?$/.test($("buy-total").textContent.trim()),
     $("buy-total").textContent);
   ok("ยังเตือนว่าของไม่พอ", $("buy-msg").textContent.includes("ไม่พอ"), $("buy-msg").textContent);

@@ -227,15 +227,18 @@ function openBuy(id) {
 // เพดานจำนวนที่สั่งได้ต่อครั้ง (สต๊อกไม่จำกัดก็ยังต้องมีเพดาน ไม่งั้นพิมพ์เลขมหาศาลได้)
 const maxQtyOf = p => Math.min(999, p?.stock != null ? p.stock : 999);
 
+// บีบค่าจำนวนให้ใช้ได้จริง — **"ไม่ต่ำกว่า 1" ต้องเป็นขั้นสุดท้ายเสมอ**
+// ถ้าเอาเพดานไว้ท้าย พอสินค้าหมดระหว่างที่กล่องเปิดค้างอยู่ (เพดาน = 0) จำนวนจะกลายเป็น 0
+// แล้วยอดรวมเป็น ฿0 · คำเตือน "ของไม่พอ" หายไป (0 ไม่มากกว่า 0) · ปุ่มยืนยันกลับมากดได้
+// เขียนไว้ที่เดียวเพราะเคยพลาดมาแล้วจากการเขียนซ้ำสองที่แล้วแก้ไม่ครบ
+function clampQty(p, n) {
+  return Math.max(1, Math.min(maxQtyOf(p), Math.floor(Number(n) || 1)));
+}
+
 function setQty(n) {
   const p = findProduct(BUY?.id);
   if (!p) return;
-  const max = maxQtyOf(p);
-  // ต้องบีบให้ "ไม่ต่ำกว่า 1" เป็นขั้นสุดท้ายเสมอ
-  // ถ้าเอา min ไว้ท้าย พอสินค้าหมดระหว่างที่กล่องเปิดค้างอยู่ (max = 0) จำนวนจะกลายเป็น 0
-  // แล้วยอดรวมเป็น ฿0 · คำเตือน "ของไม่พอ" หายไป (เพราะ 0 ไม่ได้มากกว่า 0) · ปุ่มยืนยันกลับมากดได้
-  // เกิดได้จริงตอนคนอื่นซื้อตัดหน้าไปพอดี แล้วลูกค้ากดปุ่มเพิ่ม/ลดจำนวนต่อ
-  const v = Math.max(1, Math.min(max, Math.floor(Number(n) || 1)));
+  const v = clampQty(p, n);
   BUY.qty = v;
   document.getElementById("buy-qty").value = String(v);
   syncBuy();
@@ -368,8 +371,7 @@ document.getElementById("buy-qty")?.addEventListener("input", e => {
   const raw = String(e.target.value).trim();
   if (raw === "") { BUY.qty = 1; syncBuy(); return; }
   const p = findProduct(BUY.id);
-  const v = Math.min(maxQtyOf(p), Math.max(1, Math.floor(Number(raw) || 1)));
-  BUY.qty = v;
+  BUY.qty = clampQty(p, raw);
   syncBuy();
 });
 // ออกจากช่องแล้วค่อยดันค่าที่ใช้ได้จริงกลับเข้าไป (กันค้างเป็นค่าว่าง/ค่าที่เกินเพดาน)
