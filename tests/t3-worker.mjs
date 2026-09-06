@@ -840,5 +840,54 @@ section("ซ่อน/เลิกซ่อนรายการในประ�
     JSON.stringify(DOCS.get("users/uRace")));
 }
 
+section("กดข้ามขั้นไม่ได้ (กฎเหล็กข้อ 17)");
+// รอดำเนินการ → กำลังดำเนินการ → สำเร็จ ต้องไล่ทีละขั้น
+// เหตุผลที่ห้ามลัด: ลูกค้าแก้ไอดีเกมของตัวเองได้เฉพาะตอน "รอดำเนินการ" เท่านั้น
+// ถ้าลัดจากรอดำเนินการไปสำเร็จเลย ลูกค้าจะยังแก้ไอดีได้อยู่ตอนที่แอดมินเติมเข้าไอดีเดิมไปแล้ว
+// แล้วมาเถียงกันทีหลังว่าเติมผิดไอดี
+// (เซิร์ฟเวอร์กันไว้อยู่แล้ว แต่เดิมไม่มีเทสข้อไหนคุมเรื่องนี้เลย)
+{
+  const A2 = "adminStep";
+  CLAIMS.set(A2, { admin: true });
+  DOCS.set("users/" + A2, F({ email: "admin@x.com", role: "admin", credit: 0 }));
+  DOCS.set("users/cStep", F({ email: "c@x.com", role: "member", credit: 0 }));
+  const mk = (id, status) => DOCS.set("orders/" + id, F({ uid: "cStep", total: 100, status, paid: true }));
+
+  mk("oS1", "pending");
+  let r = await call("/admin/order/complete", { idToken: "token:" + A2, orderId: "oS1" });
+  ok("ลัดจากรอดำเนินการไปสำเร็จเลยไม่ได้", r.body.error === "ALREADY_HANDLED", JSON.stringify(r.body));
+  ok("สถานะยังเป็นรอดำเนินการเหมือนเดิม", DOCS.get("orders/oS1").status.stringValue === "pending");
+
+  r = await call("/admin/order/start", { idToken: "token:" + A2, orderId: "oS1" });
+  ok("เริ่มดำเนินการได้ตามลำดับ", r.body.ok === true && DOCS.get("orders/oS1").status.stringValue === "processing",
+    JSON.stringify(r.body));
+
+  r = await call("/admin/order/start", { idToken: "token:" + A2, orderId: "oS1" });
+  ok("กดเริ่มดำเนินการซ้ำไม่ได้", r.body.error === "ALREADY_HANDLED", JSON.stringify(r.body));
+
+  r = await call("/admin/order/complete", { idToken: "token:" + A2, orderId: "oS1" });
+  ok("พอถึงคิวแล้วกดทำเสร็จได้", r.body.ok === true && DOCS.get("orders/oS1").status.stringValue === "completed",
+    JSON.stringify(r.body));
+
+  r = await call("/admin/order/complete", { idToken: "token:" + A2, orderId: "oS1" });
+  ok("กดทำเสร็จซ้ำไม่ได้", r.body.error === "ALREADY_HANDLED", JSON.stringify(r.body));
+
+  // ย้อนกลับไปเริ่มใหม่ก็ไม่ได้
+  r = await call("/admin/order/start", { idToken: "token:" + A2, orderId: "oS1" });
+  ok("ย้อนกลับไปเริ่มดำเนินการใหม่ไม่ได้", r.body.error === "ALREADY_HANDLED", JSON.stringify(r.body));
+
+  // ออเดอร์ที่ยกเลิกแล้ว ก็เดินต่อไม่ได้
+  mk("oS2", "cancelled");
+  r = await call("/admin/order/start", { idToken: "token:" + A2, orderId: "oS2" });
+  ok("ออเดอร์ที่ยกเลิกแล้ว เริ่มดำเนินการไม่ได้", r.body.error === "ALREADY_HANDLED", JSON.stringify(r.body));
+  r = await call("/admin/order/complete", { idToken: "token:" + A2, orderId: "oS2" });
+  ok("ออเดอร์ที่ยกเลิกแล้ว กดทำเสร็จไม่ได้", r.body.error === "ALREADY_HANDLED", JSON.stringify(r.body));
+
+  // ปุ่มชุดใหม่ห้ามใช้กับออเดอร์เก่า (กฎเหล็กข้อ 16) — เช็คคู่กันไปเลย
+  DOCS.set("orders/oOld1", F({ uid: "cStep", total: 100, status: "pending" }));   // ไม่มี paid
+  r = await call("/admin/order/start", { idToken: "token:" + A2, orderId: "oOld1" });
+  ok("ปุ่มชุดใหม่ใช้กับออเดอร์เก่าไม่ได้", r.body.error === "OLD_ORDER", JSON.stringify(r.body));
+}
+
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;

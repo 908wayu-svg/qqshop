@@ -470,6 +470,64 @@ for (let n = 0; n < 500; n++) store.state.docs.delete("orders/bulk" + String(n).
 await reload();
 ok("ลบของทดสอบแล้วคำเตือนหายไป", !$("cap-warning").classList.contains("show"));
 
+// =====================================================================
+section("หน้าเว็บต้องวาดปุ่มให้ตรงกับสถานะ (กฎเหล็กข้อ 16 + 17)");
+// เซิร์ฟเวอร์กันการกดผิดชุด/ข้ามขั้นไว้อยู่แล้ว แต่หน้าเว็บต้องไม่วาดปุ่มผิดตั้งแต่แรก
+// ไม่งั้นแอดมินกดแล้วเด้ง error รัวๆ โดยไม่รู้ว่าตัวเองทำอะไรผิด
+// และที่อันตรายที่สุดคือ "อนุมัติ" (ปุ่มของออเดอร์เก่า) ไปโผล่ในออเดอร์ใหม่ = หักเครดิตซ้ำสองรอบ
+{
+  // ล้างของเดิมออกให้เหลือเฉพาะที่จะทดสอบ
+  for (const k of [...store.state.docs.keys()].filter(k => k.startsWith("orders/"))) {
+    store.state.docs.delete(k);
+  }
+  const mk = (id, extra) => store.put("orders/" + id, {
+    uid: "c1", customerName: "สมชาย ใจดี", customerEmail: "somchai@x.com", total: 100,
+    createdAt: TS(10), items: [{ id: "pA", name: "ไอดีเกม A", price: 100, qty: 1 }], ...extra,
+  });
+  mk("nPend", { paid: true, status: "pending" });
+  mk("nProc", { paid: true, status: "processing" });
+  mk("nDone", { paid: true, status: "completed" });
+  mk("nVoid", { paid: true, status: "cancelled" });
+  mk("oldPend", { status: "pending" });          // ออเดอร์เก่า ไม่มี paid
+  mk("oldDone", { status: "approved" });
+  await reload();
+  click(document.querySelector('#tabs [data-tab="orders"]'));
+  click(document.querySelector('#orders-filter [data-st="all"]'));
+
+  const actsOf = id => [...document.querySelectorAll('#table-orders [data-act][data-id="' + id + '"]')]
+    .map(b => b.dataset.act).sort();
+  const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+  ok("ออเดอร์ใหม่ · รอดำเนินการ = เริ่มดำเนินการ + ยกเลิก",
+    same(actsOf("nPend"), ["cancel-order", "start-order"]), actsOf("nPend").join(","));
+  ok("ออเดอร์ใหม่ · กำลังดำเนินการ = ทำเสร็จแล้ว + ยกเลิก",
+    same(actsOf("nProc"), ["cancel-order", "complete-order"]), actsOf("nProc").join(","));
+  ok("ออเดอร์ใหม่ · สำเร็จ = ยกเลิกคืนเครดิต + ซ่อน",
+    same(actsOf("nDone"), ["cancel-order", "hide-order"]), actsOf("nDone").join(","));
+  ok("ออเดอร์ใหม่ · ยกเลิกแล้ว = เหลือแค่ซ่อน",
+    same(actsOf("nVoid"), ["hide-order"]), actsOf("nVoid").join(","));
+
+  ok("ออเดอร์เก่า · รอดำเนินการ = อนุมัติ + ไม่อนุมัติ (ปุ่มคนละชุด)",
+    same(actsOf("oldPend"), ["approve-order", "reject-order"]), actsOf("oldPend").join(","));
+  ok("ออเดอร์เก่า · อนุมัติแล้ว = เหลือแค่ซ่อน",
+    same(actsOf("oldDone"), ["hide-order"]), actsOf("oldDone").join(","));
+
+  // ข้อที่อันตรายที่สุด — ห้ามสลับปุ่มกันเด็ดขาด
+  const newOnes = ["nPend", "nProc", "nDone", "nVoid"];
+  ok("ไม่มีปุ่ม 'อนุมัติ/ไม่อนุมัติ' โผล่ในออเดอร์ใหม่เลย (กันหักเครดิตซ้ำ)",
+    newOnes.every(id => !actsOf(id).some(a => a === "approve-order" || a === "reject-order")),
+    newOnes.map(id => id + ":" + actsOf(id).join("|")).join(" · "));
+  ok("ไม่มีปุ่มชุดใหม่โผล่ในออเดอร์เก่า",
+    !actsOf("oldPend").some(a => ["start-order", "complete-order", "cancel-order"].includes(a)),
+    actsOf("oldPend").join(","));
+
+  // กฎ 17 ฝั่งหน้าเว็บ: ปุ่ม "ทำเสร็จแล้ว" ต้องไม่โผล่ตอนยังรอดำเนินการ
+  ok("ปุ่ม 'ทำเสร็จแล้ว' ไม่โผล่ตอนยังรอดำเนินการ",
+    !actsOf("nPend").includes("complete-order"), actsOf("nPend").join(","));
+  ok("ปุ่ม 'เริ่มดำเนินการ' ไม่โผล่ตอนกำลังดำเนินการอยู่แล้ว",
+    !actsOf("nProc").includes("start-order"), actsOf("nProc").join(","));
+}
+
 // ---------- สมาชิกธรรมดาต้องอ่านบันทึกไม่ได้ ----------
 section("สิทธิ์: สมาชิกธรรมดาอ่านบันทึกแอดมินไม่ได้");
 await QQ.logout();
