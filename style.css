@@ -23,7 +23,10 @@
   color-scheme:light;
 }
 
-/* โหมดมืด — เปิดใช้ด้วย <html data-theme="dark"> */
+/* ===== โหมดมืด =====
+   เปิดใช้ด้วย <html data-theme="dark"> — ตัวที่ตั้งให้คือสคริปต์สั้นๆ ใน <head> ของทุกหน้า
+   ซึ่งอ่านค่าจากเครื่องของผู้ใช้ (ตั้งไว้ก่อนหน้าเว็บวาด จะได้ไม่กระพริบขาวก่อน)
+   บังคับสว่างได้ด้วย data-theme="light" */
 :root[data-theme="dark"]{
   --bg:#17120d; --card:#221a13; --text:#f7efe4; --muted:#a2937f;
   --text-2:#d6c9b6; --brand:#ffa53d; --border:#33271c;

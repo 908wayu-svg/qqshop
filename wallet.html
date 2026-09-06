@@ -34,6 +34,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+/* โหมดมืดตามเครื่องของผู้ใช้ — ต้องรันก่อนหน้าเว็บวาด ไม่งั้นจะเห็นพื้นขาวแวบหนึ่งก่อน
+   (ไฟล์สคริปต์อื่นอยู่ท้ายหน้า จึงสายเกินไปสำหรับงานนี้) */
+try {
+  if (matchMedia("(prefers-color-scheme:dark)").matches) {
+    document.documentElement.dataset.theme = "dark";
+  }
+} catch (e) { /* เบราว์เซอร์เก่าที่ไม่รู้จัก matchMedia ก็ใช้โหมดสว่างตามเดิม */ }
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>

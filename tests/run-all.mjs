@@ -6,7 +6,7 @@ const tests = [
   ["t10-load.mjs", []], ["t11-images.mjs", []], ["t12-login.mjs", []], ["t13-overlay.mjs", []],
   ["t15-contact.mjs", []], ["t16-stickers.mjs", []],
   ["t17-categories.mjs", []], ["t18-categories-admin.mjs", []], ["t19-mobile.mjs", []],
-  ["t20-customer-info.mjs", []], ["t21-seo.mjs", []], ["t22-search.mjs", []], ["t23-terms.mjs", []], ["t24-admin-security.mjs", []], ["t25-slip-ocr.mjs", []], ["t26-i18n.mjs", []], ["t27-dom-wiring.mjs", []], ["t28-rules-sync.mjs", []],
+  ["t20-customer-info.mjs", []], ["t21-seo.mjs", []], ["t22-search.mjs", []], ["t23-terms.mjs", []], ["t24-admin-security.mjs", []], ["t25-slip-ocr.mjs", []], ["t26-i18n.mjs", []], ["t27-dom-wiring.mjs", []], ["t28-rules-sync.mjs", []], ["t29-dark-mode.mjs", []],
   ["t14-offline.mjs", ["purchases"]], ["t14-offline.mjs", ["wallet"]], ["t14-offline.mjs", ["admin"]],
 ];
 let P = 0, F = 0, bad = [];

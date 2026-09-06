@@ -124,3 +124,17 @@ document.addEventListener("click", async e => {
 });
 
 window.copyText = copyText;
+
+// ===== โหมดมืด =====
+// ค่าเริ่มต้นถูกตั้งไว้แล้วโดยสคริปต์สั้นๆ ใน <head> ของแต่ละหน้า (ตั้งก่อนหน้าเว็บวาด ไม่ให้กระพริบ)
+// ตรงนี้ดูแลกรณีผู้ใช้สลับโหมดมืด/สว่างของเครื่อง "ระหว่างที่เปิดหน้าเว็บค้างไว้"
+try {
+  const mq = matchMedia("(prefers-color-scheme:dark)");
+  const follow = e => {
+    const root = document.documentElement;
+    if (root.dataset.theme === "light") return;   // ผู้ใช้บังคับโหมดสว่างไว้ ไม่ต้องยุ่ง
+    if (e.matches) root.dataset.theme = "dark";
+    else delete root.dataset.theme;
+  };
+  mq.addEventListener ? mq.addEventListener("change", follow) : mq.addListener(follow);
+} catch { /* เบราว์เซอร์เก่าไม่รองรับ ก็ใช้ค่าที่ตั้งไว้ตอนเปิดหน้า */ }
