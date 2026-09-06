@@ -376,9 +376,15 @@ label.check input{width:auto;accent-color:var(--accent)}
   padding:7px 0;font-size:14px;flex-wrap:wrap}
 .info-row span{color:var(--text-2)}
 .info-row b{font-variant-numeric:tabular-nums}
-.copy{background:none;border:none;cursor:pointer;color:var(--brand);font-size:16px;padding:0 4px;
-  transition:transform .15s}
-.copy:hover{transform:scale(1.15)}
+/* ปุ่มคัดลอก — ต้องกดโดนง่ายด้วยนิ้ว ไม่ใช่แค่ด้วยเมาส์
+   เดิมพื้นที่กดเหลือแค่ 24x20px (เล็กกว่าที่นิ้วคนเล็งไหว) ทั้งที่เป็นปุ่ม
+   คัดลอกเลขบัญชี/ไอดีที่ซื้อมา ซึ่งลูกค้าต้องใช้บ่อยที่สุดบนมือถือ */
+.copy{background:none;border:none;cursor:pointer;color:var(--brand);font-size:16px;
+  min-width:40px;min-height:40px;padding:0 8px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;
+  border-radius:10px;transition:transform .15s,background .15s}
+.copy:hover{transform:scale(1.15);background:var(--field)}
+.copy:active{transform:scale(.95)}
 #qr-canvas{display:flex;justify-content:center;margin:18px 0}
 #qr-canvas img,#qr-canvas canvas{border-radius:16px;padding:12px;background:#fff;
   border:1px solid var(--border);box-shadow:var(--shadow)}
@@ -672,4 +678,23 @@ body.has-contact-fab main,body.has-contact-fab .wallet-main{padding-bottom:96px}
 
 @media (prefers-reduced-motion:reduce){
   *{animation:none !important;transition:none !important}
+}
+
+/* ===== พิมพ์หน้าเว็บ / บันทึกเป็น PDF =====
+   ลูกค้าบางคนพิมพ์ประวัติการซื้อเก็บไว้เป็นหลักฐาน
+   ถ้าไม่กำหนดอะไรเลย จะได้กระดาษพื้นดำ (ตอนใช้โหมดมืด) และมีปุ่มลอยทับเนื้อหา */
+@media print{
+  :root,:root[data-theme="dark"]{
+    --bg:#fff; --card:#fff; --text:#000; --text-2:#333; --muted:#555;
+    --border:#bbb; --field:#fff; --shadow:none; --shadow-lg:none;
+    color-scheme:light;
+  }
+  body{background:#fff !important}
+  body::before{display:none !important}
+  header,.contact-fab,#contact-overlay,.overlay,
+  .header-actions,.hero,.cat-tabs,.shop-tools,#cart-btn,
+  .btn-primary,.btn-ghost,.btn-small,.range-filter,.tabs{display:none !important}
+  .card,.purchase{box-shadow:none !important;border:1px solid #bbb !important;
+    break-inside:avoid;page-break-inside:avoid}
+  a[href]::after{content:""}          /* ไม่ต้องพ่นลิงก์ยาวๆ ต่อท้ายข้อความ */
 }
