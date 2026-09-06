@@ -33,6 +33,10 @@ function itemName(item) {
   return (getLang() === "en" && p?.name_en) || item.name || p?.name || "—";
 }
 
+// รายการที่แอดมินซ่อนไว้ ไม่ต้องโชว์ในหน้าประวัติของลูกค้า
+// (เอกสารยังอยู่ครบ ยอดขายหลังบ้านไม่เปลี่ยน — เป็นการซ่อนที่หน้าจอเท่านั้น)
+const visible = list => list.filter(o => !o.hiddenAt);
+
 // ===== สถานะออเดอร์ =====
 // ระบบใหม่ใช้ 4 สถานะ: pending → processing → completed · หรือ cancelled (คืนเครดิตแล้ว)
 // ออเดอร์เก่ายังมี approved / rejected ค้างอยู่ ต้องแสดงผลให้ถูกต่อไปตลอด
@@ -188,7 +192,7 @@ async function saveEdit() {
     await QQ.updateOrderInfo(EDITING, items);
     // ดึงออเดอร์ใบนั้นกลับมาใหม่ ให้หน้าจอตรงกับของจริงเสมอ
     const fresh = await QQ.fetchMyOrders(200).catch(() => null);
-    if (fresh) ORDERS = fresh;
+    if (fresh) ORDERS = visible(fresh);
     render();
     window.closePanel("edit-overlay");
   } catch (e) {
@@ -197,7 +201,7 @@ async function saveEdit() {
     // แอดมินเพิ่งกดเริ่มดำเนินการ = ปุ่มแก้ไขต้องหายไปทันที ไม่ใช่ให้กดซ้ำแล้วพังซ้ำ
     if (e.orderCode === "EDIT_LOCKED") {
       const fresh = await QQ.fetchMyOrders(200).catch(() => null);
-      if (fresh) { ORDERS = fresh; render(); }
+      if (fresh) { ORDERS = visible(fresh); render(); }
     }
   } finally {
     btn.disabled = false;
@@ -284,7 +288,7 @@ document.addEventListener("authchange", () => {
       QQ.fetchMyOrders(200),
       QQ.fetchProducts().catch(() => []),
     ]);
-    ORDERS = orders;
+    ORDERS = visible(orders);
     PRODUCTS = products;
     render();
   } catch (e) {

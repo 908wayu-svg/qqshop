@@ -1185,6 +1185,40 @@ async function adminClearOrderInfo(token, admin, { orderId }) {
   }
 }
 
+// ---------- แอดมิน: ซ่อน/เลิกซ่อนรายการในประวัติของลูกค้า ----------
+// **ไม่ใช่การลบ** — เอกสารยังอยู่ครบทุกฟิลด์ ยอดขาย ประวัติหลังบ้าน และ adminLogs ไม่เปลี่ยน
+// เปลี่ยนแค่ว่าหน้าประวัติของลูกค้าจะไม่หยิบรายการนี้มาแสดง
+// ใช้ตอนลูกค้าขอให้เอารายการที่สั่งผิด/ยิงซ้ำออกจากหน้าตัวเอง แต่ร้านต้องตรวจย้อนหลังได้อยู่
+//
+// ข้อจำกัดที่ต้องรู้: ซ่อนที่หน้าเว็บ ไม่ใช่การปิดสิทธิ์อ่าน
+// กฎ Firestore ยังให้เจ้าของอ่านเอกสารของตัวเองได้ (ปิดไม่ได้จริง เพราะคำสั่ง list
+// ของหน้าประวัติจะพังทั้งชุด — เอกสารเก่าไม่มีฟิลด์ hiddenAt เลย จะถูกตัดทิ้งหมด)
+// จึงใช้กับ "รายการที่รกหน้าจอ" ไม่ใช่ "ความลับที่ห้ามลูกค้าเห็นเด็ดขาด"
+async function adminSetHidden(token, admin, col, body) {
+  const id = col === "orders" ? body.orderId : body.topupId;
+  const { hidden } = body;
+  if (!isId(id)) throw new Error("BAD_REQUEST");
+  if (typeof hidden !== "boolean") throw new Error("BAD_REQUEST");
+
+  const got = await batchGet(token, [`documents/${col}/${id}`]);
+  const d = got[id];
+  if (!d) throw new Error("NOT_FOUND");
+
+  await commit(token, [
+    {
+      update: {
+        name: docPath(col, id),
+        // เลิกซ่อน = เขียน null ทับ ไม่ใช่ลบฟิลด์ทิ้ง จะได้เห็นว่าเคยผ่านการซ่อนมาแล้ว
+        fields: fsFields({ hiddenAt: hidden ? new Date() : null }),
+      },
+      updateMask: { fieldPaths: ["hiddenAt"] },
+    },
+    auditWrite(admin, (col === "orders" ? "order" : "topup") + ".hide",
+      { [col === "orders" ? "orderId" : "topupId"]: id, targetUid: str(d.uid), hidden }),
+  ]);
+  return { hidden };
+}
+
 // ---------- แอดมิน: ตั้ง/ถอดสิทธิ์แอดมิน ----------
 // ตั้ง: ใส่ claim ก่อน แล้วค่อยเขียนเอกสาร — ถ้าพลาดกลางทางจะยัง "ไม่ได้สิทธิ์"
 // ถอน: ลดเอกสารเป็น member ก่อน แล้วค่อยล้าง claim — ถ้าพลาดกลางทางก็ "หมดสิทธิ์" แล้ว
@@ -1322,6 +1356,9 @@ async function adminRoute(path, body, token, env, user) {
     case "/admin/order/complete":    return adminCompleteOrder(token, me, body);
     case "/admin/order/cancel":      return adminCancelOrder(token, me, body);
     case "/admin/order/clear-info":  return adminClearOrderInfo(token, me, body);
+    // ซ่อน/เลิกซ่อนรายการในหน้าประวัติของลูกค้า (ไม่ลบข้อมูล ไม่ขยับเครดิต)
+    case "/admin/order/hide":        return adminSetHidden(token, me, "orders", body);
+    case "/admin/topup/hide":        return adminSetHidden(token, me, "topups", body);
     case "/admin/role":              return adminSetRole(token, env, me, body);
     default: throw new Error("NOT_FOUND");
   }
@@ -1359,7 +1396,7 @@ export {
   parseAngpaoCode, getAccessToken, commit, docPath, fsFields, fsValue, fsRead,
   redeemAngpao, createOrder, updateOrderInfo, batchGet, money2, safeEqual, requireAdmin,
   adminAdjustCredit, adminApproveTopup, adminApproveOrder, adminSetRole,
-  adminStartOrder, adminCompleteOrder, adminCancelOrder,
+  adminStartOrder, adminCompleteOrder, adminCancelOrder, adminSetHidden,
 };
 
 // ---------- main ----------

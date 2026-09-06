@@ -135,6 +135,13 @@ ok("ลูกค้ายิง /admin/order/complete ไม่ผ่าน", er
   { orderId: "oVictim" })) === "ADMIN_ONLY");
 ok("ลูกค้ายิง /admin/order/cancel (คืนเครดิต) ไม่ผ่าน", errOf(call("/admin/order/cancel", CUST_UID,
   { orderId: "oVictim" })) === "ADMIN_ONLY");
+// ซ่อนรายการไม่ขยับเครดิตก็จริง แต่ถ้าลูกค้าสั่งเองได้ = ลบหลักฐานการซื้อของตัวเองออกจากหน้าจอ
+// แล้วมาอ้างทีหลังว่าไม่เคยสั่ง — ต้องเป็นแอดมินเท่านั้น
+ok("ลูกค้ายิง /admin/order/hide ไม่ผ่าน", errOf(call("/admin/order/hide", CUST_UID,
+  { orderId: "oVictim", hidden: true })) === "ADMIN_ONLY");
+ok("ลูกค้ายิง /admin/topup/hide ไม่ผ่าน", errOf(call("/admin/topup/hide", CUST_UID,
+  { topupId: "tt1", hidden: true })) === "ADMIN_ONLY");
+ok("ออเดอร์ไม่ถูกซ่อนจากการยิงของลูกค้า", !store.raw("orders/oVictim")?.hiddenAt);
 ok("ลูกค้ายิง /admin/bootstrap ด้วยรหัสมั่วไม่ผ่าน", errOf(call("/admin/bootstrap", CUST_UID,
   { secret: "aaaaaaaaaaaaaaaaaaaa" })) === "BOOTSTRAP_BAD_SECRET");
 ok("เครดิตลูกค้าไม่ขยับเลยหลังยิงทุกทาง", store.raw("users/" + CUST_UID).credit === 500);
@@ -256,6 +263,10 @@ ok("บันทึกมียอดก่อน/หลังของราย
   logs.filter(l => l.action === "credit.adjust" || l.action === "topup.approve")
       .every(l => typeof l.before === "number" && typeof l.after === "number"));
 await allowed(() => fs2.getDoc(fs2.doc(db, "adminLogs", "log1")), "แอดมินอ่านบันทึกได้");
+// แท็บ "บันทึกแอดมิน" ในหลังบ้านอ่านทั้งคอลเลกชัน (list) ไม่ใช่ทีละใบ
+// กฎ list กับ get คนละเส้นทาง ต้องตรวจแยกกัน
+await allowed(() => fs2.getDocs(fs2.query(fs2.collection(db, "adminLogs"),
+  fs2.orderBy("at", "desc"), fs2.limit(50))), "แอดมินไล่อ่านบันทึกทั้งลิสต์ได้");
 
 section("สคริปต์จากเว็บนอกต้องตรึงเวอร์ชัน + ตรวจลายเซ็นไฟล์");
 {

@@ -302,6 +302,52 @@ const I18N = {
     recover_admin_ask: "ใส่รหัสลับที่ตั้งไว้ในเซิร์ฟเวอร์ (ADMIN_BOOTSTRAP)",
     role: "สิทธิ์", role_admin: "แอดมิน", role_member: "สมาชิก",
     note: "หมายเหตุ", note_optional: "หมายเหตุ (ไม่บังคับ)",
+
+    // ค้นหาออเดอร์ (แอดมิน)
+    search_orders: "ค้นเลขที่คำสั่งซื้อ / ชื่อ / อีเมล",
+    search_hint_order_no: "ใส่เลขที่คำสั่งซื้อที่ลูกค้าแจ้งมาได้เลย (เช่น A1B2C3D4) — ตอนค้นหาจะมองข้ามตัวกรองสถานะ",
+    search_no_match: "ไม่พบรายการที่ตรงกับที่ค้น",
+
+    // ประวัติของสมาชิกรายคน
+    member_history: "ประวัติ",
+    member_history_title: "ประวัติของสมาชิก",
+    member_orders: "ออเดอร์",
+    member_topups: "การเติมเงิน",
+    member_total_spent: "ยอดซื้อสำเร็จ",
+    member_total_topup: "ยอดเติมที่อนุมัติแล้ว",
+    member_history_limit: "แสดงเท่าที่โหลดมาในหน้านี้ (ล่าสุด 500 รายการของทั้งร้าน)",
+
+    // ซ่อนรายการจากหน้าประวัติของลูกค้า
+    hide_from_customer: "ซ่อนจากลูกค้า",
+    unhide_from_customer: "เลิกซ่อน",
+    hidden_badge: "ซ่อนจากลูกค้าแล้ว",
+    confirm_hide: "ซ่อนรายการนี้จากหน้าประวัติของลูกค้า?\n\nข้อมูลไม่ถูกลบ ยอดขายไม่เปลี่ยน และคุณยังเห็นในหลังบ้านตามเดิม",
+    confirm_unhide: "ให้รายการนี้กลับไปแสดงในหน้าประวัติของลูกค้า?",
+
+    // บันทึกการกระทำของแอดมิน
+    tab_logs: "บันทึกแอดมิน",
+    logs_title: "บันทึกการกระทำของแอดมิน",
+    logs_hint: "เขียนโดยเซิร์ฟเวอร์เท่านั้น แก้และลบไม่ได้ — ใช้ตรวจย้อนหลังว่าใครทำอะไรกับเครดิต สิทธิ์ และออเดอร์",
+    logs_reload: "โหลดใหม่",
+    log_action: "การกระทำ",
+    log_by: "โดย",
+    log_detail: "รายละเอียด",
+    log_target: "เกี่ยวกับ",
+    "act_credit.adjust": "ปรับเครดิต",
+    "act_topup.approve": "อนุมัติเติมเงิน",
+    "act_topup.reject": "ไม่อนุมัติเติมเงิน",
+    "act_topup.hide": "ซ่อน/เลิกซ่อนรายการเติมเงิน",
+    "act_order.approve": "อนุมัติออเดอร์ (ระบบเก่า)",
+    "act_order.reject": "ไม่อนุมัติออเดอร์ (ระบบเก่า)",
+    "act_order.start": "เริ่มดำเนินการ",
+    "act_order.complete": "ทำเสร็จแล้ว",
+    "act_order.cancel": "ยกเลิก + คืนเครดิต",
+    "act_order.clearInfo": "ลบรหัสผ่านลูกค้า",
+    "act_order.hide": "ซ่อน/เลิกซ่อนออเดอร์",
+    "act_role.grant": "ตั้งเป็นแอดมิน",
+    "act_role.revoke": "ถอดสิทธิ์แอดมิน",
+    "act_role.bootstrap": "กู้คืนสิทธิ์ด้วยรหัสลับ",
+
   },
 
   en: {
@@ -592,6 +638,48 @@ const I18N = {
     recover_admin_ask: "Enter the server bootstrap secret (ADMIN_BOOTSTRAP)",
     role: "Role", role_admin: "Admin", role_member: "Member",
     note: "Note", note_optional: "Note (optional)",
+
+    search_orders: "Search order number / name / email",
+    search_hint_order_no: "Paste the order number the customer gave you (e.g. A1B2C3D4) — searching ignores the status filter",
+    search_no_match: "Nothing matched your search",
+
+    member_history: "History",
+    member_history_title: "Member history",
+    member_orders: "Orders",
+    member_topups: "Top-ups",
+    member_total_spent: "Completed purchases",
+    member_total_topup: "Approved top-ups",
+    member_history_limit: "Shows what this page loaded (the shop’s latest 500 records)",
+
+    hide_from_customer: "Hide from customer",
+    unhide_from_customer: "Unhide",
+    hidden_badge: "Hidden from customer",
+    confirm_hide: "Hide this record from the customer’s history page?\n\nNothing is deleted, sales figures do not change, and you still see it here.",
+    confirm_unhide: "Show this record on the customer’s history page again?",
+
+    tab_logs: "Admin log",
+    logs_title: "Admin action log",
+    logs_hint: "Written by the server only — it cannot be edited or deleted. Use it to check who touched credit, roles and orders.",
+    logs_reload: "Reload",
+    log_action: "Action",
+    log_by: "By",
+    log_detail: "Details",
+    log_target: "About",
+    "act_credit.adjust": "Credit adjusted",
+    "act_topup.approve": "Top-up approved",
+    "act_topup.reject": "Top-up rejected",
+    "act_topup.hide": "Top-up hidden / unhidden",
+    "act_order.approve": "Order approved (old flow)",
+    "act_order.reject": "Order rejected (old flow)",
+    "act_order.start": "Order started",
+    "act_order.complete": "Order completed",
+    "act_order.cancel": "Order cancelled + refunded",
+    "act_order.clearInfo": "Customer password deleted",
+    "act_order.hide": "Order hidden / unhidden",
+    "act_role.grant": "Admin rights granted",
+    "act_role.revoke": "Admin rights removed",
+    "act_role.bootstrap": "Admin recovered with secret",
+
   },
 };
 

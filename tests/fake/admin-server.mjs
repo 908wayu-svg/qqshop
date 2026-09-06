@@ -276,6 +276,21 @@ function clearOrderInfo(admin, { orderId }) {
   return { ok: true };
 }
 
+// ---------- ซ่อน/เลิกซ่อนรายการในประวัติของลูกค้า ----------
+// ไม่ลบข้อมูล ไม่ขยับเครดิต — แค่ตั้ง hiddenAt ให้หน้าประวัติของลูกค้าข้ามรายการนี้ไป
+function setHidden(admin, col, body) {
+  const id = col === "orders" ? body.orderId : body.topupId;
+  const { hidden } = body;
+  if (!isId(id)) fail("BAD_REQUEST");
+  if (typeof hidden !== "boolean") fail("BAD_REQUEST");
+  const d = get(col + "/" + id);
+  if (!d) fail("NOT_FOUND");
+  patch(col + "/" + id, { hiddenAt: hidden ? now() : null });
+  audit(admin, (col === "orders" ? "order" : "topup") + ".hide",
+    { [col === "orders" ? "orderId" : "topupId"]: id, targetUid: d.uid, hidden });
+  return { hidden };
+}
+
 // ---------- สิทธิ์แอดมิน ----------
 function setRole(admin, { uid, makeAdmin }) {
   if (!isId(uid)) fail("BAD_REQUEST");
@@ -491,6 +506,8 @@ export function handleAdmin(path, body) {
         case "/admin/order/complete": out = completeOrder(admin, body); break;
         case "/admin/order/cancel": out = cancelOrder(admin, body); break;
         case "/admin/order/clear-info": out = clearOrderInfo(admin, body); break;
+        case "/admin/order/hide": out = setHidden(admin, "orders", body); break;
+        case "/admin/topup/hide": out = setHidden(admin, "topups", body); break;
         case "/admin/role": out = setRole(admin, body); break;
         default: fail("NOT_FOUND");
       }

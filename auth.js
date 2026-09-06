@@ -548,6 +548,18 @@ export const QQ = {
   // ไอดีเกม/UID ยังเก็บไว้เป็นหลักฐานว่าเติมให้ใครไป
   clearOrderCustomerInfo: orderId => callAdmin("/admin/order/clear-info", { orderId }),
 
+  // ซ่อน/เลิกซ่อนรายการในหน้าประวัติของลูกค้า (ไม่ลบข้อมูล ไม่ขยับเครดิต)
+  // ต้องผ่านเซิร์ฟเวอร์เหมือนทุกอย่างที่แตะ orders/topups — กฎปิดไม่ให้เบราว์เซอร์เขียนเลย
+  setOrderHidden: (orderId, hidden) => callAdmin("/admin/order/hide", { orderId, hidden }),
+  setTopupHidden: (topupId, hidden) => callAdmin("/admin/topup/hide", { topupId, hidden }),
+
+  // ---------- บันทึกการกระทำของแอดมิน ----------
+  // เขียนได้จากเซิร์ฟเวอร์เท่านั้น อ่านได้เฉพาะแอดมิน แก้/ลบไม่ได้เลย
+  // ทุกใบมีฟิลด์ at เสมอ (เซิร์ฟเวอร์เขียนให้) จึงใส่ orderBy ได้โดยไม่ผิดกฎเหล็กข้อ 5
+  async fetchAdminLogs(max = 300) {
+    return rows(await getDocs(query(collection(db, "adminLogs"), orderBy("at", "desc"), limit(max))));
+  },
+
   // ตั้ง/ถอดสิทธิ์แอดมิน — เซิร์ฟเวอร์ตั้ง custom claim ในบัญชี Firebase Auth
   // แล้วเขียน role ในเอกสารให้ตรงกัน ทั้งสองอย่างเบราว์เซอร์แตะเองไม่ได้
   setRole: (uid, role) => callAdmin("/admin/role", { uid, makeAdmin: role === "admin" }),

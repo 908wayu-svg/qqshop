@@ -203,7 +203,8 @@ async function submitTopup() {
 async function renderHistory() {
   const tt = document.getElementById("table-topups");
   let topups;
-  try { topups = await QQ.fetchMyTopups(); }
+  // รายการที่แอดมินซ่อนไว้ไม่ต้องโชว์ให้ลูกค้า (เอกสารยังอยู่ครบ ร้านตรวจย้อนหลังได้)
+  try { topups = (await QQ.fetchMyTopups()).filter(x => !x.hiddenAt); }
   catch (e) {
     console.warn("โหลดประวัติเติมเงินไม่ได้", e);
     tt.innerHTML = `<tr class="empty-row"><td class="empty">${t("load_failed")}</td></tr>`;

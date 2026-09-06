@@ -70,6 +70,7 @@ try {
     </button>
     <button class="tab" data-tab="products" data-i18n="tab_products">สินค้า</button>
     <button class="tab" data-tab="members" data-i18n="tab_members">สมาชิก</button>
+    <button class="tab" data-tab="logs" data-i18n="tab_logs">บันทึกแอดมิน</button>
   </nav>
 
   <!-- ===== ภาพรวม ===== -->
@@ -117,6 +118,12 @@ try {
           <button class="range-btn" data-st="all" data-i18n="all">ทั้งหมด</button>
         </div>
       </div>
+      <div class="search-row">
+        <input class="search" id="order-search" data-i18n-placeholder="search_orders"
+               placeholder="ค้นเลขที่คำสั่งซื้อ / ชื่อ / อีเมล" autocomplete="off" spellcheck="false">
+        <button class="btn-small hidden" id="order-search-clear" data-i18n="clear_search">ล้างการค้นหา</button>
+      </div>
+      <p class="hint" data-i18n="search_hint_order_no">ใส่เลขที่คำสั่งซื้อที่ลูกค้าแจ้งมาได้เลย (เช่น A1B2C3D4) — ตอนค้นหาจะมองข้ามตัวกรองสถานะ</p>
       <div class="table-wrap"><table id="table-orders"></table></div>
     </div>
   </section>
@@ -156,6 +163,18 @@ try {
         <input class="search" id="member-search" data-i18n-placeholder="search" placeholder="ค้นหา">
       </div>
       <div class="table-wrap"><table id="table-members"></table></div>
+    </div>
+  </section>
+
+  <!-- ===== บันทึกการกระทำของแอดมิน ===== -->
+  <section class="tab-page hidden" id="page-logs">
+    <div class="card">
+      <div class="toolbar">
+        <h3 data-i18n="logs_title">บันทึกการกระทำของแอดมิน</h3>
+        <button class="btn-small" id="btn-reload-logs" data-i18n="logs_reload">โหลดใหม่</button>
+      </div>
+      <p class="hint" data-i18n="logs_hint">เขียนโดยเซิร์ฟเวอร์เท่านั้น แก้และลบไม่ได้ — ใช้ตรวจย้อนหลังว่าใครทำอะไรกับเครดิต สิทธิ์ และออเดอร์</p>
+      <div class="table-wrap"><table id="table-logs"></table></div>
     </div>
   </section>
 
@@ -248,6 +267,32 @@ try {
     <input type="text" id="c-note">
     <div id="c-msg" class="msg"></div>
     <button class="btn-primary" id="c-save" data-i18n="save">บันทึก</button>
+  </div>
+</div>
+
+<!-- ประวัติของสมาชิกรายคน (กดจากแท็บสมาชิก) -->
+<div class="overlay" id="member-overlay">
+  <div class="panel panel-wide">
+    <button class="btn-close" onclick="closePanel('member-overlay')">×</button>
+    <h2 data-i18n="member_history_title">ประวัติของสมาชิก</h2>
+    <p class="hint" id="mh-who"></p>
+
+    <div class="tiles">
+      <div class="tile"><div class="tile-label" data-i18n="member_total_spent">ยอดซื้อสำเร็จ</div>
+        <div class="tile-value" id="mh-spent">—</div></div>
+      <div class="tile"><div class="tile-label" data-i18n="member_total_topup">ยอดเติมที่อนุมัติแล้ว</div>
+        <div class="tile-value" id="mh-topup">—</div></div>
+      <div class="tile"><div class="tile-label" data-i18n="credit">เครดิต</div>
+        <div class="tile-value" id="mh-credit">—</div></div>
+    </div>
+
+    <h3 data-i18n="member_orders">ออเดอร์</h3>
+    <div class="table-wrap"><table id="mh-orders"></table></div>
+
+    <h3 data-i18n="member_topups">การเติมเงิน</h3>
+    <div class="table-wrap"><table id="mh-topups"></table></div>
+
+    <p class="hint" data-i18n="member_history_limit">แสดงเท่าที่โหลดมาในหน้านี้ (ล่าสุด 500 รายการของทั้งร้าน)</p>
   </div>
 </div>
 

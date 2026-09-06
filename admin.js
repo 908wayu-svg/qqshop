@@ -5,6 +5,8 @@ import { angpaoRedeemUrl, CATEGORIES } from "./shop-config.js";
 let ORDERS = [], USERS = [], TOPUPS = [], PRODUCTS = [], SETTINGS = {};
 let RANGE = 30;
 let ORDER_FILTER = "pending", TOPUP_FILTER = "pending";
+let ORDER_SEARCH = "";        // คำค้นในตารางออเดอร์ (ค้นอยู่ = มองข้ามตัวกรองสถานะ)
+let LOGS = null;              // บันทึกแอดมิน — null = ยังไม่เคยโหลด (โหลดตอนเปิดแท็บครั้งแรก)
 let EDITING_PRODUCT = null, PRODUCT_IMAGE = null, CREDIT_TARGET = null, IMAGE_CHANGED = false;
 let STOCK_ITEMS = [];
 
@@ -367,20 +369,47 @@ function renderOverview() {
 }
 
 // ---------- ออเดอร์ ----------
+// ลูกค้าแจ้ง "เลขที่คำสั่งซื้อ" มาเป็น 8 ตัวแรกของรหัสออเดอร์แบบตัวใหญ่
+// (หน้าประวัติของลูกค้าโชว์แบบนั้น) จึงต้องจับได้ทั้งเลขย่อ รหัสเต็ม ชื่อ อีเมล และชื่อสินค้า
+// ตัด # กับช่องว่างทิ้งก่อน เพราะลูกค้ามักก๊อปมาทั้งก้อน
+const normSearch = v => String(v || "").trim().replace(/^#/, "").toLowerCase();
+
+function matchOrderSearch(o, q) {
+  if (!q) return true;
+  const id = String(o.id || "").toLowerCase();
+  return id.startsWith(q)
+    || (o.customerName || "").toLowerCase().includes(q)
+    || (o.customerEmail || "").toLowerCase().includes(q)
+    || (o.items || []).some(i => String(i.name || "").toLowerCase().includes(q));
+}
+
 function renderOrders() {
-  const list = ORDERS.filter(o => matchFilter(o.status, ORDER_FILTER));
+  // กำลังค้นหา = ข้ามตัวกรองสถานะไปเลย ลูกค้าแจ้งเลขที่มาแล้วต้องเจอ
+  // ไม่ว่าออเดอร์นั้นจะยกเลิกไปแล้วหรือยังค้างอยู่
+  const list = ORDER_SEARCH
+    ? ORDERS.filter(o => matchOrderSearch(o, ORDER_SEARCH))
+    : ORDERS.filter(o => matchFilter(o.status, ORDER_FILTER));
   const el = document.getElementById("table-orders");
-  if (!list.length) { el.innerHTML = `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`; return; }
+  document.getElementById("orders-filter").classList.toggle("dimmed", !!ORDER_SEARCH);
+  if (!list.length) {
+    const msg = ORDER_SEARCH ? t("search_no_match") : t("no_data");
+    el.innerHTML = `<tr class="empty-row"><td class="empty">${msg}</td></tr>`;
+    return;
+  }
 
   el.innerHTML = `
     <thead><tr>
-      <th>${t("date")}</th><th>${t("customer")}</th><th>${t("items")}</th>
+      <th>${t("order_number")}</th><th>${t("date")}</th><th>${t("customer")}</th><th>${t("items")}</th>
       <th class="num">${t("amount")}</th><th>${t("status")}</th><th></th>
     </tr></thead>
     <tbody>${list.slice(0, 100).map(o => {
       const pc = priceCheck(o);
       return `
       <tr>
+        <td data-label="${t("order_number")}">${orderNo(o.id)
+          ? `<code class="order-no">${esc(orderNo(o.id))}</code>
+             <button class="copy" data-copy="${esc(orderNo(o.id))}">⧉</button>`
+          : "—"}</td>
         <td data-label="${t("date")}">${fmtDateTime(o._date)}</td>
         <td data-label="${t("customer")}">${esc(o.customerName || "—")}<br><small>${esc(o.customerEmail || "")}</small>
             <br><small class="credit-note">${t("credit")}: ${money(creditOf(o.uid))}</small></td>
@@ -390,10 +419,11 @@ function renderOrders() {
         <td data-label="${t("status")}">${statusBadge(o.status)}${
           // ออเดอร์เก่ายังไม่ได้หักเครดิต ใช้ปุ่มคนละชุด บอกไว้กันแอดมินงงว่าทำไมปุ่มไม่เหมือนกัน
           o.paid !== true && o.status === "pending" ? `<br><small class="muted">${t("legacy_order")}</small>` : ""
-        }${o.note ? `<br><small>${esc(o.note)}</small>` : ""}</td>
+        }${o.note ? `<br><small>${esc(o.note)}</small>` : ""}${hiddenBadge(o)}</td>
         <td class="actions">${orderActions(o)}
           ${hasCustomerPassword(o) ? `
           <button class="btn-small" data-act="clear-cust-info" data-id="${o.id}">${t("clear_customer_info")}</button>` : ""}
+          ${hideButton(o, "order")}
         </td>
       </tr>`;
     }).join("")}</tbody>`;
@@ -421,6 +451,18 @@ function orderActions(o) {
 }
 
 const creditOf = uid => Number(USERS.find(u => u.id === uid)?.credit || 0);
+
+// เลขที่คำสั่งซื้อที่ลูกค้าเห็นในหน้าประวัติ — ต้องตรงกับ purchases.js เป๊ะ
+// ไม่งั้นลูกค้าแจ้งเลขมาแล้วแอดมินหาไม่เจอ
+const orderNo = id => String(id || "").slice(0, 8).toUpperCase();
+
+// ===== ซ่อนรายการจากหน้าประวัติของลูกค้า =====
+// ไม่ใช่การลบ — เอกสารอยู่ครบ ยอดขายไม่เปลี่ยน หลังบ้านยังเห็นทุกอย่าง
+const hiddenBadge = x => x?.hiddenAt ? `<br><small class="muted">🙈 ${t("hidden_badge")}</small>` : "";
+
+const hideButton = (x, kind) => `<button class="btn-small" data-act="${
+  x.hiddenAt ? "unhide" : "hide"}-${kind}" data-id="${esc(x.id)}">${
+  t(x.hiddenAt ? "unhide_from_customer" : "hide_from_customer")}</button>`;
 
 // ===== ข้อมูลไอดีเกมที่ลูกค้ากรอกมา (ของเติมเกม) =====
 // โชว์ให้แอดมินเห็นในออเดอร์ จะได้เติมเข้าไอดีถูกคน
@@ -520,10 +562,11 @@ function renderTopups() {
         <td class="num" data-label="${t("amount")}">${money(x.amount)}${OPEN_STATES.includes(x.status) && !(Number(x.amount) > 0)
           ? `<br><small class="price-warn">⚠ ${t("needs_amount")}</small>` : ""}</td>
         <td data-label="${t("status")}">${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}${
-          x.status === "processing" ? `<br><small class="price-warn">${t("stuck_check_first")}</small>` : ""}</td>
+          x.status === "processing" ? `<br><small class="price-warn">${t("stuck_check_first")}</small>` : ""}${hiddenBadge(x)}</td>
         <td class="actions">${OPEN_STATES.includes(x.status) ? `
           <button class="btn-small ok" data-act="approve-topup" data-id="${x.id}">${t("approve")}</button>
           <button class="btn-small danger" data-act="reject-topup" data-id="${x.id}">${t("reject")}</button>` : ""}
+          ${hideButton(x, "topup")}
         </td>
       </tr>`).join("")}</tbody>`;
 }
@@ -750,11 +793,121 @@ function renderMembers() {
         <td data-label="${t("role")}">${u.role === "admin" ? `<span class="badge admin">${t("role_admin")}</span>` : t("role_member")}</td>
         <td data-label="${t("joined")}">${fmtDateTime(u._date)}</td>
         <td class="actions">
+          <button class="btn-small" data-act="member-history" data-id="${u.id}">${t("member_history")}</button>
           <button class="btn-small primary" data-act="add-credit" data-id="${u.id}">+ ${t("credit")}</button>
           <button class="btn-small" data-act="toggle-role" data-id="${u.id}">
             ${u.role === "admin" ? t("remove_admin") : t("make_admin")}</button>
         </td>
       </tr>`).join("")}</tbody>`;
+}
+
+// ---------- ประวัติของสมาชิกรายคน ----------
+// ใช้ข้อมูลที่หน้านี้โหลดมาแล้ว ไม่ยิงฐานข้อมูลเพิ่ม (ประหยัดโควตาอ่านของ Firestore)
+// ข้อแลกเปลี่ยน: เห็นได้เท่าที่อยู่ใน 500 รายการล่าสุดของทั้งร้าน — บอกไว้ท้ายกล่องแล้ว
+function openMemberHistory(u) {
+  const orders = ORDERS.filter(o => o.uid === u.id);
+  const topups = TOPUPS.filter(x => x.uid === u.id);
+
+  document.getElementById("mh-who").textContent = `${u.name || "—"} · ${u.email || "—"}`;
+  document.getElementById("mh-credit").textContent = money(u.credit);
+  document.getElementById("mh-spent").textContent =
+    money(orders.filter(o => DONE_STATES.includes(o.status))
+      .reduce((sum, o) => sum + Number(o.total || 0), 0));
+  document.getElementById("mh-topup").textContent =
+    money(topups.filter(x => x.status === "approved")
+      .reduce((sum, x) => sum + Number(x.amount || 0), 0));
+
+  const oEl = document.getElementById("mh-orders");
+  oEl.innerHTML = !orders.length
+    ? `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`
+    : `<thead><tr><th>${t("order_number")}</th><th>${t("date")}</th><th>${t("items")}</th>
+         <th class="num">${t("amount")}</th><th>${t("status")}</th></tr></thead>
+       <tbody>${orders.map(o => `<tr>
+         <td data-label="${t("order_number")}"><code class="order-no">${esc(orderNo(o.id))}</code></td>
+         <td data-label="${t("date")}">${fmtDateTime(o._date)}</td>
+         <td data-label="${t("items")}"><small>${esc((o.items || []).map(i => `${i.name} ×${i.qty}`).join(", "))}</small></td>
+         <td class="num" data-label="${t("amount")}">${money(o.total)}</td>
+         <td data-label="${t("status")}">${statusBadge(o.status)}${hiddenBadge(o)}</td>
+       </tr>`).join("")}</tbody>`;
+
+  const tEl = document.getElementById("mh-topups");
+  tEl.innerHTML = !topups.length
+    ? `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`
+    : `<thead><tr><th>${t("date")}</th><th>${t("method")}</th>
+         <th class="num">${t("amount")}</th><th>${t("status")}</th></tr></thead>
+       <tbody>${topups.map(x => `<tr>
+         <td data-label="${t("date")}">${fmtDateTime(x._date)}</td>
+         <td data-label="${t("method")}">${t(METHOD_KEY[x.method] || "m_admin")}</td>
+         <td class="num" data-label="${t("amount")}">${money(x.amount)}</td>
+         <td data-label="${t("status")}">${statusBadge(x.status)}${x.note ? `<br><small>${esc(x.note)}</small>` : ""}${hiddenBadge(x)}</td>
+       </tr>`).join("")}</tbody>`;
+
+  document.getElementById("member-overlay").classList.add("open");
+}
+
+// ---------- บันทึกการกระทำของแอดมิน ----------
+// เอกสารใน adminLogs เขียนได้จากเซิร์ฟเวอร์เท่านั้น แก้/ลบไม่ได้เลย (ดู firestore.rules)
+// โหลดตอนเปิดแท็บครั้งแรกเท่านั้น — ร้านที่ใช้มานานจะมีหลายร้อยใบ ไม่ควรโหลดทุกครั้งที่เปิดหน้า
+const userLabel = uid => {
+  const u = USERS.find(x => x.id === String(uid));
+  return u ? (u.name || u.email || String(uid)) : String(uid || "—");
+};
+
+// t() คืนชื่อคีย์กลับมาถ้าไม่มีคำแปล — การกระทำแบบใหม่ที่ยังไม่ได้แปลจะโผล่เป็น "act_xxx"
+// ให้ผู้ใช้เห็น กันไว้ด้วยการถอยไปแสดงชื่อดิบแทน
+function actionLabel(action) {
+  const key = "act_" + String(action || "");
+  const label = t(key);
+  return label === key ? String(action || "—") : label;
+}
+
+function logDetail(l) {
+  const bits = [];
+  if (l.targetUid) bits.push(`${t("customer")}: ${userLabel(l.targetUid)}`);
+  else if (l.targetEmail) bits.push(String(l.targetEmail));
+  if (l.orderId) bits.push(`${t("order_number")} ${orderNo(l.orderId)}`);
+  if (l.topupId) bits.push(`${t("tab_topups")} ${orderNo(l.topupId)}`);
+  if (typeof l.amount === "number") bits.push(`${t("amount")}: ${money(l.amount)}`);
+  if (typeof l.before === "number" && typeof l.after === "number") {
+    bits.push(`${t("credit")}: ${money(l.before)} → ${money(l.after)}`);
+  }
+  if (typeof l.hidden === "boolean") {
+    bits.push(l.hidden ? t("hidden_badge") : t("unhide_from_customer"));
+  }
+  if (l.note) bits.push(String(l.note));
+  return esc(bits.join(" · "));
+}
+
+function renderLogs() {
+  const el = document.getElementById("table-logs");
+  if (!LOGS) return;
+  if (!LOGS.length) { el.innerHTML = `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`; return; }
+  el.innerHTML = `
+    <thead><tr>
+      <th>${t("date")}</th><th>${t("log_action")}</th><th>${t("log_by")}</th><th>${t("log_detail")}</th>
+    </tr></thead>
+    <tbody>${LOGS.map(l => `
+      <tr>
+        <td data-label="${t("date")}">${fmtDateTime(l._date)}</td>
+        <td data-label="${t("log_action")}">${esc(actionLabel(l.action))}</td>
+        <td data-label="${t("log_by")}"><small>${esc(l.byEmail || l.byUid || "—")}</small></td>
+        <td data-label="${t("log_detail")}"><small>${logDetail(l)}</small></td>
+      </tr>`).join("")}</tbody>`;
+}
+
+async function loadLogs(force = false) {
+  if (LOGS && !force) return;
+  const el = document.getElementById("table-logs");
+  el.innerHTML = `<tr class="empty-row"><td class="empty">${t("loading")}</td></tr>`;
+  try {
+    LOGS = (await QQ.fetchAdminLogs()).map(l => ({ ...l, _date: toDate(l.at) }));
+  } catch (e) {
+    // โหลดไม่ได้ต้องบอก ไม่ใช่ปล่อยตารางว่างให้เข้าใจผิดว่า "ไม่มีใครทำอะไรเลย"
+    LOGS = null;
+    el.innerHTML = `<tr class="empty-row"><td class="empty">${esc(QQ.friendlyError(e))}</td></tr>`;
+    return;
+  }
+  renderLogs();
 }
 
 function setMsg(id, text, kind = "error") {
@@ -806,6 +959,7 @@ async function refreshAfter(fn) {
 
 function renderAll() {
   renderOverview(); renderOrders(); renderTopups(); renderProducts(); renderMembers();
+  if (LOGS) renderLogs();   // เคยเปิดแท็บบันทึกแล้วเท่านั้น ไม่ไปยิงฐานข้อมูลเพิ่มเอง
 }
 
 // ---------- events ----------
@@ -816,6 +970,7 @@ document.getElementById("tabs").addEventListener("click", e => {
   document.querySelectorAll(".tab-page").forEach(p =>
     p.classList.toggle("hidden", p.id !== "page-" + btn.dataset.tab));
   if (btn.dataset.tab === "overview") renderOverview();
+  if (btn.dataset.tab === "logs") loadLogs();
 });
 
 document.getElementById("range-filter").addEventListener("click", e => {
@@ -836,6 +991,21 @@ wireFilter("orders-filter", v => { ORDER_FILTER = v; renderOrders(); });
 wireFilter("topups-filter", v => { TOPUP_FILTER = v; renderTopups(); });
 
 document.getElementById("member-search").addEventListener("input", renderMembers);
+
+// ค้นหาออเดอร์ด้วยเลขที่คำสั่งซื้อที่ลูกค้าแจ้งมา (หรือชื่อ/อีเมล/ชื่อสินค้า)
+const orderSearchBox = document.getElementById("order-search");
+orderSearchBox.addEventListener("input", () => {
+  ORDER_SEARCH = normSearch(orderSearchBox.value);
+  document.getElementById("order-search-clear").classList.toggle("hidden", !ORDER_SEARCH);
+  renderOrders();
+});
+document.getElementById("order-search-clear").addEventListener("click", () => {
+  orderSearchBox.value = "";
+  orderSearchBox.dispatchEvent(new Event("input"));
+  orderSearchBox.focus();
+});
+
+document.getElementById("btn-reload-logs").addEventListener("click", () => loadLogs(true));
 document.getElementById("btn-add-product").addEventListener("click", () => openProductModal(null));
 document.getElementById("p-save").addEventListener("click", saveProduct);
 
@@ -1021,6 +1191,22 @@ document.getElementById("dash").addEventListener("click", async e => {
         document.getElementById("c-preview").textContent = "";
         setMsg("c-msg", "");
         document.getElementById("credit-overlay").classList.add("open");
+      } else if (act === "hide-order" || act === "unhide-order") {
+        // ซ่อน/เลิกซ่อนออเดอร์จากหน้าประวัติของลูกค้า — ไม่ลบข้อมูล ไม่ขยับเครดิต
+        const hidden = act === "hide-order";
+        if (!confirm(t(hidden ? "confirm_hide" : "confirm_unhide"))) return;
+        await QQ.setOrderHidden(id, hidden);
+        await refreshAfter(() => patchRow(ORDERS, "orders", id));
+      } else if (act === "hide-topup" || act === "unhide-topup") {
+        const hidden = act === "hide-topup";
+        if (!confirm(t(hidden ? "confirm_hide" : "confirm_unhide"))) return;
+        await QQ.setTopupHidden(id, hidden);
+        await refreshAfter(() => patchRow(TOPUPS, "topups", id));
+      } else if (act === "member-history") {
+        const u = USERS.find(x => x.id === id);
+        // ตารางอาจค้างอยู่หลังสมาชิกถูกลบจากอีกหน้าจอ
+        if (!u) { alert(t("not_found")); await reloadAll(); return; }
+        openMemberHistory(u);
       } else if (act === "toggle-role") {
         // กันแอดมินถอดสิทธิ์ตัวเองจนเข้าหลังบ้านไม่ได้
         if (id === QQ.user.uid) { alert(t("cannot_demote_self")); return; }
