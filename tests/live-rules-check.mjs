@@ -80,6 +80,16 @@ try {
   ok("ดึงรายการเติมเงินของตัวเองได้", r.status === 200, "HTTP " + r.status);
   r = await runQuery(structuredQuery("orders", eqUid("someone-else-uid")));
   ok("ดึงออเดอร์ของ uid คนอื่นไม่ได้", r.status === 403, "HTTP " + r.status);
+  // ===== บันทึกการกระทำของแอดมิน =====
+  // แท็บ "บันทึกแอดมิน" ในหลังบ้านอ่านทั้งคอลเลกชัน (list) ไม่ใช่ทีละใบ
+  // กฎ list กับ get เป็นคนละเส้นทาง และตัวจำลองกฎจับเคส list ไม่ได้ จึงต้องยิงจริง
+  r = await runQuery(structuredQuery("adminLogs"));
+  ok("สมาชิกไล่อ่านบันทึกแอดมินทั้งลิสต์ไม่ได้", r.status === 403, "HTTP " + r.status);
+  r = await get("adminLogs/anything");
+  ok("สมาชิกเปิดบันทึกแอดมินทีละใบไม่ได้", r.status === 403, "HTTP " + r.status);
+  r = await patch("adminLogs/qqtest-fake", { action: "ปลอม" });
+  ok("สมาชิกเขียนบันทึกปลอมไม่ได้", r.status === 403, "HTTP " + r.status);
+
   r = await runQuery(structuredQuery("settings"));
   ok("อ่านตั้งค่าร้านไม่ได้", r.status === 403, "HTTP " + r.status);
 
