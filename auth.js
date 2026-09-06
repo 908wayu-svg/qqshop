@@ -426,6 +426,22 @@ export const QQ = {
   async fetchOrders(max = 500) {
     return rows(await getDocs(query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(max))));
   },
+  // ประวัติของสมาชิกคนหนึ่งแบบครบ (แอดมินเท่านั้น)
+  // หลังบ้านโหลดมาแค่ 500 รายการล่าสุดของทั้งร้าน — ถ้ากรองจากก้อนนั้นอย่างเดียว
+  // ลูกค้าเก่าจะดูเหมือน "ไม่เคยซื้ออะไรเลย" ทั้งที่ซื้อไปเยอะ จึงต้องถามฐานข้อมูลตรงๆ
+  // ใช้ index uid + createdAt ที่มีอยู่แล้ว (ตัวเดียวกับที่หน้าประวัติของลูกค้าใช้)
+  async fetchUserHistory(col, uid, max = 200) {
+    const base = [collection(db, col), where("uid", "==", uid)];
+    try {
+      return rows(await getDocs(query(...base, orderBy("createdAt", "desc"), limit(max))));
+    } catch (e) {
+      // index ยังไม่พร้อม (เพิ่ง deploy) — ถอย orderBy ออกแล้วเรียงเองแทนที่จะพังทั้งกล่อง
+      if (e?.code !== "failed-precondition") throw e;
+      console.warn("ยังไม่มี index สำหรับ " + col + " — เรียงเองชั่วคราว", e);
+      return sortByCreatedDesc(rows(await getDocs(query(...base, limit(max)))));
+    }
+  },
+
   // ค้นออเดอร์จากฐานข้อมูลทั้งหมดด้วย "เลขที่คำสั่งซื้อ" ที่ลูกค้าแจ้งมา (แอดมินเท่านั้น)
   //
   // หลังบ้านโหลดมาแค่ 500 ใบล่าสุด ออเดอร์ที่เก่ากว่านั้นจะหาในหน้าไม่เจอ

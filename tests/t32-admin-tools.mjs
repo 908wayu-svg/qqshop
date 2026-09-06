@@ -218,6 +218,33 @@ ok("โชว์เครดิตคงเหลือปัจจุบัน"
 ok("ตารางในกล่องมี data-label ครบ (มือถือแปลงเป็นการ์ด)",
   [...$("mh-orders").querySelectorAll("tbody td")].every(td => td.hasAttribute("data-label")));
 
+// ---------- ประวัติต้องครบ ไม่ใช่แค่เท่าที่หน้าโหลดมา ----------
+// ลูกค้าเก่าที่ออเดอร์ไม่ได้อยู่ใน 500 รายการล่าสุด ต้องยังเห็นในประวัติของตัวเอง
+// ไม่งั้นแอดมินจะสรุปว่า "ลูกค้าคนนี้ซื้อน้อย" ทั้งที่ซื้อไปเยอะ
+window.closePanel("member-overlay");
+store.put("orders/aa11bb22cc33dd44", {
+  uid: "c1", customerName: "สมชาย ใจดี", customerEmail: "somchai@x.com", total: 1500,
+  status: "completed", paid: true, createdAt: TS(88888),
+  items: [{ id: "pA", name: "ไอดีเกม A", price: 1500, qty: 1 }],
+});
+click(btnFor("c1"));
+await tick(14);
+ok("เห็นออเดอร์เก่าที่หน้ายังไม่ได้โหลดมาด้วย",
+  $("mh-orders").textContent.includes("1,500"), $("mh-orders").textContent.slice(0, 90));
+ok("ยอดซื้อสำเร็จรวมของเก่าเข้าไปด้วย", $("mh-spent").textContent.includes("1,800"),
+  $("mh-spent").textContent);
+ok("ไม่มีคำเตือนว่าโหลดไม่ครบ", !$("mh-msg").classList.contains("show"), $("mh-msg").textContent);
+
+// ---------- ฐานข้อมูลตอบไม่ได้ ต้องเตือน ไม่ใช่โชว์ตัวเลขต่ำๆ เฉยๆ ----------
+window.closePanel("member-overlay");
+store.state.failReads = true;
+click(btnFor("c1"));
+await tick(14);
+store.state.failReads = false;
+ok("โหลดไม่สำเร็จแล้วเตือนว่าตัวเลขอาจไม่ครบ", $("mh-msg").classList.contains("show")
+  && $("mh-msg").textContent.includes("อาจต่ำกว่าความจริง"), $("mh-msg").textContent);
+ok("ยังโชว์เท่าที่มีให้ดูได้ ไม่ใช่กล่องว่าง", $("mh-orders").textContent.trim().length > 0);
+
 window.closePanel("member-overlay");
 click(btnFor("c2"));
 await tick(4);

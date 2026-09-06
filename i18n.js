@@ -326,7 +326,8 @@ const I18N = {
     member_topups: "การเติมเงิน",
     member_total_spent: "ยอดซื้อสำเร็จ",
     member_total_topup: "ยอดเติมที่อนุมัติแล้ว",
-    member_history_limit: "แสดงเท่าที่โหลดมาในหน้านี้ (ล่าสุด 500 รายการของทั้งร้าน)",
+    member_history_limit: "ดึงประวัติของสมาชิกคนนี้จากฐานข้อมูลโดยตรง (ล่าสุด 200 รายการต่อประเภท)",
+    member_history_partial: "⚠ โหลดประวัติจากฐานข้อมูลไม่สำเร็จ — ตัวเลขข้างล่างนับเฉพาะรายการที่หน้านี้โหลดมาเท่านั้น จึงอาจต่ำกว่าความจริง",
 
     // ซ่อนรายการจากหน้าประวัติของลูกค้า
     hide_from_customer: "ซ่อนจากลูกค้า",
@@ -674,7 +675,8 @@ const I18N = {
     member_topups: "Top-ups",
     member_total_spent: "Completed purchases",
     member_total_topup: "Approved top-ups",
-    member_history_limit: "Shows what this page loaded (the shop’s latest 500 records)",
+    member_history_limit: "Pulled straight from the database for this member (latest 200 of each)",
+    member_history_partial: "⚠ Could not load from the database — the figures below only count what this page loaded, so they may be too low",
 
     hide_from_customer: "Hide from customer",
     unhide_from_customer: "Unhide",

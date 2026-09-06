@@ -882,11 +882,26 @@ function renderMembers() {
 }
 
 // ---------- ประวัติของสมาชิกรายคน ----------
-// ใช้ข้อมูลที่หน้านี้โหลดมาแล้ว ไม่ยิงฐานข้อมูลเพิ่ม (ประหยัดโควตาอ่านของ Firestore)
-// ข้อแลกเปลี่ยน: เห็นได้เท่าที่อยู่ใน 500 รายการล่าสุดของทั้งร้าน — บอกไว้ท้ายกล่องแล้ว
-function openMemberHistory(u) {
-  const orders = ORDERS.filter(o => o.uid === u.id);
-  const topups = TOPUPS.filter(x => x.uid === u.id);
+// ถามฐานข้อมูลตรงๆ ว่าคนนี้มีอะไรบ้าง ไม่ใช่กรองจาก 500 รายการล่าสุดที่หน้าโหลดมา
+// *เหตุผล: ลูกค้าเก่าจะดูเหมือน "ไม่เคยซื้ออะไรเลย" ทั้งที่ซื้อไปเยอะ
+//  ตัวเลข "ยอดซื้อสำเร็จ" ที่ต่ำกว่าความจริงอันตรายกว่าไม่โชว์ตัวเลขเลย*
+// ถ้าฐานข้อมูลตอบไม่ได้ ค่อยถอยไปใช้ของที่โหลดมา พร้อมเตือนว่าตัวเลขอาจไม่ครบ
+async function openMemberHistory(u) {
+  let orders = ORDERS.filter(o => o.uid === u.id);
+  let topups = TOPUPS.filter(x => x.uid === u.id);
+  let partial = false;
+  try {
+    const [o, tp] = await Promise.all([
+      QQ.fetchUserHistory("orders", u.id),
+      QQ.fetchUserHistory("topups", u.id),
+    ]);
+    orders = o.map(x => ({ ...x, _date: toDate(x.createdAt) }));
+    topups = tp.map(x => ({ ...x, _date: toDate(x.createdAt) }));
+  } catch (e) {
+    console.warn("ดึงประวัติของสมาชิกจากฐานข้อมูลไม่สำเร็จ ใช้เท่าที่โหลดมา", e);
+    partial = true;
+  }
+  setMsg("mh-msg", partial ? t("member_history_partial") : "", "warn");
 
   document.getElementById("mh-who").textContent = `${u.name || "—"} · ${u.email || "—"}`;
   document.getElementById("mh-credit").textContent = money(u.credit);
@@ -1341,7 +1356,7 @@ document.getElementById("dash").addEventListener("click", async e => {
         const u = USERS.find(x => x.id === id);
         // ตารางอาจค้างอยู่หลังสมาชิกถูกลบจากอีกหน้าจอ
         if (!u) { alert(t("not_found")); await reloadAll(); return; }
-        openMemberHistory(u);
+        await openMemberHistory(u);
       } else if (act === "toggle-role") {
         // กันแอดมินถอดสิทธิ์ตัวเองจนเข้าหลังบ้านไม่ได้
         if (id === QQ.user.uid) { alert(t("cannot_demote_self")); return; }
