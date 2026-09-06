@@ -371,6 +371,31 @@ ok("กดโหลดใหม่แล้วเห็นบันทึกท�
 ok("บันทึกปรับเครดิตบอกยอดก่อน/หลัง", $("table-logs").textContent.includes("250")
   && $("table-logs").textContent.includes("300"));
 
+// ---------- บันทึกที่มากเกินกว่าจะดึงมาได้ครั้งเดียว ----------
+// ช่องค้นด้านล่างกรองได้เฉพาะในก้อนที่ดึงมาแล้ว ถ้าไม่บอกว่าดึงมาไม่ครบ
+// แอดมินจะค้นเรื่องเก่าไม่เจอแล้วสรุปว่า "ไม่มีบันทึก" ทั้งที่มี
+ok("บันทึกยังไม่ถึงเพดาน = ไม่มีคำเตือน", !$("logs-cap").classList.contains("show"),
+  $("logs-cap").textContent);
+
+for (let n = 0; n < 300; n++) {
+  store.put("adminLogs/bulk" + String(n).padStart(4, "0"), {
+    at: TS(5000 + n), action: "credit.adjust", byUid: "x", byEmail: "someone@x.com",
+    targetUid: "c1", amount: 1, before: 0, after: 1,
+  });
+}
+click($("btn-reload-logs"));
+await tick(14);
+ok("บันทึกชนเพดานแล้วเตือน", $("logs-cap").classList.contains("show"), $("logs-cap").textContent);
+ok("คำเตือนบอกจำนวนที่ดึงมาได้", $("logs-cap").textContent.includes("300"), $("logs-cap").textContent);
+ok("คำเตือนบอกด้วยว่าการค้นครอบคลุมแค่ก้อนนี้", $("logs-cap").textContent.includes("ค้น"),
+  $("logs-cap").textContent);
+
+for (let n = 0; n < 300; n++) store.state.docs.delete("adminLogs/bulk" + String(n).padStart(4, "0"));
+click($("btn-reload-logs"));
+await tick(14);
+ok("ลบของทดสอบแล้วคำเตือนหายไป", !$("logs-cap").classList.contains("show"),
+  $("logs-cap").textContent);
+
 // ---------- ค้นในบันทึก ----------
 const logSearch = $("log-search");
 const typeLog = v => { logSearch.value = v; logSearch.dispatchEvent(new window.Event("input", { bubbles: true })); };

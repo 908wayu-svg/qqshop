@@ -10,6 +10,9 @@ let DEEP_HITS = [];           // ออเดอร์ที่ค้นเจ�
 // เพดานที่หน้านี้ดึงมาต่อคอลเลกชัน — ถ้าดึงมาได้เต็มเพดานพอดี แปลว่ายังมีของเก่ากว่านั้นอีก
 // และตัวเลขทุกใบในหน้าภาพรวมจะต่ำกว่าความจริงโดยไม่มีใครรู้ ต้องบอกให้เห็น
 const DATA_CAP = 500;
+// บันทึกแอดมินดึงมาได้ครั้งละเท่านี้ — ช่องค้นด้านบนกรองได้เฉพาะในก้อนที่ดึงมาแล้ว
+// ถ้าไม่บอก แอดมินจะค้นไม่เจอเรื่องเก่าแล้วสรุปว่า "ไม่มีบันทึก" ทั้งที่มี
+const LOG_CAP = 300;
 let CAPPED = [];              // คอลเลกชันที่ดึงมาชนเพดาน
 let LOG_SEARCH = "";          // คำค้นในแท็บบันทึกแอดมิน (กรองเฉพาะที่โหลดมาแล้ว ไม่ยิงฐานข้อมูลซ้ำ)
 let LOGS = null;              // บันทึกแอดมิน — null = ยังไม่เคยโหลด (โหลดตอนเปิดแท็บครั้งแรก)
@@ -1001,9 +1004,12 @@ function renderLogs() {
   if (!LOGS) return;
   if (!LOGS.length) {
     countBox.textContent = "";
+    setMsg("logs-cap", "", "warn");
     el.innerHTML = `<tr class="empty-row"><td class="empty">${t("no_data")}</td></tr>`;
     return;
   }
+
+  setMsg("logs-cap", LOGS.length >= LOG_CAP ? tv("logs_capped", { n: fmtNum(LOG_CAP) }) : "", "warn");
 
   const rows = LOG_SEARCH ? LOGS.filter(l => logText(l).includes(LOG_SEARCH)) : LOGS;
   countBox.textContent = LOG_SEARCH ? tv("logs_count", { n: rows.length, all: LOGS.length }) : "";
@@ -1029,7 +1035,7 @@ async function loadLogs(force = false) {
   const el = document.getElementById("table-logs");
   el.innerHTML = `<tr class="empty-row"><td class="empty">${t("loading")}</td></tr>`;
   try {
-    LOGS = (await QQ.fetchAdminLogs()).map(l => ({ ...l, _date: toDate(l.at) }));
+    LOGS = (await QQ.fetchAdminLogs(LOG_CAP)).map(l => ({ ...l, _date: toDate(l.at) }));
   } catch (e) {
     // โหลดไม่ได้ต้องบอก ไม่ใช่ปล่อยตารางว่างให้เข้าใจผิดว่า "ไม่มีใครทำอะไรเลย"
     LOGS = null;
