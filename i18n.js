@@ -319,6 +319,7 @@ const I18N = {
 
     // ประวัติของสมาชิกรายคน
     credit_unknown: "ไม่ทราบ (ยังไม่ได้โหลดข้อมูลสมาชิกคนนี้)",
+    log_cleared_info: "ลบรหัสผ่านลูกค้าให้อัตโนมัติแล้ว",
     member_history: "ประวัติ",
     member_history_title: "ประวัติของสมาชิก",
     member_orders: "ออเดอร์",
@@ -664,6 +665,7 @@ const I18N = {
     search_no_match: "Nothing matched your search",
 
     credit_unknown: "unknown (this member is not loaded on this page)",
+    log_cleared_info: "customer password auto-deleted",
     member_history: "History",
     member_history_title: "Member history",
     member_orders: "Orders",

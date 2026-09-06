@@ -97,6 +97,33 @@ section("ทุกค่าใน data-act ต้องมีคนรับไ�
   ok("ไม่มีโค้ดรับปุ่มที่ไม่มีอยู่แล้ว", deadArms.length === 0, deadArms.join(", "));
 }
 
+section("ทุกอย่างที่เซิร์ฟเวอร์บันทึกไว้ ต้องมีที่แสดงในแท็บบันทึกแอดมิน");
+// เซิร์ฟเวอร์เขียน adminLogs ไว้เพื่อให้ตรวจย้อนหลังได้ ถ้าหน้าเว็บไม่แสดงฟิลด์ไหน
+// ข้อมูลนั้นก็เท่ากับไม่มี (ต้องไปเปิดฐานข้อมูลดูเอง) — เพิ่มฟิลด์ใหม่เมื่อไหร่ต้องเพิ่มที่แสดงด้วย
+{
+  const worker = fs.readFileSync(path.join(SRC, "worker/src/index.js"), "utf8");
+  const adminJs = fs.readFileSync(path.join(SRC, "admin.js"), "utf8");
+  // คอลัมน์ของตัวเองอยู่แล้ว ไม่ต้องอยู่ในช่อง "รายละเอียด"
+  const OWN_COLUMN = new Set(["at", "action", "byUid", "byEmail"]);
+
+  const fields = new Set();
+  for (const m of worker.matchAll(/auditWrite\([^,]+,[^,]+,\s*\{([^}]*)\}/g)) {
+    for (const f of m[1].matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*:/g)) fields.add(f[1]);
+    // เขียนแบบย่อ เช่น { orderId, targetUid } (ชื่อฟิลด์เท่ากับชื่อตัวแปร)
+    for (const f of m[1].split(",")) {
+      const t = f.trim();
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) fields.add(t);
+    }
+  }
+  ok("อ่านรายชื่อฟิลด์ที่เซิร์ฟเวอร์บันทึกได้", fields.size >= 6, [...fields].join(","));
+
+  const detail = adminJs.slice(adminJs.indexOf("function logDetail"),
+                               adminJs.indexOf("function renderLogs"));
+  const missing = [...fields].filter(f => !OWN_COLUMN.has(f)
+    && !new RegExp("l\\." + f + "\\b").test(detail));
+  ok("ทุกฟิลด์ที่บันทึกไว้ มีที่แสดงในหน้าเว็บ", missing.length === 0, missing.join(", "));
+}
+
 section("คลาสที่หน้าเว็บใช้ ต้องมีสไตล์รองรับจริง");
 // คลาสกลุ่มนี้ถ้าสไตล์หาย หน้าเว็บจะไม่พัง แต่จะ "ดูผิด" แบบเงียบๆ
 // เช่น .sr-only ที่ไม่มีสไตล์ = ป้ายที่ตั้งใจให้เฉพาะโปรแกรมอ่านหน้าจอได้ยิน โผล่มาบนจอจริง

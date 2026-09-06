@@ -950,6 +950,8 @@ function logDetail(l) {
   if (typeof l.before === "number" && typeof l.after === "number") {
     bits.push(`${t("credit")}: ${money(l.before)} → ${money(l.after)}`);
   }
+  // ตอนกด "ทำเสร็จแล้ว" ระบบลบชื่อผู้ใช้/รหัสผ่านของลูกค้าทิ้งให้เอง — เป็นเรื่องที่ต้องตรวจย้อนหลังได้
+  if (l.clearedInfo === true) bits.push(t("log_cleared_info"));
   if (typeof l.hidden === "boolean") {
     bits.push(l.hidden ? t("hidden_badge") : t("unhide_from_customer"));
   }
