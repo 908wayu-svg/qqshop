@@ -483,5 +483,48 @@ let hideDenied = "";
 try { await QQ.setOrderHidden(OID, true); } catch (e) { hideDenied = e.adminCode || e.message; }
 ok("สั่งซ่อนออเดอร์ไม่ได้", hideDenied === "ADMIN_ONLY", hideDenied);
 
+// =====================================================================
+section("การแบ่งวันในกราฟต้องใช้เวลาท้องถิ่น ไม่ใช่ UTC");
+// กฎเหล็กข้อ 8 — เคยพลาดมาแล้วจริง: ออเดอร์ตอนเช้าหายไปจากกราฟ
+// ไทยเป็น UTC+7 ถ้าแบ่งวันด้วยเวลา UTC ออเดอร์ที่สั่งก่อน 07:00 น. ตามเวลาไทย
+// จะถูกนับเป็น "เมื่อวาน" — ยอดขายรายวันเลื่อนไปทั้งแถบโดยไม่มีใครทันสังเกต
+// (เดิมไม่มีเทสคุมเรื่องนี้เลย ทั้งที่เขียนไว้เป็นกฎเหล็ก)
+{
+  const atLocal = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi, 0);
+
+  // เที่ยงคืนครึ่ง กับ ก่อนเที่ยงคืนครึ่ง = คนละวันเสมอ ไม่ว่าเครื่องอยู่โซนเวลาไหน
+  ok("00:30 ของวันหนึ่ง ถูกนับเป็นวันนั้น",
+    ADMIN.dayKey(atLocal(2026, 9, 6, 0, 30)) === "2026-09-06",
+    ADMIN.dayKey(atLocal(2026, 9, 6, 0, 30)));
+  ok("23:30 ของวันก่อนหน้า ถูกนับเป็นวันก่อนหน้า",
+    ADMIN.dayKey(atLocal(2026, 9, 5, 23, 30)) === "2026-09-05",
+    ADMIN.dayKey(atLocal(2026, 9, 5, 23, 30)));
+  ok("06:00 เช้า (ช่วงที่เคยหายไปตอนใช้ UTC) ยังอยู่วันเดียวกัน",
+    ADMIN.dayKey(atLocal(2026, 9, 6, 6, 0)) === "2026-09-06",
+    ADMIN.dayKey(atLocal(2026, 9, 6, 6, 0)));
+
+  // เทียบกับวิธีที่ผิด (แปลงเป็น UTC ก่อนตัดวัน) — ต้องให้ผลต่างกันในโซนเวลาไทย
+  // ถ้าเครื่องที่รันเทสตั้งเป็น UTC พอดี สองวิธีจะได้ผลเท่ากัน ข้อนี้จึงข้ามไป
+  const offset = -new Date().getTimezoneOffset();   // นาที (ไทย = +420)
+  if (offset > 0) {
+    const early = atLocal(2026, 9, 6, 0, 30);
+    const utcWay = early.toISOString().slice(0, 10);
+    ok("วิธีที่ผิด (ตัดวันจากเวลา UTC) ให้ผลคนละวันจริง — เทสนี้มีความหมาย",
+      utcWay !== ADMIN.dayKey(early), "UTC ได้ " + utcWay);
+  } else {
+    ok("เครื่องที่รันอยู่โซนเวลา UTC จึงข้ามการเทียบ (ไม่ใช่ความผิดพลาด)", true);
+  }
+
+  // ผ่านของจริง: ออเดอร์ตอนตี 1 ของวันนี้ ต้องอยู่ในถังของวันนี้
+  const today = new Date(); today.setHours(1, 0, 0, 0);
+  const series = ADMIN.dailySeries([{ _date: today }], () => 1);
+  const todayKey = ADMIN.dayKey(new Date());
+  const bucket = series.find(x => x.key === todayKey);
+  ok("ออเดอร์ตอนตี 1 ของวันนี้ ตกอยู่ในถังของวันนี้", bucket?.value === 1,
+    JSON.stringify(series.slice(-2)));
+  ok("ไม่มีถังไหนได้ค่าเกินมา", series.reduce((a, x) => a + x.value, 0) === 1,
+    String(series.reduce((a, x) => a + x.value, 0)));
+}
+
 console.log("\nสรุป: ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 process.exitCode = fail ? 1 : 0;

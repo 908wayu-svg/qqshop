@@ -105,7 +105,8 @@ function parseSlipText(text) {
 // เปิดให้ชุดทดสอบเรียกใช้ตรงๆ ได้
 // (ทดสอบด้วยข้อความตัวอย่าง/จำลอง Tesseract และป้อนข้อมูลผิดปกติเข้ากราฟ โดยไม่ต้องพึ่ง OCR/ข้อมูลจริง)
 // reloadAll เปิดไว้ให้ชุดทดสอบสั่งโหลดข้อมูลใหม่ได้ (ของจริงเรียกเองตอนเปิดหน้า/หลังกดปุ่ม)
-export { parseSlipText, showSlip, barChart, reloadAll };
+// dayKey/dailySeries เปิดไว้ให้เทสเรียกตรงๆ — การแบ่งวันต้องใช้เวลาท้องถิ่นเสมอ (กฎเหล็กข้อ 8)
+export { parseSlipText, showSlip, barChart, reloadAll, dayKey, dailySeries };
 
 function renderSlipOcr(info) {
   const box = document.getElementById("slip-ocr");
