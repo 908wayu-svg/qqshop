@@ -166,6 +166,24 @@ ok("ค้นแล้วไม่มีจริง บอกให้ชัด
 type("ไม่มีชื่อนี้");
 ok("คำค้นที่ไม่ใช่เลขที่ ไม่โชว์ปุ่มค้นฐานข้อมูล", $("order-search-deep").classList.contains("hidden"));
 
+// ค้นใหม่ให้แถวเก่ากลับมาแสดงก่อน (ก่อนหน้านี้เพิ่งลองคำค้นอื่นไป)
+type(OLD_SHOWN);
+click($("order-search-deep"));
+await tick(14);
+
+// กดปุ่มกับแถวที่มาจากการค้นฐานข้อมูล ต้องไม่ทำให้ตัวเลขในหน้าภาพรวมเปลี่ยน
+// (ออเดอร์เก่าใบนี้ 900 บาท ถ้าหลุดเข้าไปรวมกับที่หน้าโหลดมา ยอดขาย "ทั้งหมด" จะกระโดดขึ้นเงียบๆ)
+click(document.querySelector('#range-filter [data-range="all"]'));
+const salesBefore = $("kpi-sales").textContent;
+const hideOld = document.querySelector('#table-orders [data-act="hide-order"][data-id="' + OLD_ID + '"]');
+ok("แถวที่ค้นเจอจากฐานข้อมูล กดปุ่มซ่อนได้", !!hideOld);
+click(hideOld);
+await tick(12);
+ok("ซ่อนออเดอร์เก่าได้จริง", !!store.raw("orders/" + OLD_ID).hiddenAt);
+click(document.querySelector('#range-filter [data-range="all"]'));
+ok("ยอดขายในหน้าภาพรวมไม่กระโดด", $("kpi-sales").textContent === salesBefore,
+  salesBefore + " -> " + $("kpi-sales").textContent);
+
 // เปลี่ยนคำค้นแล้ว ผลค้นลึกของคำเดิมต้องไม่ค้างอยู่ — และต้องค้นซ้ำได้
 type(OLD_SHOWN);
 ok("กลับมาค้นเลขเดิม ผลเก่าไม่ค้าง", dataRows("table-orders").length === 0);

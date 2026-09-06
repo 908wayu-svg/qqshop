@@ -1023,6 +1023,11 @@ async function patchRow(list, col, id, extra) {
   if (at >= 0) list[at] = row; else list.unshift(row);
 }
 
+// แถวที่มาจากการ "ค้นทั้งฐานข้อมูล" ไม่ใช่ของที่หน้านี้โหลดมา
+// ห้ามยัดเข้า ORDERS เพราะการ์ดตัวเลขในหน้าภาพรวมคิดจาก ORDERS ทั้งก้อน
+// ออเดอร์เก่าที่หลุดเข้าไปจะทำให้ยอดขาย "ทั้งหมด" กระโดดขึ้นเงียบๆ ทั้งที่ไม่มีอะไรเกิดขึ้นจริง
+const orderListOf = id => ORDERS.some(o => o.id === id) ? ORDERS : DEEP_HITS;
+
 async function patchUser(uid) {
   if (!uid) return;
   const fresh = await QQ.fetchOne("users", uid);
@@ -1224,34 +1229,34 @@ document.getElementById("dash").addEventListener("click", async e => {
         await QQ.approveOrder(id);
         // อนุมัติแล้วสต๊อกเปลี่ยนด้วย จึงต้องดึงรายการสินค้าใหม่
         await refreshAfter(async () => {
-          await patchRow(ORDERS, "orders", id);
+          await patchRow(orderListOf(id), "orders", id);
           await patchUser(uid);
           PRODUCTS = await QQ.fetchProducts();
         });
       } else if (act === "reject-order" && confirm(t("confirm_reject"))) {
         await QQ.rejectOrder(id);
-        await refreshAfter(() => patchRow(ORDERS, "orders", id));
+        await refreshAfter(() => patchRow(orderListOf(id), "orders", id));
       } else if (act === "start-order" && confirm(t("confirm_start_order"))) {
         // รอดำเนินการ → กำลังดำเนินการ (ลูกค้าแก้ไอดีเกมไม่ได้อีกตั้งแต่จุดนี้)
         await QQ.startOrder(id);
-        await refreshAfter(() => patchRow(ORDERS, "orders", id));
+        await refreshAfter(() => patchRow(orderListOf(id), "orders", id));
       } else if (act === "complete-order" && confirm(t("confirm_complete_order"))) {
         // กำลังดำเนินการ → สำเร็จ (เริ่มจับเวลาเคลม + ลบรหัสผ่านลูกค้าอัตโนมัติ)
         await QQ.completeOrder(id);
-        await refreshAfter(() => patchRow(ORDERS, "orders", id));
+        await refreshAfter(() => patchRow(orderListOf(id), "orders", id));
       } else if (act === "cancel-order" && confirm(t("confirm_cancel_order"))) {
         // ยกเลิก = คืนเครดิตให้ลูกค้า + คืนสต๊อกของที่ยังไม่ได้ส่งมอบ
         const uid = ORDERS.find(o => o.id === id)?.uid;
         await QQ.cancelOrder(id);
         await refreshAfter(async () => {
-          await patchRow(ORDERS, "orders", id);
+          await patchRow(orderListOf(id), "orders", id);
           await patchUser(uid);
           PRODUCTS = await QQ.fetchProducts();
         });
       } else if (act === "clear-cust-info" && confirm(t("confirm_clear_customer_info"))) {
         // เติมเกมเสร็จแล้ว ไม่ควรเก็บรหัสผ่านลูกค้าไว้ในระบบต่อ
         await QQ.clearOrderCustomerInfo(id);
-        await refreshAfter(() => patchRow(ORDERS, "orders", id));
+        await refreshAfter(() => patchRow(orderListOf(id), "orders", id));
       } else if (act === "approve-topup") {
         const row = TOPUPS.find(x => x.id === id);
         let amount = null;
@@ -1297,7 +1302,7 @@ document.getElementById("dash").addEventListener("click", async e => {
           : "confirm_unhide";
         if (!confirm(t(key))) return;
         await QQ.setOrderHidden(id, hidden);
-        await refreshAfter(() => patchRow(ORDERS, "orders", id));
+        await refreshAfter(() => patchRow(orderListOf(id), "orders", id));
       } else if (act === "hide-topup" || act === "unhide-topup") {
         const hidden = act === "hide-topup";
         if (!confirm(t(hidden ? "confirm_hide" : "confirm_unhide"))) return;
