@@ -70,6 +70,9 @@
 - `tools/make-share-images.mjs` — สร้างรูปแชร์/ไอคอนใหม่จาก hero-banner.jpg + cat.png
   (`cd tools && npm i --no-save jimp && node make-share-images.mjs`)
 - `tests/` — ชุดทดสอบทุกหน้า รันด้วย `cd tests && npm test` (ไม่แตะฐานข้อมูลจริง)
+  36 ไฟล์ · 1,684 ข้อ · รวมตัวไล่เชิงกลไกที่ตรวจให้เองว่า:
+  คีย์คำแปลครบทั้งสองภาษา · ปุ่มทุกตัวมีคนรับคลิก · คลาสที่ใช้มีสไตล์จริง ·
+  กฎที่เขียนซ้ำหลายไฟล์ยังตรงกัน · สคริปต์ใหม่ไม่พังกับหน้า .html เวอร์ชันเก่า
 
 ## โครงสร้างข้อมูล (Firestore)
 - `users/{uid}` — email, name, phone, provider, **role**, **credit**
