@@ -17,8 +17,16 @@ export function buildSandbox() {
     if (!/\.(js|html|css)$/.test(f)) continue;
     let s = fs.readFileSync(path.join(SRC, f), "utf8");
     for (const [from, to] of Object.entries(MAP)) s = s.split(from).join(to);
-    s = s.replace(/from "\.\/([a-z-]+)\.js"/g, 'from "./$1.mjs"');
+    // ชื่อไฟล์มีตัวเลขได้ด้วย (เช่น i18n.js, otp2.js) — เดิมจับแค่ a-z จะข้ามไปเงียบๆ
+    s = s.replace(/from "\.\/([a-z0-9-]+)\.js"/g, 'from "./$1.mjs"');
     fs.writeFileSync(path.join(SANDBOX, f.replace(/\.js$/, ".mjs")), s);
+  }
+  // กันพลาดเงียบ: ถ้ายังเหลือ import ที่ชี้ไป .js อยู่ แปลว่าแปลงชื่อไม่ครบ
+  // (ไฟล์นั้นจะโหลดไม่ขึ้นตอนรันเทส และเราจะไล่หาสาเหตุยาก)
+  for (const f of fs.readdirSync(SANDBOX)) {
+    if (!f.endsWith(".mjs")) continue;
+    const left = fs.readFileSync(path.join(SANDBOX, f), "utf8").match(/from "\.\/[^"]+\.js"/g);
+    if (left) throw new Error("แปลงชื่อไฟล์ที่ import ใน " + f + " ไม่ครบ: " + left.join(", "));
   }
   return SANDBOX;
 }

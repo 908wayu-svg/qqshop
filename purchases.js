@@ -101,12 +101,12 @@ function openCredentials(orderId, itemIdx) {
       <div class="cred-row">
         <span>${t("item_login")}</span>
         <b>${esc(d.login) || "—"}</b>
-        <button class="copy" data-copy="${esc(d.login)}">⧉</button>
+        ${d.login ? `<button class="copy" data-copy="${esc(d.login)}">⧉</button>` : ""}
       </div>
       <div class="cred-row">
         <span>${t("item_password")}</span>
         <b>${esc(d.password) || "—"}</b>
-        <button class="copy" data-copy="${esc(d.password)}">⧉</button>
+        ${d.password ? `<button class="copy" data-copy="${esc(d.password)}">⧉</button>` : ""}
       </div>
       ${d.note ? `<div class="cred-note">${esc(d.note)}</div>` : ""}
     </div>`).join("");

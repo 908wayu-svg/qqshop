@@ -115,12 +115,20 @@ async function copyText(text) {
 
 // ปุ่ม .copy ทุกปุ่มในหน้า (มอบหมายคลิกไว้ที่ document จึงใช้ได้กับปุ่มที่วาดใหม่ทีหลังด้วย)
 // บอกผลด้วยสัญลักษณ์เสมอ: ✓ = คัดลอกแล้ว · ✕ = เบราว์เซอร์นี้คัดลอกให้ไม่ได้ (ให้ลากเลือกเอง)
+const copyTimers = new WeakMap();
 document.addEventListener("click", async e => {
   const btn = e.target.closest?.(".copy");
   if (!btn || !btn.dataset.copy) return;
-  const old = btn.textContent;
+  // กดรัวๆ ได้ — เก็บป้ายเดิมไว้ครั้งแรกครั้งเดียว ไม่งั้นครั้งที่สองจะจำ "✓" เป็นป้ายเดิม
+  // แล้วปุ่มจะค้างเป็นเครื่องหมายถูกตลอดไป (ผู้ใช้ไม่รู้ว่ากดคัดลอกได้อีก)
+  if (btn.dataset.copyLabel === undefined) btn.dataset.copyLabel = btn.textContent;
+  clearTimeout(copyTimers.get(btn));
   btn.textContent = (await copyText(btn.dataset.copy)) ? "✓" : "✕";
-  setTimeout(() => { btn.textContent = old; }, 1200);
+  copyTimers.set(btn, setTimeout(() => {
+    btn.textContent = btn.dataset.copyLabel;
+    delete btn.dataset.copyLabel;
+    copyTimers.delete(btn);
+  }, 1200));
 });
 
 window.copyText = copyText;

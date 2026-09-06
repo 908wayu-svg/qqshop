@@ -79,12 +79,14 @@ export const CATEGORIES = [
 ];
 
 // ดึงรหัสซองอั่งเปาออกจากลิงก์ (รองรับหลายรูปแบบลิงก์ของทรูมันนี่)
+// *** ต้องให้ผลตรงกับ parseAngpaoCode() ใน worker/src/index.js เสมอ ***
+// ถ้าฝั่งเบราว์เซอร์รับลิงก์ที่เซิร์ฟเวอร์ปฏิเสธ ลูกค้าจะกดส่งได้แต่ขึ้นข้อความผิดพลาดที่งงมาก
 export function parseAngpaoCode(link) {
   if (!link) return null;
-  const m = String(link).match(/[?&]v=([A-Za-z0-9]+)/)
-    || String(link).match(/campaign\/\?v=([A-Za-z0-9]+)/)
-    || String(link).match(/^([A-Za-z0-9]{16,})$/);
-  return m ? m[1] : null;
+  const s = String(link).trim();
+  const m = s.match(/[?&]v=([A-Za-z0-9]+)/) || s.match(/^([A-Za-z0-9]{16,})$/);
+  // รหัสซองจริงยาวราว 30-35 ตัว — ยาวเกิน 64 คือลิงก์มั่ว
+  return m && m[1].length <= 64 ? m[1] : null;
 }
 
 // ลิงก์สำหรับให้แอดมินกดรับซอง (เปิดในแอป/เว็บทรูมันนี่ด้วยเบอร์ผู้รับ)

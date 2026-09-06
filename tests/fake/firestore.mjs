@@ -4,7 +4,22 @@ import { state, can, PermissionError, resolveTs, clone, Timestamp, SERVER_TS } f
 export { Timestamp };
 export const getFirestore = () => ({ __db: true });
 export const serverTimestamp = () => SERVER_TS;
+// increment() ของจริงคือ "บวกเพิ่มจากค่าเดิมในฐานข้อมูล" ไม่ใช่ค่าคงที่
+// ถ้าตัวจำลองเก็บก้อน { __inc } ลงไปตรงๆ เอกสารจะเสียแบบเงียบๆ แล้วเทสยังเขียวอยู่
 export const increment = n => ({ __inc: n });
+const applyIncrements = (after, before) => {
+  for (const [k, v] of Object.entries(after)) {
+    if (v && typeof v === "object" && "__inc" in v) {
+      const base = before?.[k];
+      if (base !== undefined && typeof base !== "number") {
+        const e = new Error("increment() ใช้กับฟิลด์ที่ไม่ใช่ตัวเลขไม่ได้: " + k);
+        e.code = "invalid-argument"; throw e;
+      }
+      after[k] = (typeof base === "number" ? base : 0) + v.__inc;
+    }
+  }
+  return after;
+};
 export const DELETE = Symbol("deleteField");
 export const deleteField = () => DELETE;
 
@@ -137,6 +152,8 @@ function write(op, ref, data, { merge = false } = {}) {
     after = merge ? { ...(before || {}), ...resolveTs(data) } : resolveTs(data);
     for (const [k, v] of Object.entries(data)) if (v === DELETE) delete after[k];
   }
+
+  if (after) applyIncrements(after, before);
 
   const rule = op === "set" ? (before === undefined ? "create" : "update") : op;
   if (!can(rule, ref.__path, after, before)) throw new PermissionError(ref.__path, rule);

@@ -188,5 +188,45 @@ ok("ลบการจองทิ้ง ลูกค้ายิงใหม่
 ok("ไม่มีสถานะค้าง processing", !DOCS.has("topups/angpao_CODE0000000000011"));
 TM_THROWS = false;
 
+
+// ===== ฝั่งเบราว์เซอร์กับฝั่งเซิร์ฟเวอร์ต้องอ่านลิงก์ซองเหมือนกันเป๊ะ =====
+// ถ้าเบราว์เซอร์ยอมรับลิงก์ที่เซิร์ฟเวอร์ปฏิเสธ ลูกค้าจะกดส่งได้แล้วเจอข้อความผิดพลาดที่ไม่บอกอะไร
+// (และถ้าเบราว์เซอร์เข้มกว่า ลูกค้าจะส่งลิงก์ที่ใช้ได้จริงไม่ได้)
+section("ฝั่งเบราว์เซอร์กับเซิร์ฟเวอร์อ่านลิงก์ซองตรงกัน");
+{
+  fs.writeFileSync("./sandbox/shop-config.mjs", fs.readFileSync("../shop-config.js", "utf8"));
+  const client = await import("./sandbox/shop-config.mjs");
+  const worker = await import("./sandbox/worker.mjs");
+  const cases = [
+    "https://gift.truemoney.com/campaign/?v=abcdefghij1234567890",
+    "https://gift.truemoney.com/campaign/?v=ABC123&x=1",
+    "  https://gift.truemoney.com/campaign/?v=abcdefghij1234567890  ",
+    "abcdefghij1234567890",
+    "abc",                                   // สั้นเกินไป
+    "A".repeat(200),                         // ยาวเกินจริง
+    "https://gift.truemoney.com/campaign/?v=" + "A".repeat(200),
+    "https://เว็บปลอม.example/?v=abcdefghij1234567890",
+    "",
+    null,
+    undefined,
+    "https://gift.truemoney.com/campaign/",  // ไม่มีรหัส
+    "?v=มีภาษาไทย",
+  ];
+  let same = 0;
+  for (const c of cases) {
+    const a = client.parseAngpaoCode(c), b = worker.parseAngpaoCode(c);
+    if (a === b) same++;
+    else ok("ตรงกัน: " + JSON.stringify(String(c).slice(0, 45)), false,
+      "เบราว์เซอร์ได้ " + JSON.stringify(a) + " เซิร์ฟเวอร์ได้ " + JSON.stringify(b));
+  }
+  ok("ทดสอบ " + cases.length + " รูปแบบ ได้ผลตรงกันทุกอัน", same === cases.length,
+    same + "/" + cases.length);
+  ok("ลิงก์ปกติยังอ่านรหัสออก",
+    client.parseAngpaoCode("https://gift.truemoney.com/campaign/?v=abcdefghij1234567890")
+      === "abcdefghij1234567890");
+  ok("ลิงก์รับซองที่แอดมินกดยังสร้างถูก",
+    client.angpaoRedeemUrl("abcdefghij1234567890")
+      === "https://gift.truemoney.com/campaign/?v=abcdefghij1234567890");
+}
 console.log("\nสรุป(รวมท้าย): ผ่าน " + pass + " / ไม่ผ่าน " + fail);
 if (fail) process.exitCode = 1;
